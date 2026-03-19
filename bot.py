@@ -13,6 +13,7 @@ from telegram.ext import (
     filters,
 )
 
+from telegram import BotCommand
 from config import BOT_TOKEN
 from database import init_db, track_message
 
@@ -105,6 +106,21 @@ def main():
 
     # Трекинг сообщений (без команд)
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, _track_message))
+
+    async def set_commands(app):
+        await app.bot.set_my_commands([
+            BotCommand("help",     "📖 Помощь по командам"),
+            BotCommand("top",      "📊 Статистика чата"),
+            BotCommand("dice",     "🎲 Бросить кубик"),
+            BotCommand("coinflip", "🪙 Орёл или решка"),
+            BotCommand("king",     "👑 Выбрать короля дня"),
+            BotCommand("roast",    "🔥 Опалить кого-нибудь"),
+            BotCommand("rate",     "⭐ Оценить фото"),
+            BotCommand("weather",  "🌤 Погода"),
+        ])
+        logger.info("Команды обновлены")
+
+    app.post_init = set_commands
 
     logger.info("Бот запущен")
     app.run_polling(poll_interval=0, drop_pending_updates=True)
