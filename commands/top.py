@@ -62,7 +62,10 @@ async def top_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
 async def top_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Обработчик нажатий на inline-кнопки статистики."""
     query = update.callback_query
-    await query.answer()
+    try:
+        await query.answer()
+    except BadRequest:
+        return  # Запрос устарел (бот перезапускался)
 
     if query.data == "top_messages":
         rows = get_top_messages()

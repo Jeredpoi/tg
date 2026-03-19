@@ -4,6 +4,7 @@
 
 import logging
 import random
+import re
 from telegram.ext import (
     ApplicationBuilder,
     CommandHandler,
@@ -68,9 +69,9 @@ async def _track_message(update, context):
     upsert_user(user.id, user.username, user.first_name)
     increment_message(user.id)
 
-    # Проверяем наличие мат-слов (нормализуем ё → е)
+    # Проверяем наличие мат-слов (нормализуем ё → е, убираем пунктуацию)
     text = (update.message.text or "").lower().replace("ё", "е")
-    words = set(text.split())
+    words = set(re.findall(r'\w+', text, re.UNICODE))
     count = len(words & _SWEAR_NORMALIZED)
     if count:
         increment_swear(user.id, count)
@@ -107,7 +108,7 @@ def main():
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, _track_message))
 
     logger.info("Бот запущен")
-    app.run_polling()
+    app.run_polling(poll_interval=0, drop_pending_updates=True)
 
 
 if __name__ == "__main__":
