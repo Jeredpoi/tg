@@ -3,6 +3,7 @@
 # ==============================================================================
 
 import logging
+import random
 from telegram.ext import (
     ApplicationBuilder,
     CommandHandler,
@@ -44,6 +45,19 @@ SWEAR_WORDS = {
     "тупица", "ублюдок", "скотина", "чмо", "уёбок", "уёбище",
 }
 
+# Нормализованный список (ё → е) для сравнения
+_SWEAR_NORMALIZED = {w.replace("ё", "е") for w in SWEAR_WORDS}
+
+SWEAR_RESPONSES = [
+    "Ай-яй-яй, {name}! Что за слова такие! 😤",
+    "Полегче на поворотах, {name}! 🤨",
+    "{name}, рот помой! 🧼",
+    "Мама слышит тебя, {name}! 😱",
+    "Культурнее надо быть, {name}! 📚",
+    "Ого, {name}! Такие слова знаешь! 😳",
+    "Фильтруй базар, {name}! 🫡",
+]
+
 
 async def _track_message(update, context):
     """Считает сообщения и маты всех участников."""
@@ -54,12 +68,18 @@ async def _track_message(update, context):
     upsert_user(user.id, user.username, user.first_name)
     increment_message(user.id)
 
-    # Проверяем наличие мат-слов
-    text = (update.message.text or "").lower()
+    # Проверяем наличие мат-слов (нормализуем ё → е)
+    text = (update.message.text or "").lower().replace("ё", "е")
     words = set(text.split())
-    count = len(words & SWEAR_WORDS)
+    count = len(words & _SWEAR_NORMALIZED)
     if count:
         increment_swear(user.id, count)
+        # С вероятностью ~25% отвечаем на мат
+        if random.random() < 0.25:
+            name = user.first_name or user.username or "дружок"
+            await update.message.reply_text(
+                random.choice(SWEAR_RESPONSES).format(name=name)
+            )
 
 
 def main():
