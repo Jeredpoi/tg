@@ -73,6 +73,9 @@ async def _track_message(update, context):
     text = (update.message.text or "").lower().replace("ё", "е")
     words = set(re.findall(r'\w+', text, re.UNICODE))
     count = len(words & _SWEAR_NORMALIZED)
+
+    logger.info("MSG from %s (@%s): %r | swears=%d", user.first_name, user.username, update.message.text, count)
+
     if count:
         increment_swear(user.id, count)
         # С вероятностью ~25% отвечаем на мат
