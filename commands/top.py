@@ -3,6 +3,7 @@
 # ==============================================================================
 
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.error import BadRequest
 from telegram.ext import ContextTypes
 from database import get_top_messages, get_top_swears
 
@@ -74,4 +75,7 @@ async def top_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     else:
         return
 
-    await query.edit_message_text(text=text, parse_mode="HTML", reply_markup=keyboard)
+    try:
+        await query.edit_message_text(text=text, parse_mode="HTML", reply_markup=keyboard)
+    except BadRequest:
+        pass  # Сообщение не изменилось — игнорируем
