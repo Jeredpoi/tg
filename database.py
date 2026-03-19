@@ -2,8 +2,12 @@
 # database.py — Работа с SQLite базой данных
 # ==============================================================================
 
+import logging
 import sqlite3
 from config import DATABASE_PATH
+
+logger = logging.getLogger(__name__)
+logger.info("DATABASE_PATH resolved to: %s", DATABASE_PATH)
 
 
 def get_connection() -> sqlite3.Connection:
@@ -63,16 +67,21 @@ def init_db() -> None:
 
 def upsert_user(user_id: int, username: str, first_name: str) -> None:
     """Создаёт запись пользователя или обновляет имя если уже есть."""
-    conn = get_connection()
-    conn.execute("""
-        INSERT INTO user_stats (user_id, username, first_name, msg_count, swear_count)
-        VALUES (?, ?, ?, 0, 0)
-        ON CONFLICT(user_id) DO UPDATE SET
-            username   = excluded.username,
-            first_name = excluded.first_name
-    """, (user_id, username, first_name))
-    conn.commit()
-    conn.close()
+    logger.info("upsert_user called: user_id=%s, username=%s, first_name=%s", user_id, username, first_name)
+    try:
+        conn = get_connection()
+        conn.execute("""
+            INSERT INTO user_stats (user_id, username, first_name, msg_count, swear_count)
+            VALUES (?, ?, ?, 0, 0)
+            ON CONFLICT(user_id) DO UPDATE SET
+                username   = excluded.username,
+                first_name = excluded.first_name
+        """, (user_id, username, first_name))
+        conn.commit()
+        conn.close()
+        logger.info("upsert_user OK")
+    except Exception as e:
+        logger.error("upsert_user FAILED: %s", e, exc_info=True)
 
 
 def increment_message(user_id: int) -> None:
