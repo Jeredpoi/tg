@@ -64,43 +64,23 @@ def init_db() -> None:
 # Статистика пользователей
 # ------------------------------------------------------------------------------
 
-def upsert_user(user_id: int, username: str, first_name: str) -> None:
-    """Создаёт запись пользователя или обновляет имя если уже есть."""
+def track_message(user_id: int, username: str, first_name: str, swear_count: int = 0) -> None:
+    """Upsert пользователя и инкрементирует счётчики за одно подключение."""
     try:
         conn = get_connection()
         conn.execute("""
             INSERT INTO user_stats (user_id, username, first_name, msg_count, swear_count)
-            VALUES (?, ?, ?, 0, 0)
+            VALUES (?, ?, ?, 1, ?)
             ON CONFLICT(user_id) DO UPDATE SET
-                username   = excluded.username,
-                first_name = excluded.first_name
-        """, (user_id, username, first_name))
+                username    = excluded.username,
+                first_name  = excluded.first_name,
+                msg_count   = msg_count + 1,
+                swear_count = swear_count + excluded.swear_count
+        """, (user_id, username, first_name, swear_count))
         conn.commit()
         conn.close()
     except Exception as e:
-        logger.error("upsert_user FAILED: %s", e, exc_info=True)
-
-
-def increment_message(user_id: int) -> None:
-    """Увеличивает счётчик сообщений пользователя на 1."""
-    conn = get_connection()
-    conn.execute(
-        "UPDATE user_stats SET msg_count = msg_count + 1 WHERE user_id = ?",
-        (user_id,)
-    )
-    conn.commit()
-    conn.close()
-
-
-def increment_swear(user_id: int, count: int = 1) -> None:
-    """Увеличивает счётчик матов пользователя."""
-    conn = get_connection()
-    conn.execute(
-        "UPDATE user_stats SET swear_count = swear_count + ? WHERE user_id = ?",
-        (count, user_id)
-    )
-    conn.commit()
-    conn.close()
+        logger.error("track_message FAILED: %s", e, exc_info=True)
 
 
 def get_top_messages(limit: int = 10) -> list:

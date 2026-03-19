@@ -14,7 +14,7 @@ from telegram.ext import (
 )
 
 from config import BOT_TOKEN
-from database import init_db, upsert_user, increment_message, increment_swear
+from database import init_db, track_message
 
 from commands.debug import debug_command
 from commands.dice import dice_command
@@ -36,12 +36,12 @@ logger = logging.getLogger(__name__)
 SWEAR_WORDS = {
     "блять", "блядь", "блядина", "сука", "сучка", "пизда", "пиздец",
     "пиздёж", "хуй", "хуйня", "хуета", "ебать", "ёбаный", "ёб", "еби",
-    "ебал", "ебло", "ёблан", "ебанат", "ебаный", "мудак", "мудила",
+    "ебал", "ебло", "ёблан", "ебанат", "мудак", "мудила",
     "мудачок", "пидор", "пидорас", "пиздюк", "залупа", "шлюха",
-    "шлюшка", "ёбаный", "ёб твою мать", "бля", "нахуй", "похуй",
-    "похуй", "похуйку", "ёпт", "ёпта", "заебал", "заебала", "заебали",
-    "заебись", "заёб", "пиздить", "пиздит", "пиздит", "пизда",
-    "отъебись", "отъебите", "выёбываться", "выёбывается",
+    "шлюшка", "бля", "нахуй", "похуй", "похуйку", "ёпт", "ёпта",
+    "заебал", "заебала", "заебали", "заебись", "заёб",
+    "пиздить", "пиздит", "отъебись", "отъебите",
+    "выёбываться", "выёбывается",
     "долбоёб", "долбоёбина", "идиот", "дебил", "дебилизм",
     "тупица", "ублюдок", "скотина", "чмо", "уёбок", "уёбище",
 }
@@ -66,24 +66,20 @@ async def _track_message(update, context):
     if not user or user.is_bot:
         return
 
-    upsert_user(user.id, user.username, user.first_name)
-    increment_message(user.id)
-
-    # Проверяем наличие мат-слов (нормализуем ё → е, убираем пунктуацию)
+    # Нормализуем: lowercase + ё → е
     text = (update.message.text or "").lower().replace("ё", "е")
     words = set(re.findall(r'\w+', text, re.UNICODE))
-    count = len(words & _SWEAR_NORMALIZED)
+    swear_count = len(words & _SWEAR_NORMALIZED)
 
-    logger.info("MSG from %s (@%s): %r | swears=%d", user.first_name, user.username, update.message.text, count)
+    track_message(user.id, user.username, user.first_name, swear_count)
 
-    if count:
-        increment_swear(user.id, count)
-        # С вероятностью ~25% отвечаем на мат
-        if random.random() < 0.25:
-            name = user.first_name or user.username or "дружок"
-            await update.message.reply_text(
-                random.choice(SWEAR_RESPONSES).format(name=name)
-            )
+    logger.info("MSG from %s (@%s): %r | swears=%d", user.first_name, user.username, update.message.text, swear_count)
+
+    if swear_count and random.random() < 0.25:
+        name = user.first_name or user.username or "дружок"
+        await update.message.reply_text(
+            random.choice(SWEAR_RESPONSES).format(name=name)
+        )
 
 
 def main():
