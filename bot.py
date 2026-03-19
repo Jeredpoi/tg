@@ -14,7 +14,8 @@ from telegram.ext import (
 )
 
 from telegram import BotCommand
-from config import BOT_TOKEN
+from telegram.request import HTTPXRequest
+from config import BOT_TOKEN, PROXY_URL
 from database import init_db, track_message
 
 from commands.debug import debug_command
@@ -86,7 +87,11 @@ async def _track_message(update, context):
 def main():
     init_db()
 
-    app = ApplicationBuilder().token(BOT_TOKEN).build()
+    builder = ApplicationBuilder().token(BOT_TOKEN)
+    if PROXY_URL:
+        builder = builder.request(HTTPXRequest(proxy=PROXY_URL))
+        logger.info("Используется прокси: %s", PROXY_URL)
+    app = builder.build()
 
     # Команды
     app.add_handler(CommandHandler("start",    help_command))
