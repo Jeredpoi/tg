@@ -149,9 +149,11 @@ async def weather_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         await msg.edit_text(text, parse_mode="HTML", reply_markup=kb)
 
     except Exception as e:
+        logger.exception("weather_command failed for city=%r: %s", city, e)
         await msg.edit_text(
             f"❌ Не удалось получить погоду для «{city}».\n"
-            "Проверь название или попробуй позже."
+            f"Ошибка: <code>{e}</code>",
+            parse_mode="HTML",
         )
 
 
@@ -182,8 +184,11 @@ async def weather_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -
 
         await query.edit_message_text(text, parse_mode="HTML", reply_markup=kb)
 
-    except Exception:
+    except Exception as e:
+        logger.exception("weather_callback failed city=%r action=%r: %s", city_name, action, e)
         await query.edit_message_text(
-            f"❌ Не удалось обновить погоду для «{city_name}».",
+            f"❌ Не удалось обновить погоду для «{city_name}».\n"
+            f"Ошибка: <code>{e}</code>",
+            parse_mode="HTML",
             reply_markup=_keyboard(lat, lon, city_name),
         )
