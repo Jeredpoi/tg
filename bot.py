@@ -155,7 +155,7 @@ async def _track_message(update, context):
             job.schedule_removal()
 
         # Случайно решаем отвечать ли (50%) — но с учётом cooldown в _send_swear_response
-        if random.random() < 0.50:
+        if random.random() < 0.45:
             context.job_queue.run_once(
                 _send_swear_response,
                 2.5,  # 2.5 сек задержка — ждём пока закончат спамить
