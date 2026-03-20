@@ -34,7 +34,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Список мат-слов (добавляй по необходимости)
+# Точные слова (ё → е нормализуется при сравнении)
 SWEAR_WORDS = {
     "блять", "блядь", "блядина", "сука", "сучка", "пизда", "пиздец",
     "пиздёж", "хуй", "хуйня", "хуета", "ебать", "ёбаный", "ёб", "еби",
@@ -44,12 +44,38 @@ SWEAR_WORDS = {
     "заебал", "заебала", "заебали", "заебись", "заёб",
     "пиздить", "пиздит", "отъебись", "отъебите",
     "выёбываться", "выёбывается",
-    "долбоёб", "долбоёбина", "идиот", "дебил", "дебилизм",
-    "тупица", "ублюдок", "скотина", "чмо", "уёбок", "уёбище",
+    "долбоёб", "долбоёбина", "дебил", "дебилизм",
+    "ублюдок", "чмо", "уёбок", "уёбище",
 }
-
-# Нормализованный список (ё → е) для сравнения
 _SWEAR_NORMALIZED = {w.replace("ё", "е") for w in SWEAR_WORDS}
+
+# Корни — если корень встречается внутри любого слова, считается матом
+# Покрывают все словоформы: ебал/ебут/наебал/выебал и т.д.
+_SWEAR_ROOTS = [
+    "еба", "еби", "ебё", "ебу", "ебл",   # ебать и все формы
+    "ёба", "ёби", "ёбл",
+    "пизд",                                 # пизда, пиздец, пиздить...
+    "бляд",                                 # блядь, блядина...
+    "хуй", "хуе", "хуя", "хую",           # хуй и все падежи
+    "залуп",                                # залупа...
+    "пидар", "пидор",                       # все формы
+    "мудак", "мудил",                       # мудак, мудила...
+    "дрочи", "дрочи",                       # дрочить...
+]
+_SWEAR_ROOTS = [r.replace("ё", "е") for r in _SWEAR_ROOTS]
+
+
+def _count_swears(text: str) -> int:
+    """Считает количество матерных слов с учётом корней."""
+    normalized = text.lower().replace("ё", "е")
+    words = re.findall(r'\w+', normalized, re.UNICODE)
+    count = 0
+    for word in words:
+        if word in _SWEAR_NORMALIZED:
+            count += 1
+        elif any(root in word for root in _SWEAR_ROOTS):
+            count += 1
+    return count
 
 SWEAR_RESPONSES = [
     "Ай-яй-яй, {name}! Что за слова такие! 😤",
@@ -72,10 +98,8 @@ async def _track_message(update, context):
 
     chat_id = update.effective_chat.id
 
-    # Нормализуем: lowercase + ё → е
-    text = (update.message.text or "").lower().replace("ё", "е")
-    words = set(re.findall(r'\w+', text, re.UNICODE))
-    swear_count = len(words & _SWEAR_NORMALIZED)
+    text = update.message.text or ""
+    swear_count = _count_swears(text)
 
     track_message(user.id, user.username, user.first_name, swear_count, chat_id)
 
