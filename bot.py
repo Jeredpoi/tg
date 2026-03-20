@@ -28,7 +28,8 @@ from commands.top import top_command, top_callback
 from commands.rate import rate_command, rate_callback, handle_rate_photo
 from commands.help import help_command
 from commands.coinflip import coinflip_command
-from commands.weather import weather_command
+from commands.weather import weather_command, weather_callback
+from commands.eightball import eightball_command
 
 logging.basicConfig(
     format="%(asctime)s — %(name)s — %(levelname)s — %(message)s",
@@ -110,7 +111,7 @@ async def _track_message(update, context):
         chat_id, user.first_name, user.username, update.message.text, swear_count,
     )
 
-    if swear_count and update.effective_chat.type != "private" and random.random() < 0.25:
+    if swear_count and update.effective_chat.type != "private" and random.random() < 0.30:
         name = user.first_name or user.username or "дружок"
         await update.message.reply_text(
             random.choice(SWEAR_RESPONSES).format(name=name)
@@ -185,7 +186,8 @@ def main():
     app.add_handler(CommandHandler("roast",    roast_command,   filters=filters.ChatType.GROUPS))
     app.add_handler(CommandHandler("top",      top_command,     filters=filters.ChatType.GROUPS))
     app.add_handler(CommandHandler("coinflip", coinflip_command, filters=filters.ChatType.GROUPS))
-    app.add_handler(CommandHandler("weather",  weather_command, filters=filters.ChatType.GROUPS))
+    app.add_handler(CommandHandler("weather",  weather_command,   filters=filters.ChatType.GROUPS))
+    app.add_handler(CommandHandler("8ball",    eightball_command, filters=filters.ChatType.GROUPS))
 
     # Королевские команды — только в группах
     app.add_handler(CommandHandler("kfine",   kfine_command,   filters=filters.ChatType.GROUPS))
@@ -208,8 +210,9 @@ def main():
     ))
 
     # Inline-кнопки
-    app.add_handler(CallbackQueryHandler(top_callback,  pattern=r"^top_"))
-    app.add_handler(CallbackQueryHandler(rate_callback, pattern=r"^(anon_|rate_)"))
+    app.add_handler(CallbackQueryHandler(top_callback,     pattern=r"^top_"))
+    app.add_handler(CallbackQueryHandler(rate_callback,    pattern=r"^(anon_|rate_)"))
+    app.add_handler(CallbackQueryHandler(weather_callback, pattern=r"^w(forecast|refresh):"))
 
     # Трекинг текстовых сообщений (без команд)
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, _track_message))
@@ -224,6 +227,7 @@ def main():
             BotCommand("coinflip", "🪙 Орёл или решка"),
             BotCommand("king",     "👑 Выбрать короля дня"),
             BotCommand("roast",    "🔥 Опалить кого-нибудь"),
+            BotCommand("8ball",    "🎱 Магический шар"),
             BotCommand("weather",  "🌤 Погода"),
             BotCommand("kfine",    "⚖️ [Король] Оштрафовать"),
             BotCommand("kpardon",  "🕊️ [Король] Помиловать"),
