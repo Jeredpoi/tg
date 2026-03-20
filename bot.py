@@ -108,11 +108,20 @@ async def _track_message(update, context):
         chat_id, user.first_name, user.username, update.message.text, swear_count,
     )
 
-    if swear_count and random.random() < 0.25:
+    if swear_count and update.effective_chat.type != "private" and random.random() < 0.25:
         name = user.first_name or user.username or "дружок"
         await update.message.reply_text(
             random.choice(SWEAR_RESPONSES).format(name=name)
         )
+
+
+async def _private_command_guard(update, context):
+    """Отвечает на неизвестные команды в личке."""
+    await update.message.reply_text(
+        "❌ В личке доступны только:\n"
+        "/rate — отправить фото на оценку группы\n"
+        "/help — список команд группы"
+    )
 
 
 def main():
@@ -124,22 +133,30 @@ def main():
         logger.info("Используется прокси: %s", PROXY_URL)
     app = builder.build()
 
-    # Обычные команды
-    app.add_handler(CommandHandler("start",    help_command))
+    # В личке работают только /start, /help, /rate
+    app.add_handler(CommandHandler("start",    help_command,    filters=filters.ChatType.PRIVATE))
     app.add_handler(CommandHandler("help",     help_command))
-    app.add_handler(CommandHandler("debug",    debug_command))
-    app.add_handler(CommandHandler("dice",     dice_command))
-    app.add_handler(CommandHandler("king",     king_command))
-    app.add_handler(CommandHandler("roast",    roast_command))
-    app.add_handler(CommandHandler("top",      top_command))
-    app.add_handler(CommandHandler("rate",     rate_command))
-    app.add_handler(CommandHandler("coinflip", coinflip_command))
-    app.add_handler(CommandHandler("weather",  weather_command))
+    app.add_handler(CommandHandler("rate",     rate_command,    filters=filters.ChatType.PRIVATE))
 
-    # Королевские команды (доступны всем, но внутри проверяется — ты ли король)
-    app.add_handler(CommandHandler("kfine",   kfine_command))
-    app.add_handler(CommandHandler("kpardon", kpardon_command))
-    app.add_handler(CommandHandler("kdecree", kdecree_command))
+    # Команды только для групп
+    app.add_handler(CommandHandler("debug",    debug_command,   filters=filters.ChatType.GROUPS))
+    app.add_handler(CommandHandler("dice",     dice_command,    filters=filters.ChatType.GROUPS))
+    app.add_handler(CommandHandler("king",     king_command,    filters=filters.ChatType.GROUPS))
+    app.add_handler(CommandHandler("roast",    roast_command,   filters=filters.ChatType.GROUPS))
+    app.add_handler(CommandHandler("top",      top_command,     filters=filters.ChatType.GROUPS))
+    app.add_handler(CommandHandler("coinflip", coinflip_command, filters=filters.ChatType.GROUPS))
+    app.add_handler(CommandHandler("weather",  weather_command, filters=filters.ChatType.GROUPS))
+
+    # Королевские команды — только в группах
+    app.add_handler(CommandHandler("kfine",   kfine_command,   filters=filters.ChatType.GROUPS))
+    app.add_handler(CommandHandler("kpardon", kpardon_command, filters=filters.ChatType.GROUPS))
+    app.add_handler(CommandHandler("kdecree", kdecree_command, filters=filters.ChatType.GROUPS))
+
+    # Ловим любые другие команды в личке и вежливо отказываем
+    app.add_handler(MessageHandler(
+        filters.COMMAND & filters.ChatType.PRIVATE,
+        _private_command_guard,
+    ))
 
     # Приём фото в личке для /rate
     app.add_handler(MessageHandler(
@@ -157,24 +174,27 @@ def main():
     async def set_commands(app):
         from telegram import BotCommandScopeAllGroupChats, BotCommandScopeAllPrivateChats, BotCommandScopeDefault
 
-        commands = [
+        group_commands = [
             BotCommand("help",     "📖 Помощь по командам"),
             BotCommand("top",      "📊 Статистика чата"),
             BotCommand("dice",     "🎲 Бросить кубик"),
             BotCommand("coinflip", "🪙 Орёл или решка"),
             BotCommand("king",     "👑 Выбрать короля дня"),
             BotCommand("roast",    "🔥 Опалить кого-нибудь"),
-            BotCommand("rate",     "⭐ Оценить фото (личка)"),
             BotCommand("weather",  "🌤 Погода"),
             BotCommand("kfine",    "⚖️ [Король] Оштрафовать"),
             BotCommand("kpardon",  "🕊️ [Король] Помиловать"),
             BotCommand("kdecree",  "📜 [Король] Издать указ"),
         ]
 
-        # Обновляем команды для всех scope-ов, чтобы перезаписать старые (в т.ч. установленные через BotFather)
-        await app.bot.set_my_commands(commands, scope=BotCommandScopeDefault())
-        await app.bot.set_my_commands(commands, scope=BotCommandScopeAllPrivateChats())
-        await app.bot.set_my_commands(commands, scope=BotCommandScopeAllGroupChats())
+        private_commands = [
+            BotCommand("rate",  "⭐ Отправить фото на оценку группы"),
+            BotCommand("help",  "📖 Список команд группы"),
+        ]
+
+        await app.bot.set_my_commands(group_commands, scope=BotCommandScopeDefault())
+        await app.bot.set_my_commands(group_commands, scope=BotCommandScopeAllGroupChats())
+        await app.bot.set_my_commands(private_commands, scope=BotCommandScopeAllPrivateChats())
         logger.info("Команды обновлены для всех scope-ов")
 
     app.post_init = set_commands

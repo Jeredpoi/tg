@@ -130,12 +130,20 @@ async def rate_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         caption = "🖼 Анонимное фото" if anonymous else f"🖼 Фото от {photo_row['author_name']}"
         caption += "\n\n⭐ Голосуй от 1 до 10! Голосование идёт 30 минут."
 
-        sent = await context.bot.send_photo(
-            chat_id=CHAT_ID,
-            photo=photo_id,
-            caption=caption,
-            reply_markup=_rating_keyboard(key),
-        )
+        try:
+            sent = await context.bot.send_photo(
+                chat_id=CHAT_ID,
+                photo=photo_id,
+                caption=caption,
+                reply_markup=_rating_keyboard(key),
+            )
+        except Exception as e:
+            await query.edit_message_text(
+                f"❌ Не удалось отправить фото в группу.\n"
+                f"Убедись, что бот добавлен в группу и CHAT_ID верный.\n"
+                f"Ошибка: {e}"
+            )
+            return
 
         save_photo(
             photo_id=photo_id,
