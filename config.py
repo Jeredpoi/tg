@@ -12,3 +12,7 @@ CHAT_ID = -3630988613  # Замените на реальный ID вашего 
 
 # Путь к файлу базы данных SQLite
 DATABASE_PATH = "bot_stats.db"
+
+# Прокси для российского хостинга (None = отключено)
+# Формат: "socks5://user:pass@host:port" или "http://host:port"
+PROXY_URL = None
