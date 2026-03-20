@@ -154,6 +154,12 @@ async def rate_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
             )
             return
 
+        # Сообщаем пользователю сразу — до любых операций с БД/job_queue
+        await query.edit_message_text(
+            "✅ Фото отправлено в группу!\n"
+            "Голосование закроется через 30 минут — итог появится там."
+        )
+
         save_photo(
             photo_id=photo_id,
             message_id=sent.message_id,
@@ -168,11 +174,6 @@ async def rate_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
             _close_rate_voting,
             VOTE_DURATION,
             data={"photo_id": photo_id, "chat_id": config.CHAT_ID, "message_id": sent.message_id},
-        )
-
-        await query.edit_message_text(
-            "✅ Фото отправлено в группу!\n"
-            "Голосование закроется через 30 минут — итог появится там."
         )
 
     # ── Голосование ───────────────────────────────────────────────────────
