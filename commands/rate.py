@@ -2,6 +2,7 @@
 # commands/rate.py — /rate: оценка фото (только в личке → постит в группу)
 # ==============================================================================
 
+import hashlib
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
 from database import save_photo, add_vote, get_photo, close_photo
@@ -10,24 +11,25 @@ from config import CHAT_ID
 VOTE_DURATION = 30 * 60  # 30 минут в секундах
 
 
-def _rating_keyboard(photo_id: str) -> InlineKeyboardMarkup:
-    row1 = [InlineKeyboardButton(str(i), callback_data=f"rate_{photo_id}_{i}") for i in range(1, 6)]
-    row2 = [InlineKeyboardButton(str(i), callback_data=f"rate_{photo_id}_{i}") for i in range(6, 11)]
+def _short_key(photo_id: str) -> str:
+    """Возвращает короткий 8-символьный ключ для callback_data (лимит Telegram — 64 байта)."""
+    return hashlib.md5(photo_id.encode()).hexdigest()[:8]
+
+
+def _rating_keyboard(key: str) -> InlineKeyboardMarkup:
+    row1 = [InlineKeyboardButton(str(i), callback_data=f"rate_{key}_{i}") for i in range(1, 6)]
+    row2 = [InlineKeyboardButton(str(i), callback_data=f"rate_{key}_{i}") for i in range(6, 11)]
     return InlineKeyboardMarkup([row1, row2])
 
 
-def _anon_keyboard(photo_id: str) -> InlineKeyboardMarkup:
+def _anon_keyboard(key: str) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup([[
-        InlineKeyboardButton("✅ Да, скрыть", callback_data=f"anon_{photo_id}_yes"),
-        InlineKeyboardButton("❌ Нет",        callback_data=f"anon_{photo_id}_no"),
+        InlineKeyboardButton("✅ Да, скрыть", callback_data=f"anon_{key}_yes"),
+        InlineKeyboardButton("❌ Нет",        callback_data=f"anon_{key}_no"),
     ]])
 
 
 async def rate_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """
-    /rate — только в личных сообщениях.
-    Просит прислать фото, затем отправляет его в группу с голосованием на 30 минут.
-    """
     if update.effective_chat.type != "private":
         await update.message.reply_text(
             "📸 Команда /rate работает только в личных сообщениях!\n"
@@ -35,7 +37,6 @@ async def rate_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         )
         return
 
-    context.user_data["awaiting_rate_photo"] = True
     await update.message.reply_text(
         "📸 Отправь мне фото, которое хочешь выставить на оценку группы.\n"
         "Голосование будет идти 30 минут, затем покажу итоговый счёт."
@@ -43,18 +44,16 @@ async def rate_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 
 
 async def handle_rate_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """
-    Принимает фото в личке (после /rate или напрямую).
-    Зарегистрирован как MessageHandler(PHOTO & ChatType.PRIVATE) в bot.py.
-    """
-    context.user_data.pop("awaiting_rate_photo", None)
-
-    photo = update.message.photo[-1]  # максимальное разрешение
+    """Принимает любое фото в личке и предлагает выставить на оценку группы."""
+    photo = update.message.photo[-1]
     photo_id = photo.file_id
+    key = _short_key(photo_id)
     author = update.effective_user
     author_name = f"@{author.username}" if author.username else author.first_name
 
-    # Сохраняем предварительно (chat_id группы укажем позже)
+    # Сохраняем маппинг key → photo_id в памяти бота
+    context.bot_data[f"rate_key_{key}"] = photo_id
+
     save_photo(
         photo_id=photo_id,
         message_id=update.message.message_id,
@@ -66,7 +65,7 @@ async def handle_rate_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) 
 
     await update.message.reply_text(
         "🤔 Скрыть тебя как автора в группе?",
-        reply_markup=_anon_keyboard(photo_id),
+        reply_markup=_anon_keyboard(key),
     )
 
 
@@ -101,27 +100,27 @@ async def _close_rate_voting(context) -> None:
             caption=caption,
         )
     except Exception:
-        pass  # Сообщение могло быть удалено
+        pass
 
 
 async def rate_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """
-    Обработчик callback-кнопок:
-      anon_{photo_id}_yes / anon_{photo_id}_no  — выбор анонимности (в личке)
-      rate_{photo_id}_{score}                   — голосование (в группе)
-    """
     query = update.callback_query
     await query.answer()
     data = query.data
 
-    # ── Выбор анонимности (приходит из лички) ─────────────────────────────
+    # ── Выбор анонимности ─────────────────────────────────────────────────
     if data.startswith("anon_"):
         if data.endswith("_yes"):
-            photo_id = data[5:-4]
+            key = data[5:-4]
             anonymous = True
         else:
-            photo_id = data[5:-3]
+            key = data[5:-3]
             anonymous = False
+
+        photo_id = context.bot_data.get(f"rate_key_{key}")
+        if not photo_id:
+            await query.edit_message_text("❌ Сессия устарела. Отправь фото заново.")
+            return
 
         photo_row = get_photo(photo_id)
         if not photo_row:
@@ -131,15 +130,13 @@ async def rate_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         caption = "🖼 Анонимное фото" if anonymous else f"🖼 Фото от {photo_row['author_name']}"
         caption += "\n\n⭐ Голосуй от 1 до 10! Голосование идёт 30 минут."
 
-        # Отправляем фото в группу
         sent = await context.bot.send_photo(
             chat_id=CHAT_ID,
             photo=photo_id,
             caption=caption,
-            reply_markup=_rating_keyboard(photo_id),
+            reply_markup=_rating_keyboard(key),
         )
 
-        # Обновляем запись: сохраняем message_id группового сообщения
         save_photo(
             photo_id=photo_id,
             message_id=sent.message_id,
@@ -149,7 +146,6 @@ async def rate_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
             anonymous=anonymous,
         )
 
-        # Планируем закрытие голосования через 30 минут
         context.job_queue.run_once(
             _close_rate_voting,
             VOTE_DURATION,
@@ -161,11 +157,16 @@ async def rate_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
             "Голосование закроется через 30 минут — итоговый счёт появится там."
         )
 
-    # ── Голосование (приходит из группы) ─────────────────────────────────
+    # ── Голосование ───────────────────────────────────────────────────────
     elif data.startswith("rate_"):
-        parts = data.rsplit("_", 1)         # ["rate_{photo_id}", "{score}"]
+        parts = data.rsplit("_", 1)
         score = int(parts[1])
-        photo_id = parts[0][5:]             # убираем "rate_"
+        key = parts[0][5:]  # убираем "rate_"
+
+        photo_id = context.bot_data.get(f"rate_key_{key}")
+        if not photo_id:
+            await query.answer("❌ Сессия устарела.", show_alert=True)
+            return
 
         photo_row = get_photo(photo_id)
         if not photo_row:
@@ -191,5 +192,5 @@ async def rate_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
         await query.edit_message_caption(
             caption=caption,
-            reply_markup=_rating_keyboard(photo_id),
+            reply_markup=_rating_keyboard(key),
         )
