@@ -64,6 +64,8 @@ SWEAR_RESPONSES = [
 
 async def _track_message(update, context):
     """Считает сообщения и маты всех участников (раздельно по чатам)."""
+    if not update.message:
+        return
     user = update.effective_user
     if not user or user.is_bot:
         return

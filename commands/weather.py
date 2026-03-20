@@ -4,7 +4,7 @@
 # ==============================================================================
 
 import urllib.parse
-import urllib.request
+import httpx
 from telegram import Update
 from telegram.ext import ContextTypes
 
@@ -25,9 +25,9 @@ async def weather_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 
     try:
         url = f"https://wttr.in/{city_encoded}?format=3&lang=ru"
-        req = urllib.request.Request(url, headers={"User-Agent": "curl/7.68.0"})
-        with urllib.request.urlopen(req, timeout=5) as resp:
-            result = resp.read().decode("utf-8").strip()
+        async with httpx.AsyncClient(timeout=5) as client:
+            resp = await client.get(url, headers={"User-Agent": "curl/7.68.0"})
+            result = resp.text.strip()
 
         if not result:
             raise ValueError("Пустой ответ")

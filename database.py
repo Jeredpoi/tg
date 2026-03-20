@@ -182,9 +182,12 @@ def save_photo(photo_id: str, message_id: int, chat_id: int,
                author_id: int, author_name: str, anonymous: bool) -> None:
     conn = get_connection()
     conn.execute("""
-        INSERT OR REPLACE INTO photo_ratings
+        INSERT INTO photo_ratings
             (photo_id, message_id, chat_id, author_id, author_name, anonymous)
         VALUES (?, ?, ?, ?, ?, ?)
+        ON CONFLICT(photo_id) DO UPDATE SET
+            message_id  = excluded.message_id,
+            anonymous   = excluded.anonymous
     """, (photo_id, message_id, chat_id, author_id, author_name, int(anonymous)))
     conn.commit()
     conn.close()
