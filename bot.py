@@ -129,7 +129,9 @@ def main():
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, _track_message))
 
     async def set_commands(app):
-        await app.bot.set_my_commands([
+        from telegram import BotCommandScopeAllGroupChats, BotCommandScopeAllPrivateChats, BotCommandScopeDefault
+
+        commands = [
             BotCommand("help",     "📖 Помощь по командам"),
             BotCommand("top",      "📊 Статистика чата"),
             BotCommand("dice",     "🎲 Бросить кубик"),
@@ -141,8 +143,13 @@ def main():
             BotCommand("kfine",    "⚖️ [Король] Оштрафовать"),
             BotCommand("kpardon",  "🕊️ [Король] Помиловать"),
             BotCommand("kdecree",  "📜 [Король] Издать указ"),
-        ])
-        logger.info("Команды обновлены")
+        ]
+
+        # Обновляем команды для всех scope-ов, чтобы перезаписать старые (в т.ч. установленные через BotFather)
+        await app.bot.set_my_commands(commands, scope=BotCommandScopeDefault())
+        await app.bot.set_my_commands(commands, scope=BotCommandScopeAllPrivateChats())
+        await app.bot.set_my_commands(commands, scope=BotCommandScopeAllGroupChats())
+        logger.info("Команды обновлены для всех scope-ов")
 
     app.post_init = set_commands
 
