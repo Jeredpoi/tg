@@ -3,13 +3,15 @@
 # ==============================================================================
 
 import logging
-import random
+import os
 import re
+import random
 from telegram.ext import (
     ApplicationBuilder,
     CommandHandler,
     MessageHandler,
     CallbackQueryHandler,
+    ChatMemberHandler,
     filters,
 )
 
@@ -115,6 +117,44 @@ async def _track_message(update, context):
         )
 
 
+def _save_chat_id_to_config(new_id: int) -> None:
+    """Перезаписывает строку CHAT_ID в config.py."""
+    config_path = os.path.join(os.path.dirname(__file__), "config.py")
+    with open(config_path, "r", encoding="utf-8") as f:
+        content = f.read()
+    content = re.sub(r"^CHAT_ID\s*=.*$", f"CHAT_ID = {new_id}", content, flags=re.MULTILINE)
+    with open(config_path, "w", encoding="utf-8") as f:
+        f.write(content)
+
+
+async def _on_bot_added(update, context):
+    """Срабатывает когда бот добавлен в группу — сохраняет CHAT_ID."""
+    event = update.my_chat_member
+    new_status = event.new_chat_member.status
+    chat = event.chat
+
+    if new_status not in ("member", "administrator"):
+        return
+    if chat.type not in ("group", "supergroup"):
+        return
+
+    import config
+    chat_id = chat.id
+    config.CHAT_ID = chat_id
+    _save_chat_id_to_config(chat_id)
+
+    logger.info("Бот добавлен в группу %r, CHAT_ID обновлён на %s", chat.title, chat_id)
+
+    try:
+        await context.bot.send_message(
+            chat_id=chat_id,
+            text=f"👋 Привет! Группа зарегистрирована как основная.\n<code>CHAT_ID = {chat_id}</code>",
+            parse_mode="HTML",
+        )
+    except Exception:
+        pass
+
+
 async def _private_command_guard(update, context):
     """Отвечает на неизвестные команды в личке."""
     await update.message.reply_text(
@@ -157,6 +197,9 @@ def main():
         filters.COMMAND & filters.ChatType.PRIVATE,
         _private_command_guard,
     ))
+
+    # Автоопределение CHAT_ID при добавлении бота в группу
+    app.add_handler(ChatMemberHandler(_on_bot_added, ChatMemberHandler.MY_CHAT_MEMBER))
 
     # Приём фото в личке для /rate
     app.add_handler(MessageHandler(
