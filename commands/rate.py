@@ -44,12 +44,9 @@ async def rate_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 
 async def handle_rate_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """
-    Принимает фото в личке после /rate.
+    Принимает фото в личке (после /rate или напрямую).
     Зарегистрирован как MessageHandler(PHOTO & ChatType.PRIVATE) в bot.py.
     """
-    if not context.user_data.get("awaiting_rate_photo"):
-        return
-
     context.user_data.pop("awaiting_rate_photo", None)
 
     photo = update.message.photo[-1]  # максимальное разрешение
