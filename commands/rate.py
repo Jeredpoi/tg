@@ -6,7 +6,7 @@ import hashlib
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
 from database import save_photo, add_vote, get_photo, close_photo
-from config import CHAT_ID
+import config
 
 VOTE_DURATION = 30 * 60  # 30 минут в секундах
 
@@ -57,7 +57,7 @@ async def handle_rate_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     save_photo(
         photo_id=photo_id,
         message_id=update.message.message_id,
-        chat_id=CHAT_ID,
+        chat_id=config.CHAT_ID,
         author_id=author.id,
         author_name=author_name,
         anonymous=False,
@@ -132,7 +132,7 @@ async def rate_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
         try:
             sent = await context.bot.send_photo(
-                chat_id=CHAT_ID,
+                chat_id=config.CHAT_ID,
                 photo=photo_id,
                 caption=caption,
                 reply_markup=_rating_keyboard(key),
@@ -148,7 +148,7 @@ async def rate_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         save_photo(
             photo_id=photo_id,
             message_id=sent.message_id,
-            chat_id=CHAT_ID,
+            chat_id=config.CHAT_ID,
             author_id=photo_row["author_id"],
             author_name=photo_row["author_name"],
             anonymous=anonymous,
@@ -157,7 +157,7 @@ async def rate_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         context.job_queue.run_once(
             _close_rate_voting,
             VOTE_DURATION,
-            data={"photo_id": photo_id, "chat_id": CHAT_ID, "message_id": sent.message_id},
+            data={"photo_id": photo_id, "chat_id": config.CHAT_ID, "message_id": sent.message_id},
         )
 
         await query.edit_message_text(
