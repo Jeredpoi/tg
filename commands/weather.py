@@ -2,11 +2,16 @@
 # commands/weather.py — Команда /weather (Яндекс.Погода API)
 # ==============================================================================
 
+import logging
+
 import httpx
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.error import BadRequest
 from telegram.ext import ContextTypes
 
 from config import YANDEX_WEATHER_KEY
+
+logger = logging.getLogger(__name__)
 
 CONDITION_MAP = {
     "clear":                    ("☀️",  "Ясно"),
@@ -182,13 +187,24 @@ async def weather_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         else:  # wrefresh
             text = _build_current_text(city_name, weather_data)
 
-        await query.edit_message_text(text, parse_mode="HTML", reply_markup=kb)
+        try:
+            await query.edit_message_text(text, parse_mode="HTML", reply_markup=kb)
+        except BadRequest as e:
+            if "Message is not modified" in str(e):
+                await query.answer("Погода не изменилась 🔄")
+            else:
+                raise
 
+    except BadRequest:
+        raise
     except Exception as e:
         logger.exception("weather_callback failed city=%r action=%r: %s", city_name, action, e)
-        await query.edit_message_text(
-            f"❌ Не удалось обновить погоду для «{city_name}».\n"
-            f"Ошибка: <code>{e}</code>",
-            parse_mode="HTML",
-            reply_markup=_keyboard(lat, lon, city_name),
-        )
+        try:
+            await query.edit_message_text(
+                f"❌ Не удалось получить погоду для «{city_name}».\n"
+                f"Ошибка: <code>{e}</code>",
+                parse_mode="HTML",
+                reply_markup=_keyboard(lat, lon, city_name),
+            )
+        except BadRequest:
+            pass
