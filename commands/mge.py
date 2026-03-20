@@ -19,8 +19,8 @@ async def mge_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     if reply and reply.from_user and not reply.from_user.is_bot:
         target = reply.from_user
         mention = f"@{target.username}" if target.username else target.first_name
-        text = f"{mention}\n\n🎭 *{speaker}:*\n«{phrase}»"
+        text = f"{mention}\n\n🎭 <b>{speaker}:</b>\n«{phrase}»"
     else:
-        text = f"🎭 *{speaker}:*\n«{phrase}»"
+        text = f"🎭 <b>{speaker}:</b>\n«{phrase}»"
 
-    await update.message.reply_text(text, parse_mode="Markdown")
+    await update.message.reply_text(text, parse_mode="HTML")

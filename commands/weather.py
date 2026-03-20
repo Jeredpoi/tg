@@ -103,11 +103,13 @@ def _build_forecast_text(city_name: str, data: dict) -> str:
         parts = day.get("parts", {})
         # Берём день
         d = parts.get("day_short") or parts.get("day") or {}
-        temp_min = day.get("parts", {}).get("night_short", {}).get("temp_min", "?")
-        temp_max = d.get("temp_max", d.get("temp", "?"))
+        temp_min = day.get("parts", {}).get("night_short", {}).get("temp_min")
+        temp_max = d.get("temp_max", d.get("temp"))
         cond_code = d.get("condition", "")
         icon, cond_name = _cond(cond_code)
-        lines.append(f"📆 <b>{date}</b>  {icon} {cond_name}  {_sign(temp_min)}…{_sign(temp_max)}°C")
+        t_min = _sign(temp_min) if isinstance(temp_min, (int, float)) else "?"
+        t_max = _sign(temp_max) if isinstance(temp_max, (int, float)) else "?"
+        lines.append(f"📆 <b>{date}</b>  {icon} {cond_name}  {t_min}…{t_max}°C")
     return "\n".join(lines)
 
 
