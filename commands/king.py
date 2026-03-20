@@ -28,6 +28,20 @@ _PARDON_TEMPLATES = [
     "🎊 {user} помилован! {king} сегодня добр как никогда! 🌟",
 ]
 
+_REWARD_TEMPLATES = [
+    "🏅 Великий {king} награждает {user} орденом «За заслуги перед чатом»! Аплодисменты! 👏",
+    "🎖️ По воле короля {king} — {user} удостоен королевской награды! Носи с честью! ✨",
+    "🌟 {king} лично отмечает {user} за выдающееся поведение! Да здравствует {user}! 🎉",
+    "🏆 Королевским указом {king} вручает {user} титул «Лучший подданный»! Слава! 👑",
+]
+
+_TAX_TEMPLATES = [
+    "💰 Королевский казначей объявляет: по указу {king} все платят налог! Казна пустовать не должна! 🏛️",
+    "📜 Его Величество {king} вводит новый налог! Платить немедленно, иначе — в темницу! ⚖️",
+    "🪙 {king} объявляет налоговую проверку! Кто не заплатит — тот предатель престола! 👑",
+    "💸 По велению {king} объявляется сбор налогов! Казна ждёт ваши монеты! 🏰",
+]
+
 
 def _king_mention(king_row) -> str:
     return f"@{king_row['username']}" if king_row['username'] else king_row['first_name']
@@ -140,4 +154,29 @@ async def kdecree_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         f"«{decree}»\n\n"
         f"Подписано и скреплено королевской печатью 👑"
     )
+    await update.message.reply_text(text)
+
+
+async def kreward_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """/kreward @user — Король награждает подданного."""
+    king_mention = await _require_king(update)
+    if king_mention is None:
+        return
+
+    if not context.args:
+        await update.message.reply_text("Укажи кого наградить: /kreward @user")
+        return
+
+    target = context.args[0]
+    text = random.choice(_REWARD_TEMPLATES).format(king=king_mention, user=target)
+    await update.message.reply_text(text)
+
+
+async def ktax_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """/ktax — Король вводит налог для всего чата."""
+    king_mention = await _require_king(update)
+    if king_mention is None:
+        return
+
+    text = random.choice(_TAX_TEMPLATES).format(king=king_mention)
     await update.message.reply_text(text)

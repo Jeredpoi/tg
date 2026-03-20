@@ -6,6 +6,7 @@ import logging
 import os
 import re
 import random
+import time
 from telegram.ext import (
     ApplicationBuilder,
     CommandHandler,
@@ -22,7 +23,8 @@ from database import init_db, track_message
 
 from commands.debug import debug_command
 from commands.dice import dice_command
-from commands.king import king_command, kfine_command, kpardon_command, kdecree_command
+from commands.king import king_command, kfine_command, kpardon_command, kdecree_command, kreward_command, ktax_command
+from commands.mge import mge_command
 from commands.roast import roast_command
 from commands.top import top_command, top_callback
 from commands.rate import rate_command, rate_callback, handle_rate_photo
@@ -88,7 +90,41 @@ SWEAR_RESPONSES = [
     "Культурнее надо быть, {name}! 📚",
     "Ого, {name}! Такие слова знаешь! 😳",
     "Фильтруй базар, {name}! 🫡",
+    "Лексикон на уровне, {name} 👏",
+    "{name}, это что, норма? 😬",
+    "Слушай, {name}, ну зачем так-то? 🙄",
+    "Словарный запас {name} пополняется не туда 📖",
+    "{name} открыл рот и сразу всё стало ясно 🗣️",
+    "Сохраню это для твоего личного дела, {name} 📋",
+    "{name}, у тебя всё хорошо? Просто спрашиваю 🙂",
 ]
+
+# Cooldown: последнее время ответа на мат по chat_id
+_swear_last_response: dict[int, float] = {}
+# Минимальная пауза между ответами на маты (секунды)
+_SWEAR_COOLDOWN = 15
+
+
+async def _send_swear_response(context) -> None:
+    """Job: отправляет ответ на мат после дебаунс-паузы."""
+    d = context.job.data
+    chat_id = d["chat_id"]
+
+    # Проверяем глобальный cooldown для чата
+    last = _swear_last_response.get(chat_id, 0)
+    if time.time() - last < _SWEAR_COOLDOWN:
+        return
+
+    _swear_last_response[chat_id] = time.time()
+
+    try:
+        await context.bot.send_message(
+            chat_id=chat_id,
+            text=random.choice(SWEAR_RESPONSES).format(name=d["name"]),
+            reply_to_message_id=d["message_id"],
+        )
+    except Exception:
+        pass
 
 
 async def _track_message(update, context):
@@ -111,11 +147,25 @@ async def _track_message(update, context):
         chat_id, user.first_name, user.username, update.message.text, swear_count,
     )
 
-    if swear_count and update.effective_chat.type != "private" and random.random() < 0.30:
+    if swear_count and update.effective_chat.type != "private":
         name = user.first_name or user.username or "дружок"
-        await update.message.reply_text(
-            random.choice(SWEAR_RESPONSES).format(name=name)
-        )
+
+        # Дебаунсинг: отменяем предыдущий отложенный ответ для этого чата
+        for job in context.job_queue.get_jobs_by_name(f"swear_{chat_id}"):
+            job.schedule_removal()
+
+        # Случайно решаем отвечать ли (50%) — но с учётом cooldown в _send_swear_response
+        if random.random() < 0.50:
+            context.job_queue.run_once(
+                _send_swear_response,
+                2.5,  # 2.5 сек задержка — ждём пока закончат спамить
+                data={
+                    "chat_id": chat_id,
+                    "name": name,
+                    "message_id": update.message.message_id,
+                },
+                name=f"swear_{chat_id}",
+            )
 
 
 def _save_chat_id_to_config(new_id: int) -> None:
@@ -193,6 +243,11 @@ def main():
     app.add_handler(CommandHandler("kfine",   kfine_command,   filters=filters.ChatType.GROUPS))
     app.add_handler(CommandHandler("kpardon", kpardon_command, filters=filters.ChatType.GROUPS))
     app.add_handler(CommandHandler("kdecree", kdecree_command, filters=filters.ChatType.GROUPS))
+    app.add_handler(CommandHandler("kreward", kreward_command, filters=filters.ChatType.GROUPS))
+    app.add_handler(CommandHandler("ktax",    ktax_command,    filters=filters.ChatType.GROUPS))
+
+    # MGE
+    app.add_handler(CommandHandler("mge", mge_command, filters=filters.ChatType.GROUPS))
 
     # Ловим любые другие команды в личке и вежливо отказываем
     app.add_handler(MessageHandler(
@@ -232,6 +287,9 @@ def main():
             BotCommand("kfine",    "⚖️ [Король] Оштрафовать"),
             BotCommand("kpardon",  "🕊️ [Король] Помиловать"),
             BotCommand("kdecree",  "📜 [Король] Издать указ"),
+            BotCommand("kreward",  "🏅 [Король] Наградить"),
+            BotCommand("ktax",     "💰 [Король] Ввести налог"),
+            BotCommand("mge",      "🎭 Фраза из МГЕ"),
         ]
 
         private_commands = [

@@ -58,6 +58,7 @@ def init_db() -> None:
     c.execute("""
         CREATE TABLE IF NOT EXISTS photo_ratings (
             photo_id    TEXT PRIMARY KEY,
+            key         TEXT,
             message_id  INTEGER,
             chat_id     INTEGER,
             author_id   INTEGER,
@@ -71,6 +72,8 @@ def init_db() -> None:
     pr_cols = {row[1] for row in c.execute("PRAGMA table_info(photo_ratings)")}
     if "closed" not in pr_cols:
         c.execute("ALTER TABLE photo_ratings ADD COLUMN closed INTEGER DEFAULT 0")
+    if "key" not in pr_cols:
+        c.execute("ALTER TABLE photo_ratings ADD COLUMN key TEXT")
 
     # ── photo_votes ─────────────────────────────────────────────────────────
     c.execute("""
@@ -179,18 +182,30 @@ def set_king_today(chat_id: int, user_id: int, username: str, first_name: str) -
 # ── photo_ratings ──────────────────────────────────────────────────────────
 
 def save_photo(photo_id: str, message_id: int, chat_id: int,
-               author_id: int, author_name: str, anonymous: bool) -> None:
+               author_id: int, author_name: str, anonymous: bool,
+               key: str = "") -> None:
     conn = get_connection()
     conn.execute("""
         INSERT INTO photo_ratings
-            (photo_id, message_id, chat_id, author_id, author_name, anonymous)
-        VALUES (?, ?, ?, ?, ?, ?)
+            (photo_id, key, message_id, chat_id, author_id, author_name, anonymous)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(photo_id) DO UPDATE SET
+            key         = excluded.key,
             message_id  = excluded.message_id,
             anonymous   = excluded.anonymous
-    """, (photo_id, message_id, chat_id, author_id, author_name, int(anonymous)))
+    """, (photo_id, key, message_id, chat_id, author_id, author_name, int(anonymous)))
     conn.commit()
     conn.close()
+
+
+def get_photo_by_key(key: str):
+    """Возвращает строку photo_ratings по короткому ключу."""
+    conn = get_connection()
+    row = conn.execute(
+        "SELECT * FROM photo_ratings WHERE key = ?", (key,)
+    ).fetchone()
+    conn.close()
+    return row
 
 
 def close_photo(photo_id: str) -> None:
