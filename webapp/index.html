@@ -46,14 +46,14 @@
   }
 
   /* ── Sections ── */
-  .section { display: none; padding: 14px 12px; }
+  .section { display: none; padding: 20px 16px; }
   .section.active { display: block; }
 
   /* ── Sort bar ── */
   .sort-bar {
     display: flex;
-    gap: 8px;
-    margin-bottom: 14px;
+    gap: 10px;
+    margin-bottom: 20px;
     overflow-x: auto;
     padding-bottom: 2px;
     scrollbar-width: none;
@@ -61,12 +61,12 @@
   .sort-bar::-webkit-scrollbar { display: none; }
   .sort-btn {
     white-space: nowrap;
-    padding: 7px 16px;
-    border-radius: 20px;
+    padding: 9px 20px;
+    border-radius: 22px;
     border: 1.5px solid rgba(255,255,255,0.1);
     background: rgba(255,255,255,0.04);
     color: var(--tg-theme-hint-color, #6e6e73);
-    font-size: 13px;
+    font-size: 14px;
     font-weight: 500;
     cursor: pointer;
     transition: all .2s;
@@ -78,11 +78,11 @@
   }
 
   /* ── Steam cards ── */
-  .steam-list { display: flex; flex-direction: column; gap: 10px; }
+  .steam-list { display: flex; flex-direction: column; gap: 14px; }
   .steam-card {
     display: flex;
     background: var(--tg-theme-secondary-bg-color, #1a1a1c);
-    border-radius: 16px;
+    border-radius: 18px;
     overflow: hidden;
     text-decoration: none;
     color: inherit;
@@ -92,24 +92,24 @@
   }
   .steam-card:active { transform: scale(0.975); }
   .steam-cover {
-    width: 110px;
-    min-width: 110px;
-    height: 74px;
+    width: 130px;
+    min-width: 130px;
+    height: 90px;
     object-fit: cover;
     background: #222;
   }
   .steam-cover-placeholder {
-    width: 110px;
-    min-width: 110px;
-    height: 74px;
+    width: 130px;
+    min-width: 130px;
+    height: 90px;
     background: linear-gradient(135deg, #1a2f4a, #0d1f30);
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 26px;
+    font-size: 30px;
   }
   .steam-info {
-    padding: 10px 12px;
+    padding: 14px 16px;
     display: flex;
     flex-direction: column;
     justify-content: space-between;
@@ -117,9 +117,9 @@
     min-width: 0;
   }
   .steam-name {
-    font-size: 13px;
+    font-size: 14px;
     font-weight: 600;
-    line-height: 1.35;
+    line-height: 1.4;
     overflow: hidden;
     display: -webkit-box;
     -webkit-line-clamp: 2;
@@ -129,27 +129,27 @@
   .steam-price-row {
     display: flex;
     align-items: center;
-    gap: 7px;
+    gap: 8px;
     flex-wrap: wrap;
-    margin-top: 4px;
+    margin-top: 8px;
   }
   .steam-badge {
     background: linear-gradient(135deg, #2ecc71, #27ae60);
     color: #fff;
-    font-size: 11px;
+    font-size: 12px;
     font-weight: 800;
-    padding: 2px 8px;
-    border-radius: 6px;
+    padding: 3px 10px;
+    border-radius: 8px;
     letter-spacing: 0.02em;
   }
   .steam-badge.hot { background: linear-gradient(135deg, #ff6b35, #e84118); }
   .steam-orig {
-    font-size: 11px;
+    font-size: 12px;
     color: var(--tg-theme-hint-color, #6e6e73);
     text-decoration: line-through;
   }
   .steam-sale {
-    font-size: 14px;
+    font-size: 15px;
     font-weight: 700;
     color: #4cd964;
   }
@@ -158,11 +158,11 @@
   .gallery-grid {
     display: grid;
     grid-template-columns: 1fr 1fr;
-    gap: 10px;
+    gap: 14px;
   }
   .photo-card {
     background: var(--tg-theme-secondary-bg-color, #1a1a1c);
-    border-radius: 16px;
+    border-radius: 18px;
     overflow: hidden;
     position: relative;
     -webkit-tap-highlight-color: transparent;
@@ -193,38 +193,38 @@
   .photo-overlay {
     position: absolute;
     bottom: 0; left: 0; right: 0;
-    background: linear-gradient(to top, rgba(0,0,0,0.82) 0%, rgba(0,0,0,0) 100%);
-    padding: 28px 10px 8px;
+    background: linear-gradient(to top, rgba(0,0,0,0.85) 0%, rgba(0,0,0,0) 100%);
+    padding: 36px 12px 12px;
     display: flex;
     align-items: flex-end;
     justify-content: space-between;
   }
   .photo-author-overlay {
-    font-size: 11px;
+    font-size: 12px;
     font-weight: 500;
-    color: rgba(255,255,255,0.75);
+    color: rgba(255,255,255,0.8);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-    max-width: 65%;
+    max-width: 62%;
   }
   .photo-score-overlay {
     display: flex;
     align-items: center;
-    gap: 3px;
-    background: rgba(0,0,0,0.45);
+    gap: 4px;
+    background: rgba(0,0,0,0.5);
     backdrop-filter: blur(6px);
-    padding: 3px 7px;
-    border-radius: 10px;
+    padding: 4px 9px;
+    border-radius: 12px;
     flex-shrink: 0;
   }
   .score-num {
-    font-size: 13px;
+    font-size: 14px;
     font-weight: 700;
     color: #ffd60a;
   }
   .score-votes {
-    font-size: 10px;
+    font-size: 11px;
     color: rgba(255,255,255,0.55);
   }
 
@@ -235,35 +235,35 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 36px;
+    font-size: 40px;
   }
 
   /* Rank badge */
   .rank-badge {
     position: absolute;
-    top: 8px;
-    left: 8px;
-    font-size: 14px;
+    top: 10px;
+    left: 10px;
+    font-size: 18px;
     line-height: 1;
-    filter: drop-shadow(0 1px 3px rgba(0,0,0,0.6));
+    filter: drop-shadow(0 1px 4px rgba(0,0,0,0.7));
   }
   .rank-badge.rank-num {
-    font-size: 11px;
+    font-size: 12px;
     font-weight: 700;
     background: rgba(0,0,0,0.55);
-    color: rgba(255,255,255,0.8);
-    padding: 2px 7px;
-    border-radius: 10px;
+    color: rgba(255,255,255,0.85);
+    padding: 3px 9px;
+    border-radius: 12px;
     backdrop-filter: blur(4px);
   }
 
   /* Видео-бейдж */
   .video-badge {
     position: absolute;
-    top: 8px;
-    right: 8px;
-    font-size: 14px;
-    filter: drop-shadow(0 1px 3px rgba(0,0,0,0.7));
+    top: 10px;
+    right: 10px;
+    font-size: 18px;
+    filter: drop-shadow(0 1px 4px rgba(0,0,0,0.8));
   }
 
   /* ── Loader & empty ── */
