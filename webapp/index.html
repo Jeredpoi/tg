@@ -363,11 +363,17 @@ async function loadGallery() {
       const rank = i < 3
         ? `<div class="rank-badge rank-${i+1}">${['🥇','🥈','🥉'][i]}</div>`
         : `<div class="rank-badge">#${i+1}</div>`;
+      const isVideo = p.media_type === 'video';
+      const media = isVideo
+        ? `<video class="photo-img" src="/api/photo/${p.key}" muted playsinline loop preload="metadata"
+                  onerror="this.outerHTML='<div class=\\'photo-img-placeholder\\'>🎥</div>'"
+                  onmouseenter="this.play()" onmouseleave="this.pause();this.currentTime=0"></video>`
+        : `<img class="photo-img" src="/api/photo/${p.key}" alt=""
+                onerror="this.outerHTML='<div class=\\'photo-img-placeholder\\'>📷</div>'">`;
       return `
         <div class="photo-card">
           ${rank}
-          <img class="photo-img" src="/api/photo/${p.key}" alt=""
-               onerror="this.outerHTML='<div class=\\'photo-img-placeholder\\'>📷</div>'">
+          ${media}
           <div class="photo-meta">
             <div class="photo-author">${escHtml(p.author)}</div>
             <div class="photo-score">
