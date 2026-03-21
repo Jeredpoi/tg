@@ -4,7 +4,7 @@
 
 import hashlib
 import logging
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
 from telegram.ext import ContextTypes
 from database import save_photo, add_vote, get_photo, get_photo_by_key, close_photo
 import config
@@ -124,7 +124,7 @@ async def _close_rate_voting(context) -> None:
 
     try:
         gallery_btn = InlineKeyboardMarkup([[
-            InlineKeyboardButton("🖼 Галерея", url="https://144.31.75.246.sslip.io")
+            InlineKeyboardButton("🖼 Галерея", web_app=WebAppInfo(url="https://144.31.75.246.sslip.io"))
         ]])
         await context.bot.edit_message_caption(
             chat_id=chat_id,
