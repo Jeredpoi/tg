@@ -2,6 +2,7 @@
 # bot.py — Главный файл бота
 # ==============================================================================
 
+import json
 import logging
 import os
 import re
@@ -166,6 +167,68 @@ async def _rate_limit_guard(update, context):
     _cmd_last_used[key] = now
 
 
+# ==============================================================================
+# Setup guard — бот требует /start и права на удаление сообщений
+# ==============================================================================
+
+_SETUP_FILE = os.path.join(os.path.dirname(__file__), "setup_chats.json")
+
+def _load_setup_chats() -> set[int]:
+    try:
+        with open(_SETUP_FILE, "r", encoding="utf-8") as f:
+            return set(json.load(f))
+    except (FileNotFoundError, json.JSONDecodeError):
+        return set()
+
+def _save_setup_chats() -> None:
+    with open(_SETUP_FILE, "w", encoding="utf-8") as f:
+        json.dump(list(_setup_chats), f)
+
+_setup_chats: set[int] = _load_setup_chats()
+
+
+async def _setup_guard(update, context):
+    """Middleware (group=-1): блокирует команды в не-инициализированных группах."""
+    msg = update.message
+    if not msg or not msg.text:
+        return
+
+    chat = update.effective_chat
+    if not chat or chat.type not in ("group", "supergroup"):
+        return
+
+    # /start пропускаем всегда — через него происходит инициализация
+    command = msg.text.split()[0].split("@")[0].lower()
+    if command == "/start":
+        return
+
+    if chat.id not in _setup_chats:
+        await msg.reply_text("Сосунок, папочка пока не работает! Пропишите /start")
+        raise ApplicationHandlerStop
+
+
+async def _group_start_command(update, context):
+    """Инициализация бота в группе через /start."""
+    chat = update.effective_chat
+
+    # Проверяем, есть ли у бота право удалять сообщения
+    bot_member = await context.bot.get_chat_member(chat.id, context.bot.id)
+    can_delete = getattr(bot_member, "can_delete_messages", False)
+
+    if not can_delete:
+        await update.message.reply_text(
+            "Вы что тупые? Папочка сказал: дайте права на удаление сообщений! "
+            "Выдайте — и снова пропишите /start"
+        )
+        return
+
+    _setup_chats.add(chat.id)
+    _save_setup_chats()
+    await update.message.reply_text(
+        "Молодец сынок, папочка начинает работать 😎"
+    )
+
+
 async def _send_swear_response(context) -> None:
     """Job: отправляет ответ на мат после дебаунс-паузы."""
     d = context.job.data
@@ -260,7 +323,13 @@ async def _on_bot_added(update, context):
     try:
         await context.bot.send_message(
             chat_id=chat_id,
-            text=f"👋 Привет! Группа зарегистрирована как основная.\n<code>CHAT_ID = {chat_id}</code>",
+            text=(
+                "Привет сосунки! 😤\n\n"
+                "Чтобы батя начал работать:\n"
+                "1️⃣ Выдайте мне права на <b>удаление сообщений</b>\n"
+                "2️⃣ Пропишите /start\n\n"
+                "Пока не сделаете — ни одна команда работать не будет!"
+            ),
             parse_mode="HTML",
         )
     except Exception:
@@ -285,11 +354,18 @@ def main():
         logger.info("Используется прокси: %s", PROXY_URL)
     app = builder.build()
 
-    # Rate limiter — должен стоять раньше всех командных хендлеров
+    # Middleware (group=-1): сначала rate limiter, потом setup guard
     app.add_handler(
         MessageHandler(filters.COMMAND, _rate_limit_guard),
         group=-1,
     )
+    app.add_handler(
+        MessageHandler(filters.COMMAND & filters.ChatType.GROUPS, _setup_guard),
+        group=-1,
+    )
+
+    # /start в группе — инициализация бота
+    app.add_handler(CommandHandler("start", _group_start_command, filters=filters.ChatType.GROUPS))
 
     # В личке работают только /start, /help, /rate
     app.add_handler(CommandHandler("start",    help_command,    filters=filters.ChatType.PRIVATE))
