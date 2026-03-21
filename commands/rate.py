@@ -109,7 +109,6 @@ async def _close_rate_voting(context) -> None:
 
 async def rate_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
-    await query.answer()
     data = query.data
 
     # ── Выбор анонимности ─────────────────────────────────────────────────
@@ -211,6 +210,7 @@ async def rate_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
             f"📊 Сейчас: средняя {avg} ({votes} голос(ов))"
         )
 
+        await query.answer(f"Вы поставили {score} ⭐")
         try:
             await query.edit_message_caption(
                 caption=caption,
