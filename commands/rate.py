@@ -4,7 +4,7 @@
 
 import hashlib
 import logging
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
 from database import save_photo, add_vote, get_photo, get_photo_by_key, close_photo
 import config
@@ -95,7 +95,7 @@ async def _close_rate_voting(context) -> None:
 
     try:
         gallery_btn = InlineKeyboardMarkup([[
-            InlineKeyboardButton("🖼 Галерея", web_app=WebAppInfo(url="https://144.31.75.246.sslip.io"))
+            InlineKeyboardButton("🖼 Галерея", url="https://144.31.75.246.sslip.io")
         ]])
         await context.bot.edit_message_caption(
             chat_id=chat_id,
@@ -104,7 +104,7 @@ async def _close_rate_voting(context) -> None:
             reply_markup=gallery_btn,
         )
     except Exception as e:
-        logger.warning("Не удалось закрыть голосование: %s", e)
+        logger.error("Не удалось закрыть голосование chat=%s msg=%s: %s", chat_id, message_id, e)
 
 
 async def rate_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
