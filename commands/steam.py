@@ -29,17 +29,46 @@ async def _get_deals() -> list:
     if _cache.get("deals") and now - _cache.get("ts", 0) < CACHE_TTL:
         return _cache["deals"]
 
-    url = "https://store.steampowered.com/api/featuredcategories/"
+    seen: set[int] = set()
+    deals: list = []
+
     async with httpx.AsyncClient(timeout=10) as client:
-        resp = await client.get(url, params={"cc": "ru", "l": "russian"})
-        resp.raise_for_status()
-        data = resp.json()
+        # Основная выборка — все секции featuredcategories
+        r1 = await client.get(
+            "https://store.steampowered.com/api/featuredcategories/",
+            params={"cc": "ru", "l": "russian"},
+        )
+        r1.raise_for_status()
+        data1 = r1.json()
 
-    items = data.get("specials", {}).get("items", [])
-    # discount_percent может быть как -70, так и 70 в зависимости от версии API
-    deals = [i for i in items if i.get("discounted") or abs(i.get("discount_percent", 0)) > 0]
+        for section in data1.values():
+            if not isinstance(section, dict):
+                continue
+            for item in section.get("items", []):
+                app_id = item.get("id")
+                if not app_id or app_id in seen:
+                    continue
+                if abs(item.get("discount_percent", 0)) > 0 or item.get("discounted"):
+                    seen.add(app_id)
+                    deals.append(item)
+
+        # Дополнительно — featured (другой набор игр)
+        r2 = await client.get(
+            "https://store.steampowered.com/api/featured/",
+            params={"cc": "ru", "l": "russian"},
+        )
+        if r2.status_code == 200:
+            data2 = r2.json()
+            for section_items in (data2.get("featured_win", []), data2.get("large_capsules", [])):
+                for item in section_items:
+                    app_id = item.get("id")
+                    if not app_id or app_id in seen:
+                        continue
+                    if abs(item.get("discount_percent", 0)) > 0 or item.get("discounted"):
+                        seen.add(app_id)
+                        deals.append(item)
+
     logger.info("Steam deals fetched: %d items", len(deals))
-
     _cache["deals"] = deals
     _cache["ts"] = now
     return deals
