@@ -5,16 +5,22 @@
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.error import BadRequest
 from telegram.ext import ContextTypes
-from database import get_top_messages, get_top_swears
+from database import get_top_messages, get_top_swears, get_gallery
+
+MEDALS = ["🥇", "🥈", "🥉"]
+
+
+def _medal(i: int) -> str:
+    return MEDALS[i] if i < len(MEDALS) else f"{i + 1}."
 
 
 def _build_messages_text(rows: list) -> str:
     if not rows:
         return "Пока нет данных 😴"
     lines = ["📊 <b>Статистика чата</b>\n", "<b>Топ по сообщениям:</b>\n"]
-    for i, row in enumerate(rows, start=1):
+    for i, row in enumerate(rows):
         name = row["first_name"] or row["username"] or "Аноним"
-        lines.append(f"{i}. {name} — {row['msg_count']} сообщений")
+        lines.append(f"{_medal(i)} {name} — {row['msg_count']} сообщений")
     return "\n".join(lines)
 
 
@@ -22,24 +28,33 @@ def _build_swears_text(rows: list) -> str:
     if not rows:
         return "Пока нет данных 😴"
     lines = ["🤬 <b>Статистика чата</b>\n", "<b>Кто больше матерится:</b>\n"]
-    for i, row in enumerate(rows, start=1):
+    for i, row in enumerate(rows):
         name = row["first_name"] or row["username"] or "Аноним"
-        lines.append(f"{i}. {name} — {row['swear_count']} раз(а)")
+        lines.append(f"{_medal(i)} {name} — {row['swear_count']} раз(а)")
+    return "\n".join(lines)
+
+
+def _build_rating_text(rows: list) -> str:
+    if not rows:
+        return "🏆 <b>Рейтинг /rate</b>\n\nПока нет оценённых фото или видео 😴"
+    lines = ["🏆 <b>Рейтинг /rate</b>\n", "<b>Топ по средней оценке:</b>\n"]
+    for i, row in enumerate(rows):
+        avg = round(row["total_score"] / row["vote_count"], 1) if row["vote_count"] > 0 else 0
+        author = "Аноним" if row["anonymous"] else (row["author_name"] or "Аноним")
+        lines.append(f"{_medal(i)} {author} — ⭐ {avg} ({row['vote_count']} голос(ов))")
     return "\n".join(lines)
 
 
 def _get_keyboard(active: str) -> InlineKeyboardMarkup:
-    buttons = [
-        InlineKeyboardButton(
-            text="✅ Сообщения" if active == "messages" else "Сообщения",
-            callback_data="top_messages",
-        ),
-        InlineKeyboardButton(
-            text="✅ Маты" if active == "swears" else "Кто матерится",
-            callback_data="top_swears",
-        ),
-    ]
-    return InlineKeyboardMarkup([buttons])
+    def btn(key, label):
+        text = f"✅ {label}" if active == key else label
+        return InlineKeyboardButton(text, callback_data=f"top_{key}")
+
+    return InlineKeyboardMarkup([[
+        btn("messages", "Сообщения"),
+        btn("swears",   "Маты"),
+        btn("rating",   "🏆 Рейтинг"),
+    ]])
 
 
 async def top_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -69,6 +84,10 @@ async def top_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         rows = get_top_swears(chat_id)
         text = _build_swears_text(rows)
         keyboard = _get_keyboard("swears")
+    elif query.data == "top_rating":
+        rows = get_gallery(limit=10, chat_id=chat_id)
+        text = _build_rating_text(rows)
+        keyboard = _get_keyboard("rating")
     else:
         return
 

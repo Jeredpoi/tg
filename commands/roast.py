@@ -46,14 +46,24 @@ ROAST_PHRASES = [
 
 
 async def roast_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Обработчик команды /roast @username."""
-    if not context.args:
-        await update.message.reply_text("ℹ️ Укажи цель!\nПример: /roast @username")
-        return
+    """Обработчик команды /roast.
+    Приоритеты цели: аргумент @username → reply → сам себя.
+    """
+    target = None
 
-    target = context.args[0]
-    if not target.startswith("@"):
-        target = f"@{target}"
+    if context.args:
+        t = context.args[0]
+        target = t if t.startswith("@") else f"@{t}"
+    elif update.message.reply_to_message:
+        reply_user = update.message.reply_to_message.from_user
+        if reply_user and not reply_user.is_bot:
+            target = f"@{reply_user.username}" if reply_user.username else reply_user.first_name
+
+    if not target:
+        await update.message.reply_text(
+            "ℹ️ Укажи цель!\nПример: /roast @username или ответь на чьё-нибудь сообщение."
+        )
+        return
 
     phrase = random.choice(ROAST_PHRASES).format(user=target)
     await update.message.reply_text(phrase)

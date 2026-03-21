@@ -131,13 +131,16 @@ def _keyboard(lat: float, lon: float, city_name: str) -> InlineKeyboardMarkup:
 
 async def weather_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Обработчик команды /weather <город>."""
-    if not context.args:
+    if context.args:
+        city = " ".join(context.args)
+        context.user_data["last_weather_city"] = city
+    elif context.user_data.get("last_weather_city"):
+        city = context.user_data["last_weather_city"]
+    else:
         await update.message.reply_text(
             "🌤 Укажи город!\nПример: /weather Москва"
         )
         return
-
-    city = " ".join(context.args)
 
     msg = await update.message.reply_text("⏳ Получаю погоду...")
 

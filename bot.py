@@ -25,15 +25,12 @@ from database import init_db, track_message
 
 from commands.debug import debug_command
 from commands.dice import dice_command
-from commands.king import king_command, kfine_command, kpardon_command, kdecree_command, kreward_command, ktax_command
 from commands.mge import mge_command
 from commands.roast import roast_command
 from commands.top import top_command, top_callback
 from commands.rate import rate_command, rate_callback, handle_rate_photo, handle_rate_video
 from commands.help import help_command
-from commands.coinflip import coinflip_command
 from commands.weather import weather_command, weather_callback
-from commands.eightball import eightball_command
 from commands.steam import steam_command, steam_callback
 
 logging.basicConfig(
@@ -395,21 +392,11 @@ def main():
     app.add_handler(CommandHandler("rate",     rate_command,    filters=filters.ChatType.PRIVATE))
 
     # Команды только для групп
-    app.add_handler(CommandHandler("debug",    debug_command,   filters=filters.ChatType.GROUPS))
-    app.add_handler(CommandHandler("dice",     dice_command,    filters=filters.ChatType.GROUPS))
-    app.add_handler(CommandHandler("king",     king_command,    filters=filters.ChatType.GROUPS))
-    app.add_handler(CommandHandler("roast",    roast_command,   filters=filters.ChatType.GROUPS))
-    app.add_handler(CommandHandler("top",      top_command,     filters=filters.ChatType.GROUPS))
-    app.add_handler(CommandHandler("coinflip", coinflip_command, filters=filters.ChatType.GROUPS))
-    app.add_handler(CommandHandler("weather",  weather_command,   filters=filters.ChatType.GROUPS))
-    app.add_handler(CommandHandler("8ball",    eightball_command, filters=filters.ChatType.GROUPS))
-
-    # Королевские команды — только в группах
-    app.add_handler(CommandHandler("kfine",   kfine_command,   filters=filters.ChatType.GROUPS))
-    app.add_handler(CommandHandler("kpardon", kpardon_command, filters=filters.ChatType.GROUPS))
-    app.add_handler(CommandHandler("kdecree", kdecree_command, filters=filters.ChatType.GROUPS))
-    app.add_handler(CommandHandler("kreward", kreward_command, filters=filters.ChatType.GROUPS))
-    app.add_handler(CommandHandler("ktax",    ktax_command,    filters=filters.ChatType.GROUPS))
+    app.add_handler(CommandHandler("debug",   debug_command,   filters=filters.ChatType.GROUPS))
+    app.add_handler(CommandHandler("dice",    dice_command,    filters=filters.ChatType.GROUPS))
+    app.add_handler(CommandHandler("roast",   roast_command,   filters=filters.ChatType.GROUPS))
+    app.add_handler(CommandHandler("top",     top_command,     filters=filters.ChatType.GROUPS))
+    app.add_handler(CommandHandler("weather", weather_command, filters=filters.ChatType.GROUPS))
 
     # MGE
     app.add_handler(CommandHandler("mge",   mge_command,   filters=filters.ChatType.GROUPS))
@@ -452,22 +439,14 @@ def main():
         from telegram import BotCommandScopeAllGroupChats, BotCommandScopeAllPrivateChats, BotCommandScopeDefault
 
         group_commands = [
-            BotCommand("help",     "Помощь по командам"),
-            BotCommand("top",      "Статистика чата"),
-            BotCommand("dice",     "Бросить кубик"),
-            BotCommand("coinflip", "Орёл или решка"),
-            BotCommand("king",     "Выбрать короля дня"),
-            BotCommand("roast",    "Подколоть участника"),
-            BotCommand("8ball",    "Магический шар"),
-            BotCommand("weather",  "Погода"),
-            BotCommand("kfine",    "[Король] Оштрафовать"),
-            BotCommand("kpardon",  "[Король] Помиловать"),
-            BotCommand("kdecree",  "[Король] Издать указ"),
-            BotCommand("kreward",  "[Король] Наградить"),
-            BotCommand("ktax",     "[Король] Ввести налог"),
-            BotCommand("mge",      "Фраза из МГЕ"),
-            BotCommand("steam",    "Топ скидок в Steam"),
-            BotCommand("app",      "Открыть мини-приложение"),
+            BotCommand("help",    "Помощь по командам"),
+            BotCommand("top",     "Статистика чата"),
+            BotCommand("dice",    "Бросить кубик"),
+            BotCommand("roast",   "Подколоть участника"),
+            BotCommand("weather", "Погода"),
+            BotCommand("mge",     "Фраза из МГЕ"),
+            BotCommand("steam",   "Топ скидок в Steam"),
+            BotCommand("app",     "Открыть мини-приложение"),
         ]
 
         private_commands = [
