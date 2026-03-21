@@ -330,6 +330,57 @@ def add_comment(photo_id: str, commenter_id: int, commenter_name: str, text: str
     conn.close()
 
 
+def get_user_stats(user_id: int, chat_id: int) -> dict:
+    """Возвращает личную статистику пользователя в чате."""
+    conn = get_connection()
+
+    user_row = conn.execute(
+        "SELECT msg_count, swear_count FROM user_stats WHERE user_id = ? AND chat_id = ?",
+        (user_id, chat_id)
+    ).fetchone()
+
+    photos = conn.execute(
+        """SELECT COUNT(*) AS cnt,
+                  COALESCE(SUM(total_score), 0) AS total,
+                  COALESCE(SUM(vote_count), 0)  AS votes,
+                  MAX(CAST(total_score AS FLOAT) / NULLIF(vote_count, 0)) AS best
+           FROM photo_ratings
+           WHERE author_id = ? AND chat_id = ? AND vote_count > 0 AND anonymous = 0""",
+        (user_id, chat_id)
+    ).fetchone()
+
+    king_count = conn.execute(
+        "SELECT COUNT(*) AS cnt FROM king_of_day WHERE user_id = ? AND chat_id = ?",
+        (user_id, chat_id)
+    ).fetchone()
+
+    msg_rank = conn.execute(
+        """SELECT COUNT(*) + 1 AS rank FROM user_stats
+           WHERE chat_id = ? AND msg_count > (
+               SELECT COALESCE(msg_count, 0) FROM user_stats WHERE user_id = ? AND chat_id = ?
+           )""",
+        (chat_id, user_id, chat_id)
+    ).fetchone()
+
+    conn.close()
+
+    photo_cnt   = photos["cnt"]   if photos else 0
+    total_votes = photos["votes"] if photos else 0
+    avg_score   = round(photos["total"] / total_votes, 1) if total_votes else 0
+    best_score  = round(photos["best"], 1) if photos and photos["best"] else 0
+
+    return {
+        "msg_count":   user_row["msg_count"]   if user_row else 0,
+        "swear_count": user_row["swear_count"] if user_row else 0,
+        "msg_rank":    msg_rank["rank"]        if msg_rank else 1,
+        "king_count":  king_count["cnt"]       if king_count else 0,
+        "photo_count": photo_cnt,
+        "total_votes": total_votes,
+        "avg_score":   avg_score,
+        "best_score":  best_score,
+    }
+
+
 def get_photo(photo_id: str):
     conn = get_connection()
     row = conn.execute(

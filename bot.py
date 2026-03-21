@@ -32,6 +32,7 @@ from commands.rate import rate_command, rate_callback, handle_rate_photo, handle
 from commands.help import help_command
 from commands.weather import weather_command, weather_callback
 from commands.steam import steam_command, steam_callback
+from commands.stats import stats_command
 
 logging.basicConfig(
     format="%(asctime)s — %(name)s — %(levelname)s — %(message)s",
@@ -404,6 +405,9 @@ def main():
     # Steam скидки
     app.add_handler(CommandHandler("steam", steam_command, filters=filters.ChatType.GROUPS))
 
+    # Личная статистика
+    app.add_handler(CommandHandler("stats", stats_command, filters=filters.ChatType.GROUPS))
+
     # Mini App
     app.add_handler(CommandHandler("app", app_command, filters=filters.ChatType.GROUPS))
 
@@ -447,6 +451,7 @@ def main():
             BotCommand("mge",     "Фраза из МГЕ"),
             BotCommand("steam",   "Топ скидок в Steam"),
             BotCommand("app",     "Открыть мини-приложение"),
+            BotCommand("stats",   "Личная статистика"),
         ]
 
         private_commands = [

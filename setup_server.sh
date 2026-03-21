@@ -8,8 +8,13 @@ DOMAIN="144.31.75.246.sslip.io"
 echo "==> Устанавливаем nginx и certbot..."
 apt update -q && apt install -y nginx certbot python3-certbot-nginx
 
+echo "==> Создаём виртуальное окружение..."
+python3 -m venv /root/tg/venv
+
 echo "==> Устанавливаем зависимости Python..."
-pip install -q aiohttp httpx
+/root/tg/venv/bin/pip install -q --upgrade pip
+/root/tg/venv/bin/pip install -q -r /root/tg/requirements.txt
+/root/tg/venv/bin/pip install -q aiohttp httpx
 
 echo "==> Создаём конфиг nginx..."
 cat > /etc/nginx/sites-available/${DOMAIN} << NGINXCONF
