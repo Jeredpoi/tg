@@ -1,8 +1,9 @@
 # ==============================================================================
-# commands/steam.py — Команда /steam: топ скидок в Steam (CheapShark API)
+# commands/steam.py — Команда /steam: топ скидок в Steam (Steam Storefront API)
 # ==============================================================================
 
 import logging
+import time
 import httpx
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.error import BadRequest
@@ -11,82 +12,111 @@ from telegram.ext import ContextTypes
 logger = logging.getLogger(__name__)
 
 DEALS_PER_PAGE = 5
+CACHE_TTL = 300  # 5 минут
+
+# Кэш: {"deals": [...], "ts": float}
+_cache: dict = {}
 
 SORT_OPTIONS = [
-    ("Savings",  "Скидка"),
-    ("Rating",   "Рейтинг"),
-    ("Price",    "Цена"),
+    ("discount", "По скидке"),
+    ("price",    "По цене"),
 ]
 
-CHEAPSHARK_URL = "https://www.cheapshark.com/api/1.0/deals"
 
+async def _get_deals() -> list:
+    """Загружает скидки из Steam API с кэшированием на 5 минут."""
+    now = time.time()
+    if _cache.get("deals") and now - _cache.get("ts", 0) < CACHE_TTL:
+        return _cache["deals"]
 
-async def _fetch_deals(sort_by: str, page: int) -> list:
-    params = {
-        "storeID": "1",
-        "sortBy": sort_by,
-        "pageSize": DEALS_PER_PAGE + 1,  # +1 чтобы понять есть ли следующая страница
-        "pageNumber": page,
-    }
+    url = "https://store.steampowered.com/api/featuredcategories/"
     async with httpx.AsyncClient(timeout=10) as client:
-        resp = await client.get(CHEAPSHARK_URL, params=params)
+        resp = await client.get(url, params={"cc": "ru", "l": "russian"})
         resp.raise_for_status()
-        return resp.json()
+        data = resp.json()
+
+    items = data.get("specials", {}).get("items", [])
+    deals = [i for i in items if i.get("discounted") and i.get("discount_percent", 0) < 0]
+
+    _cache["deals"] = deals
+    _cache["ts"] = now
+    return deals
+
+
+def _sort_deals(deals: list, sort_by: str) -> list:
+    if sort_by == "price":
+        return sorted(deals, key=lambda d: d.get("final_price", 0))
+    # по скидке (discount_percent отрицательный, -70 = 70% скидка)
+    return sorted(deals, key=lambda d: d.get("discount_percent", 0))
+
+
+def _fmt_price(kopecks) -> str:
+    """Копейки → рубли с символом ₽."""
+    rubles = int(kopecks) // 100
+    return f"{rubles:,}₽".replace(",", " ")
 
 
 def _build_text(deals: list, sort_by: str, page: int) -> str:
-    sort_label = next((label for key, label in SORT_OPTIONS if key == sort_by), sort_by)
-    lines = [f"🎮 <b>Скидки в Steam</b>  |  сортировка: {sort_label}\n"]
+    sort_label = next(l for k, l in SORT_OPTIONS if k == sort_by)
+    start = page * DEALS_PER_PAGE
+    chunk = deals[start: start + DEALS_PER_PAGE]
 
-    for i, deal in enumerate(deals[:DEALS_PER_PAGE], start=1):
-        title = deal.get("title", "Неизвестно")
-        sale  = deal.get("salePrice", "?")
-        orig  = deal.get("normalPrice", "?")
-        pct   = int(float(deal.get("savings", 0)))
-        rating = deal.get("steamRatingText") or ""
+    lines = [f"🎮 <b>Скидки в Steam</b>  ·  {sort_label}\n"]
 
-        # Обрезаем длинные названия
-        if len(title) > 35:
-            title = title[:33] + "…"
+    for i, item in enumerate(chunk, start=start + 1):
+        app_id   = item.get("id", 0)
+        name     = item.get("name", "Неизвестно")
+        orig     = item.get("original_price", 0)
+        final    = item.get("final_price", 0)
+        discount = abs(item.get("discount_percent", 0))
+        url      = f"https://store.steampowered.com/app/{app_id}"
 
-        price_line = f"  <s>{orig}$</s> → <b>{sale}$</b>  (-{pct}%)"
-        if rating:
-            price_line += f"  [{rating}]"
+        if len(name) > 35:
+            name = name[:33] + "…"
 
-        lines.append(f"{i}. <b>{title}</b>")
-        lines.append(price_line)
+        lines.append(
+            f'{i}. <a href="{url}"><b>{name}</b></a>\n'
+            f'💎 <s>{_fmt_price(orig)}</s> → <b>{_fmt_price(final)}</b>\n'
+            f'🔥 Скидка: <b>-{discount}%</b>'
+        )
 
-    return "\n".join(lines)
+    return "\n\n".join(lines)
 
 
-def _build_keyboard(sort_by: str, page: int, has_next: bool) -> InlineKeyboardMarkup:
-    # Строка сортировки
-    sort_row = []
-    for key, label in SORT_OPTIONS:
-        text = f"✅ {label}" if key == sort_by else label
-        sort_row.append(InlineKeyboardButton(text, callback_data=f"steam:{key}:0"))
+def _build_keyboard(sort_by: str, page: int, total: int) -> InlineKeyboardMarkup:
+    max_page = max(0, (total - 1) // DEALS_PER_PAGE)
 
-    # Строка навигации
+    # Сортировка
+    sort_row = [
+        InlineKeyboardButton(
+            f"✅ {label}" if key == sort_by else label,
+            callback_data=f"steam:{key}:0",
+        )
+        for key, label in SORT_OPTIONS
+    ]
+
+    # Навигация
     nav_row = []
     if page > 0:
-        nav_row.append(InlineKeyboardButton("◀", callback_data=f"steam:{sort_by}:{page - 1}"))
-    nav_row.append(InlineKeyboardButton(f"стр. {page + 1}", callback_data="steam_noop"))
-    if has_next:
-        nav_row.append(InlineKeyboardButton("▶", callback_data=f"steam:{sort_by}:{page + 1}"))
+        nav_row.append(InlineKeyboardButton("◀ Назад", callback_data=f"steam:{sort_by}:{page - 1}"))
+    if page < max_page:
+        nav_row.append(InlineKeyboardButton("Далее ▶", callback_data=f"steam:{sort_by}:{page + 1}"))
 
-    return InlineKeyboardMarkup([sort_row, nav_row])
+    rows = [sort_row]
+    if nav_row:
+        rows.append(nav_row)
+    return InlineKeyboardMarkup(rows)
 
 
 async def steam_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """/steam — топ скидок в Steam."""
-    msg = await update.message.reply_text("⏳ Загружаю скидки...")
-
+    msg = await update.message.reply_text("⏳ Загружаю скидки...", disable_web_page_preview=True)
     try:
-        deals = await _fetch_deals("Savings", 0)
-        has_next = len(deals) > DEALS_PER_PAGE
-        text = _build_text(deals, "Savings", 0)
-        kb = _build_keyboard("Savings", 0, has_next)
-        await msg.edit_text(text, parse_mode="HTML", reply_markup=kb)
+        deals = await _get_deals()
+        sorted_deals = _sort_deals(deals, "discount")
+        text = _build_text(sorted_deals, "discount", 0)
+        kb   = _build_keyboard("discount", 0, len(sorted_deals))
+        await msg.edit_text(text, parse_mode="HTML", reply_markup=kb, disable_web_page_preview=True)
     except Exception as e:
         logger.exception("steam_command failed: %s", e)
         await msg.edit_text("❌ Не удалось загрузить скидки. Попробуй позже.")
@@ -100,7 +130,6 @@ async def steam_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         await query.answer()
         return
 
-    # Формат: steam:{sort}:{page}
     parts = query.data.split(":")
     if len(parts) != 3:
         await query.answer()
@@ -116,12 +145,14 @@ async def steam_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     await query.answer()
 
     try:
-        deals = await _fetch_deals(sort_by, page)
-        has_next = len(deals) > DEALS_PER_PAGE
-        text = _build_text(deals, sort_by, page)
-        kb = _build_keyboard(sort_by, page, has_next)
+        deals = await _get_deals()
+        sorted_deals = _sort_deals(deals, sort_by)
+        text = _build_text(sorted_deals, sort_by, page)
+        kb   = _build_keyboard(sort_by, page, len(sorted_deals))
         try:
-            await query.edit_message_text(text, parse_mode="HTML", reply_markup=kb)
+            await query.edit_message_text(
+                text, parse_mode="HTML", reply_markup=kb, disable_web_page_preview=True
+            )
         except BadRequest as e:
             if "Message is not modified" not in str(e):
                 raise
