@@ -85,20 +85,20 @@ def _count_swears(text: str) -> int:
     return count
 
 SWEAR_RESPONSES = [
-    "Ай-яй-яй, {name}! Что за слова такие! 😤",
-    "Полегче на поворотах, {name}! 🤨",
-    "{name}, рот помой! 🧼",
-    "Мама слышит тебя, {name}! 😱",
-    "Культурнее надо быть, {name}! 📚",
+    "Ай-яй-яй, {name}! Что за слова такие!",
+    "Полегче на поворотах, {name}!",
+    "{name}, рот помой!",
+    "Мама слышит тебя, {name}!",
+    "Культурнее надо быть, {name}!",
     "Ого, {name}! Такие слова знаешь! 😳",
-    "Фильтруй базар, {name}! 🫡",
-    "Лексикон на уровне, {name} 👏",
-    "{name}, это что, норма? 😬",
-    "Слушай, {name}, ну зачем так-то? 🙄",
-    "Словарный запас {name} пополняется не туда 📖",
-    "{name} открыл рот и сразу всё стало ясно 🗣️",
-    "Сохраню это для твоего личного дела, {name} 📋",
-    "{name}, у тебя всё хорошо? Просто спрашиваю 🙂",
+    "Фильтруй базар, {name}!",
+    "Лексикон на уровне, {name}",
+    "{name}, это что, норма?",
+    "Слушай, {name}, ну зачем так-то?",
+    "Словарный запас {name} пополняется не туда",
+    "{name} открыл рот и сразу всё стало ясно",
+    "Сохраню это для твоего личного дела, {name}",
+    "{name}, у тебя всё хорошо? Просто спрашиваю",
 ]
 
 # Cooldown: последнее время ответа на мат по chat_id
@@ -211,6 +211,14 @@ async def _group_start_command(update, context):
     """Инициализация бота в группе через /start."""
     chat = update.effective_chat
 
+    # Уже инициализирован — тихо удаляем команду
+    if chat.id in _setup_chats:
+        try:
+            await update.message.delete()
+        except Exception:
+            pass
+        return
+
     # Проверяем, есть ли у бота право удалять сообщения
     bot_member = await context.bot.get_chat_member(chat.id, context.bot.id)
     can_delete = getattr(bot_member, "can_delete_messages", False)
@@ -225,7 +233,7 @@ async def _group_start_command(update, context):
     _setup_chats.add(chat.id)
     _save_setup_chats()
     await update.message.reply_text(
-        "Молодец сынок, папочка начинает работать 😎"
+        "Молодец сынок, папочка начинает работать"
     )
 
 
@@ -265,11 +273,6 @@ async def _track_message(update, context):
     swear_count = _count_swears(text)
 
     track_message(user.id, user.username, user.first_name, swear_count, chat_id)
-
-    logger.info(
-        "MSG [chat=%s] from %s (@%s): %r | swears=%d",
-        chat_id, user.first_name, user.username, update.message.text, swear_count,
-    )
 
     if swear_count and update.effective_chat.type != "private":
         name = user.first_name or user.username or "дружок"
@@ -324,10 +327,10 @@ async def _on_bot_added(update, context):
         await context.bot.send_message(
             chat_id=chat_id,
             text=(
-                "Привет сосунки! 😤\n\n"
+                "Привет сосунки!\n\n"
                 "Чтобы батя начал работать:\n"
-                "1️⃣ Выдайте мне права на <b>удаление сообщений</b>\n"
-                "2️⃣ Пропишите /start\n\n"
+                "1. Выдайте мне права на <b>удаление сообщений</b>\n"
+                "2. Пропишите /start\n\n"
                 "Пока не сделаете — ни одна команда работать не будет!"
             ),
             parse_mode="HTML",
@@ -348,10 +351,16 @@ async def _private_command_guard(update, context):
 def main():
     init_db()
 
-    builder = ApplicationBuilder().token(BOT_TOKEN)
+    builder = (
+        ApplicationBuilder()
+        .token(BOT_TOKEN)
+        .concurrent_updates(True)
+    )
     if PROXY_URL:
-        builder = builder.request(HTTPXRequest(proxy=PROXY_URL))
+        builder = builder.request(HTTPXRequest(proxy=PROXY_URL, read_timeout=15, write_timeout=15, connect_timeout=10))
         logger.info("Используется прокси: %s", PROXY_URL)
+    else:
+        builder = builder.request(HTTPXRequest(read_timeout=15, write_timeout=15, connect_timeout=10))
     app = builder.build()
 
     # Middleware (group=-1): сначала rate limiter, потом setup guard
@@ -419,28 +428,29 @@ def main():
         from telegram import BotCommandScopeAllGroupChats, BotCommandScopeAllPrivateChats, BotCommandScopeDefault
 
         group_commands = [
-            BotCommand("help",     "📖 Помощь по командам"),
-            BotCommand("top",      "📊 Статистика чата"),
-            BotCommand("dice",     "🎲 Бросить кубик"),
-            BotCommand("coinflip", "🪙 Орёл или решка"),
-            BotCommand("king",     "👑 Выбрать короля дня"),
-            BotCommand("roast",    "🔥 Опалить кого-нибудь"),
-            BotCommand("8ball",    "🎱 Магический шар"),
-            BotCommand("weather",  "🌤 Погода"),
-            BotCommand("kfine",    "⚖️ [Король] Оштрафовать"),
-            BotCommand("kpardon",  "🕊️ [Король] Помиловать"),
-            BotCommand("kdecree",  "📜 [Король] Издать указ"),
-            BotCommand("kreward",  "🏅 [Король] Наградить"),
-            BotCommand("ktax",     "💰 [Король] Ввести налог"),
-            BotCommand("mge",      "🎭 Фраза из МГЕ"),
+            BotCommand("help",     "Помощь по командам"),
+            BotCommand("top",      "Статистика чата"),
+            BotCommand("dice",     "Бросить кубик"),
+            BotCommand("coinflip", "Орёл или решка"),
+            BotCommand("king",     "Выбрать короля дня"),
+            BotCommand("roast",    "Подколоть участника"),
+            BotCommand("8ball",    "Магический шар"),
+            BotCommand("weather",  "Погода"),
+            BotCommand("kfine",    "[Король] Оштрафовать"),
+            BotCommand("kpardon",  "[Король] Помиловать"),
+            BotCommand("kdecree",  "[Король] Издать указ"),
+            BotCommand("kreward",  "[Король] Наградить"),
+            BotCommand("ktax",     "[Король] Ввести налог"),
+            BotCommand("mge",      "Фраза из МГЕ"),
         ]
 
         private_commands = [
-            BotCommand("rate",  "⭐ Отправить фото на оценку группы"),
-            BotCommand("help",  "📖 Список команд группы"),
+            BotCommand("rate",  "Отправить фото на оценку группы"),
+            BotCommand("help",  "Список команд группы"),
         ]
 
-        await app.bot.set_my_commands(group_commands, scope=BotCommandScopeDefault())
+        # Для дефолтного scope — пустой список (не показываем /start нигде)
+        await app.bot.set_my_commands([], scope=BotCommandScopeDefault())
         await app.bot.set_my_commands(group_commands, scope=BotCommandScopeAllGroupChats())
         await app.bot.set_my_commands(private_commands, scope=BotCommandScopeAllPrivateChats())
         logger.info("Команды обновлены для всех scope-ов")
