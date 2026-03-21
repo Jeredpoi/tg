@@ -78,6 +78,8 @@ def init_db() -> None:
         c.execute("ALTER TABLE photo_ratings ADD COLUMN key TEXT")
     if "media_type" not in pr_cols:
         c.execute("ALTER TABLE photo_ratings ADD COLUMN media_type TEXT DEFAULT 'photo'")
+    if "created_at" not in pr_cols:
+        c.execute("ALTER TABLE photo_ratings ADD COLUMN created_at TEXT DEFAULT (datetime('now'))")
 
     # ── photo_votes ─────────────────────────────────────────────────────────
     c.execute("""
@@ -279,27 +281,28 @@ def add_vote(photo_id: str, voter_id: int, score: int) -> tuple[float, int]:
     return 0.0, 0
 
 
-def get_gallery(limit: int = 100, chat_id: int = None) -> list:
-    """Возвращает фото отсортированные по среднему рейтингу."""
+def get_gallery(limit: int = 100, chat_id: int = None, sort: str = "score") -> list:
+    """Возвращает фото с кол-вом комментариев, отсортированные по выбранному критерию."""
+    order_map = {
+        "votes": "pr.vote_count DESC",
+        "date":  "pr.created_at DESC",
+    }
+    order = order_map.get(sort, "CAST(pr.total_score AS FLOAT) / pr.vote_count DESC, pr.vote_count DESC")
+
     conn = get_connection()
-    if chat_id is not None:
-        rows = conn.execute("""
-            SELECT key, photo_id, author_name, anonymous, total_score, vote_count, media_type
-            FROM photo_ratings
-            WHERE vote_count > 0 AND key IS NOT NULL AND chat_id = ?
-            ORDER BY CAST(total_score AS FLOAT) / vote_count DESC,
-                     vote_count DESC
-            LIMIT ?
-        """, (chat_id, limit)).fetchall()
-    else:
-        rows = conn.execute("""
-            SELECT key, photo_id, author_name, anonymous, total_score, vote_count, media_type
-            FROM photo_ratings
-            WHERE vote_count > 0 AND key IS NOT NULL
-            ORDER BY CAST(total_score AS FLOAT) / vote_count DESC,
-                     vote_count DESC
-            LIMIT ?
-        """, (limit,)).fetchall()
+    chat_filter = "AND pr.chat_id = ?" if chat_id is not None else ""
+    params = tuple(filter(lambda x: x is not None, [chat_id, limit]))
+    rows = conn.execute(f"""
+        SELECT pr.key, pr.photo_id, pr.author_name, pr.anonymous,
+               pr.total_score, pr.vote_count, pr.media_type, pr.created_at,
+               COUNT(pc.id) AS comment_count
+        FROM photo_ratings pr
+        LEFT JOIN photo_comments pc ON pc.photo_id = pr.photo_id
+        WHERE pr.vote_count > 0 AND pr.key IS NOT NULL {chat_filter}
+        GROUP BY pr.photo_id
+        ORDER BY {order}
+        LIMIT ?
+    """, params).fetchall()
     conn.close()
     return rows
 

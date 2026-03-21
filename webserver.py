@@ -52,14 +52,16 @@ async def api_gallery(request: web.Request) -> web.Response:
     try:
         chat_id_raw = request.rel_url.query.get("chat_id")
         chat_id = int(chat_id_raw) if chat_id_raw else None
-        rows = get_gallery(100, chat_id=chat_id)
+        sort = request.rel_url.query.get("sort", "score")
+        rows = get_gallery(100, chat_id=chat_id, sort=sort)
         result = [
             {
-                "key":        row["key"],
-                "author":     "Анонимно" if row["anonymous"] else (row["author_name"] or "Аноним"),
-                "avg_score":  round(row["total_score"] / row["vote_count"], 2) if row["vote_count"] else 0,
-                "vote_count": row["vote_count"],
-                "media_type": row["media_type"] if row["media_type"] else "photo",
+                "key":           row["key"],
+                "author":        "Анонимно" if row["anonymous"] else (row["author_name"] or "Аноним"),
+                "avg_score":     round(row["total_score"] / row["vote_count"], 2) if row["vote_count"] else 0,
+                "vote_count":    row["vote_count"],
+                "media_type":    row["media_type"] if row["media_type"] else "photo",
+                "comment_count": row["comment_count"] or 0,
             }
             for row in rows
         ]

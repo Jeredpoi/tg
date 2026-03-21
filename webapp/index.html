@@ -197,6 +197,32 @@
     color: #a855f7;
   }
 
+  /* ── Gallery toolbar ── */
+  .gallery-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 14px;
+  }
+  .gallery-sort {
+    flex: 1;
+    margin-bottom: 0;
+  }
+  .refresh-btn {
+    width: 36px; height: 36px;
+    border-radius: 50%;
+    border: 1.5px solid rgba(255,255,255,0.1);
+    background: rgba(255,255,255,0.04);
+    color: var(--tg-theme-hint-color, #6e6e73);
+    font-size: 18px;
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+    transition: all .2s;
+  }
+  .refresh-btn:hover { border-color: var(--tg-theme-button-color, #3a8ee6); color: var(--tg-theme-button-color, #3a8ee6); }
+  .refresh-btn.spinning { animation: spin .7s linear infinite; }
+
   /* ── Gallery grid ── */
   .gallery-grid {
     display: grid;
@@ -227,6 +253,20 @@
   .photo-card:nth-child(6) { animation-delay: .20s; }
   .photo-card:nth-child(n+7) { animation-delay: .24s; }
 
+  /* Skeleton */
+  .photo-card.skeleton { pointer-events: none; }
+  .skeleton-img {
+    width: 100%;
+    aspect-ratio: 1;
+    background: linear-gradient(90deg, #1e1e20 25%, #2a2a2e 50%, #1e1e20 75%);
+    background-size: 200% 100%;
+    animation: shimmer 1.4s infinite;
+  }
+  @keyframes shimmer {
+    0%   { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+  }
+
   .photo-img {
     width: 100%;
     aspect-ratio: 1;
@@ -237,11 +277,14 @@
   .photo-overlay {
     position: absolute;
     bottom: 0; left: 0; right: 0;
-    background: linear-gradient(to top, rgba(0,0,0,0.85) 0%, rgba(0,0,0,0) 100%);
-    padding: 36px 10px 10px;
+    background: linear-gradient(to top, rgba(0,0,0,0.88) 0%, rgba(0,0,0,0) 100%);
+    padding: 36px 8px 8px;
+  }
+  .photo-overlay-row {
     display: flex;
     align-items: flex-end;
     justify-content: space-between;
+    gap: 4px;
   }
   .photo-author-overlay {
     font-size: 11px;
@@ -250,7 +293,8 @@
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-    max-width: 60%;
+    flex: 1;
+    min-width: 0;
   }
   .photo-score-overlay {
     display: flex;
@@ -258,12 +302,24 @@
     gap: 3px;
     background: rgba(0,0,0,0.5);
     backdrop-filter: blur(6px);
-    padding: 3px 8px;
+    padding: 3px 7px;
     border-radius: 10px;
     flex-shrink: 0;
   }
-  .score-num { font-size: 13px; font-weight: 700; color: #ffd60a; }
+  .score-num { font-size: 12px; font-weight: 700; color: #ffd60a; }
   .score-votes { font-size: 10px; color: rgba(255,255,255,0.55); }
+  .photo-comments-badge {
+    display: flex;
+    align-items: center;
+    gap: 3px;
+    background: rgba(0,0,0,0.45);
+    backdrop-filter: blur(6px);
+    padding: 3px 7px;
+    border-radius: 10px;
+    flex-shrink: 0;
+    font-size: 11px;
+    color: rgba(255,255,255,0.7);
+  }
 
   .photo-img-placeholder {
     width: 100%;
@@ -330,15 +386,51 @@
     background: #000;
     display: block;
   }
+  .modal-media-wrap { position: relative; }
+  .modal-nav {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    background: rgba(0,0,0,0.55);
+    border: none;
+    color: #fff;
+    font-size: 20px;
+    width: 38px; height: 38px;
+    border-radius: 50%;
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    backdrop-filter: blur(4px);
+    z-index: 10;
+    transition: opacity .15s;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .modal-nav:disabled { opacity: 0; pointer-events: none; }
+  .modal-nav-prev { left: 10px; }
+  .modal-nav-next { right: 10px; }
+  .modal-counter {
+    position: absolute;
+    bottom: 10px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(0,0,0,0.5);
+    backdrop-filter: blur(4px);
+    color: rgba(255,255,255,0.7);
+    font-size: 12px;
+    padding: 3px 10px;
+    border-radius: 10px;
+    pointer-events: none;
+  }
   .modal-info {
     padding: 14px 16px 10px;
     display: flex;
     align-items: center;
     justify-content: space-between;
     border-bottom: 1px solid rgba(255,255,255,0.07);
+    gap: 10px;
   }
+  .modal-info-left { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
   .modal-author { font-size: 14px; font-weight: 600; }
-  .modal-score  { font-size: 14px; color: #ffd60a; font-weight: 700; }
+  .modal-score  { font-size: 13px; color: #ffd60a; font-weight: 700; }
   .modal-close {
     position: absolute;
     top: 14px; right: 14px;
@@ -469,19 +561,32 @@
 
 <!-- ── Gallery ── -->
 <div id="tab-gallery" class="section">
+  <div class="gallery-toolbar">
+    <div class="sort-bar gallery-sort">
+      <button class="sort-btn active" id="gsort-score" onclick="gallerySort('score', this)">⭐ Рейтинг</button>
+      <button class="sort-btn" id="gsort-votes" onclick="gallerySort('votes', this)">🗳 Голоса</button>
+      <button class="sort-btn" id="gsort-date"  onclick="gallerySort('date',  this)">🆕 Новые</button>
+    </div>
+    <button class="refresh-btn" id="gallery-refresh" onclick="refreshGallery()" title="Обновить">↻</button>
+  </div>
   <div id="gallery-grid"><div class="loader"><div class="spinner"></div><span>Загружаю галерею…</span></div></div>
 </div>
 
 <!-- ── Photo modal ── -->
 <div class="modal-overlay" id="modal-overlay" onclick="onOverlayClick(event)">
   <div class="modal" id="modal">
-    <div style="position:relative">
+    <div class="modal-media-wrap" id="modal-media-wrap-outer">
       <div id="modal-media-wrap"></div>
+      <button class="modal-nav modal-nav-prev" id="modal-prev" onclick="prevPhoto()">‹</button>
+      <button class="modal-nav modal-nav-next" id="modal-next" onclick="nextPhoto()">›</button>
+      <div class="modal-counter" id="modal-counter"></div>
       <button class="modal-close" onclick="closeModal()">✕</button>
     </div>
     <div class="modal-info">
-      <span class="modal-author" id="modal-author"></span>
-      <span class="modal-score"  id="modal-score"></span>
+      <div class="modal-info-left">
+        <span class="modal-author" id="modal-author"></span>
+        <span class="modal-score"  id="modal-score"></span>
+      </div>
     </div>
     <div class="comments-section">
       <div class="comments-title">Комментарии</div>
@@ -507,6 +612,9 @@ let steamData = null;
 let currentSort = 'discount';
 let steamQuery = '';
 let galleryLoaded = false;
+let gallerySort_  = 'score';
+let photosData    = [];
+let currentPhotoIndex = 0;
 
 // ── Сохранение и восстановление вкладки ──
 const STORAGE_KEY = 'scout_active_tab';
@@ -620,13 +728,39 @@ function renderSteam(deals) {
 }
 
 // ── Gallery ──
+function gallerySort(sort, btn) {
+  gallerySort_ = sort;
+  document.querySelectorAll('.gallery-sort .sort-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  galleryLoaded = false;
+  loadGallery();
+}
+
+function refreshGallery() {
+  const btn = document.getElementById('gallery-refresh');
+  btn.classList.add('spinning');
+  galleryLoaded = false;
+  loadGallery().finally(() => btn.classList.remove('spinning'));
+}
+
+function showGallerySkeleton() {
+  const grid = document.getElementById('gallery-grid');
+  grid.innerHTML = '<div class="gallery-grid">' +
+    Array(6).fill('<div class="photo-card skeleton"><div class="skeleton-img"></div></div>').join('') +
+    '</div>';
+}
+
 async function loadGallery() {
   if (galleryLoaded) return;
+  showGallerySkeleton();
   const grid = document.getElementById('gallery-grid');
   try {
-    const r = await fetch('/api/gallery' + (chatId ? `?chat_id=${chatId}` : ''));
+    const params = new URLSearchParams({ sort: gallerySort_ });
+    if (chatId) params.set('chat_id', chatId);
+    const r = await fetch('/api/gallery?' + params);
     const data = await r.json();
     const photos = data.photos || [];
+    photosData = photos;
 
     if (!photos.length) {
       grid.innerHTML = '<div class="empty"><span class="empty-icon">📸</span>Нет оценённых фото или видео</div>';
@@ -647,13 +781,18 @@ async function loadGallery() {
                   ontouchstart="this.play()" onmouseenter="this.play()" onmouseleave="this.pause();this.currentTime=0"></video>`
         : `<img class="photo-img" src="/api/photo/${p.key}" alt=""
                 onerror="this.outerHTML='<div class=\\'photo-img-placeholder\\'>📷</div>'">`;
-      const onclick = `openModal('${p.key}','${escHtml(p.author).replace(/'/g,"\\'")}',${p.avg_score.toFixed(1)},${p.vote_count},${isVideo})`;
+      const commentsEl = p.comment_count > 0
+        ? `<span class="photo-comments-badge">💬 ${p.comment_count}</span>`
+        : '';
       return `
-        <div class="photo-card" onclick="${onclick}" style="cursor:pointer">
+        <div class="photo-card" onclick="openModal(${i})" style="cursor:pointer">
           ${rankEl}${videoBadge}${media}
           <div class="photo-overlay">
-            <span class="photo-author-overlay">${escHtml(p.author)}</span>
-            <span class="photo-score-overlay">⭐ <span class="score-num">${p.avg_score.toFixed(1)}</span><span class="score-votes"> (${p.vote_count})</span></span>
+            <div class="photo-overlay-row">
+              <span class="photo-author-overlay">${escHtml(p.author)}</span>
+              <span class="photo-score-overlay">⭐ <span class="score-num">${p.avg_score.toFixed(1)}</span><span class="score-votes"> (${p.vote_count})</span></span>
+              ${commentsEl}
+            </div>
           </div>
         </div>`;
     }).join('') + '</div>';
@@ -672,35 +811,68 @@ const myName = tgUser
   : 'Аноним';
 const myId = tgUser?.id || 0;
 
-function openModal(key, author, score, votes, isVideo) {
-  modalKey = key;
-  document.getElementById('modal-author').textContent = author;
-  document.getElementById('modal-score').textContent  = `⭐ ${score} (${votes} гол.)`;
+function openModal(index) {
+  const p = photosData[index];
+  if (!p) return;
+  currentPhotoIndex = index;
+  modalKey = p.key;
+
+  document.getElementById('modal-author').textContent = p.author;
+  document.getElementById('modal-score').textContent  = `⭐ ${p.avg_score.toFixed(1)} · ${p.vote_count} гол.`;
+
+  const counter = document.getElementById('modal-counter');
+  counter.textContent = photosData.length > 1 ? `${index + 1} / ${photosData.length}` : '';
+
+  const prevBtn = document.getElementById('modal-prev');
+  const nextBtn = document.getElementById('modal-next');
+  prevBtn.disabled = index === 0;
+  nextBtn.disabled = index === photosData.length - 1;
 
   const wrap = document.getElementById('modal-media-wrap');
+  const isVideo = p.media_type === 'video';
   if (isVideo) {
-    wrap.innerHTML = `<video class="modal-media" src="/api/photo/${key}" controls autoplay muted playsinline loop></video>`;
+    wrap.innerHTML = `<video class="modal-media" src="/api/photo/${p.key}" controls autoplay muted playsinline loop></video>`;
   } else {
-    wrap.innerHTML = `<img class="modal-media" src="/api/photo/${key}" alt="">`;
+    wrap.innerHTML = `<img class="modal-media" src="/api/photo/${p.key}" alt="">`;
   }
 
   document.getElementById('comment-input').value = '';
   document.getElementById('modal-overlay').classList.add('open');
   document.body.style.overflow = 'hidden';
-  loadComments(key);
+  loadComments(p.key);
+}
+
+function prevPhoto() {
+  if (currentPhotoIndex > 0) openModal(currentPhotoIndex - 1);
+}
+function nextPhoto() {
+  if (currentPhotoIndex < photosData.length - 1) openModal(currentPhotoIndex + 1);
 }
 
 function closeModal() {
   document.getElementById('modal-overlay').classList.remove('open');
   document.body.style.overflow = '';
-  const wrap = document.getElementById('modal-media-wrap');
-  wrap.innerHTML = '';
+  document.getElementById('modal-media-wrap').innerHTML = '';
   modalKey = null;
 }
 
 function onOverlayClick(e) {
   if (e.target === document.getElementById('modal-overlay')) closeModal();
 }
+
+// Свайп в модале
+let _swipeX = null;
+document.addEventListener('touchstart', e => {
+  if (!document.getElementById('modal-overlay').classList.contains('open')) return;
+  _swipeX = e.touches[0].clientX;
+}, { passive: true });
+document.addEventListener('touchend', e => {
+  if (_swipeX === null || !document.getElementById('modal-overlay').classList.contains('open')) return;
+  const dx = e.changedTouches[0].clientX - _swipeX;
+  _swipeX = null;
+  if (Math.abs(dx) < 50) return;
+  if (dx < 0) nextPhoto(); else prevPhoto();
+}, { passive: true });
 
 async function loadComments(key) {
   const list = document.getElementById('comments-list');
