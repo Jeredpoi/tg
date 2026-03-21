@@ -297,6 +297,124 @@
     filter: drop-shadow(0 1px 4px rgba(0,0,0,0.8));
   }
 
+  /* ── Modal ── */
+  .modal-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.85);
+    z-index: 200;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  .modal-overlay.open { display: flex; flex-direction: column; }
+  .modal {
+    background: var(--tg-theme-secondary-bg-color, #1a1a1c);
+    border-radius: 20px 20px 0 0;
+    margin-top: auto;
+    width: 100%;
+    max-width: 680px;
+    margin-left: auto;
+    margin-right: auto;
+    overflow: hidden;
+    animation: slideUp .25s ease;
+  }
+  @keyframes slideUp {
+    from { transform: translateY(40px); opacity: 0; }
+    to   { transform: translateY(0);    opacity: 1; }
+  }
+  .modal-media {
+    width: 100%;
+    max-height: 55vh;
+    object-fit: contain;
+    background: #000;
+    display: block;
+  }
+  .modal-info {
+    padding: 14px 16px 10px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-bottom: 1px solid rgba(255,255,255,0.07);
+  }
+  .modal-author { font-size: 14px; font-weight: 600; }
+  .modal-score  { font-size: 14px; color: #ffd60a; font-weight: 700; }
+  .modal-close {
+    position: absolute;
+    top: 14px; right: 14px;
+    background: rgba(0,0,0,0.6);
+    border: none;
+    color: #fff;
+    font-size: 18px;
+    width: 34px; height: 34px;
+    border-radius: 50%;
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    backdrop-filter: blur(4px);
+  }
+  .comments-section { padding: 14px 16px; }
+  .comments-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--tg-theme-hint-color, #6e6e73);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    margin-bottom: 12px;
+  }
+  .comments-list { display: flex; flex-direction: column; gap: 10px; margin-bottom: 16px; }
+  .comment-item { display: flex; gap: 10px; }
+  .comment-avatar {
+    width: 32px; height: 32px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, var(--tg-theme-button-color, #3a8ee6), #1a56a0);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 13px; font-weight: 700; color: #fff;
+    flex-shrink: 0;
+  }
+  .comment-body { flex: 1; min-width: 0; }
+  .comment-header { display: flex; align-items: baseline; gap: 8px; margin-bottom: 2px; }
+  .comment-name { font-size: 13px; font-weight: 600; }
+  .comment-time { font-size: 11px; color: var(--tg-theme-hint-color, #6e6e73); }
+  .comment-text { font-size: 14px; line-height: 1.45; word-break: break-word; }
+  .comments-empty {
+    font-size: 14px;
+    color: var(--tg-theme-hint-color, #6e6e73);
+    margin-bottom: 16px;
+    text-align: center;
+    padding: 8px 0;
+  }
+  .comment-form { display: flex; gap: 10px; align-items: flex-end; }
+  .comment-input {
+    flex: 1;
+    padding: 10px 14px;
+    border-radius: 14px;
+    border: 1.5px solid rgba(255,255,255,0.1);
+    background: rgba(255,255,255,0.06);
+    color: var(--tg-theme-text-color, #f0f0f0);
+    font-size: 14px;
+    font-family: inherit;
+    resize: none;
+    outline: none;
+    min-height: 42px;
+    max-height: 100px;
+    transition: border-color .2s;
+  }
+  .comment-input::placeholder { color: var(--tg-theme-hint-color, #6e6e73); }
+  .comment-input:focus { border-color: var(--tg-theme-button-color, #3a8ee6); }
+  .comment-send {
+    width: 42px; height: 42px;
+    border-radius: 50%;
+    background: var(--tg-theme-button-color, #3a8ee6);
+    border: none;
+    color: #fff;
+    font-size: 18px;
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+    transition: opacity .15s;
+  }
+  .comment-send:disabled { opacity: .4; cursor: default; }
+
   /* ── Loader & empty ── */
   .loader {
     display: flex;
@@ -352,6 +470,30 @@
 <!-- ── Gallery ── -->
 <div id="tab-gallery" class="section">
   <div id="gallery-grid"><div class="loader"><div class="spinner"></div><span>Загружаю галерею…</span></div></div>
+</div>
+
+<!-- ── Photo modal ── -->
+<div class="modal-overlay" id="modal-overlay" onclick="onOverlayClick(event)">
+  <div class="modal" id="modal">
+    <div style="position:relative">
+      <div id="modal-media-wrap"></div>
+      <button class="modal-close" onclick="closeModal()">✕</button>
+    </div>
+    <div class="modal-info">
+      <span class="modal-author" id="modal-author"></span>
+      <span class="modal-score"  id="modal-score"></span>
+    </div>
+    <div class="comments-section">
+      <div class="comments-title">Комментарии</div>
+      <div class="comments-list" id="comments-list"></div>
+      <div class="comment-form">
+        <textarea class="comment-input" id="comment-input" rows="1"
+                  placeholder="Написать комментарий…"
+                  oninput="autoResize(this)"></textarea>
+        <button class="comment-send" id="comment-send" onclick="submitComment()">➤</button>
+      </div>
+    </div>
+  </div>
 </div>
 
 <script>
@@ -505,8 +647,9 @@ async function loadGallery() {
                   ontouchstart="this.play()" onmouseenter="this.play()" onmouseleave="this.pause();this.currentTime=0"></video>`
         : `<img class="photo-img" src="/api/photo/${p.key}" alt=""
                 onerror="this.outerHTML='<div class=\\'photo-img-placeholder\\'>📷</div>'">`;
+      const onclick = `openModal('${p.key}','${escHtml(p.author).replace(/'/g,"\\'")}',${p.avg_score.toFixed(1)},${p.vote_count},${isVideo})`;
       return `
-        <div class="photo-card">
+        <div class="photo-card" onclick="${onclick}" style="cursor:pointer">
           ${rankEl}${videoBadge}${media}
           <div class="photo-overlay">
             <span class="photo-author-overlay">${escHtml(p.author)}</span>
@@ -518,6 +661,118 @@ async function loadGallery() {
   } catch(e) {
     grid.innerHTML = '<div class="empty"><span class="empty-icon">😔</span>Не удалось загрузить галерею</div>';
   }
+}
+
+// ── Modal ──
+let modalKey = null;
+
+const tgUser = tg.initDataUnsafe?.user;
+const myName = tgUser
+  ? (tgUser.username ? '@' + tgUser.username : tgUser.first_name)
+  : 'Аноним';
+const myId = tgUser?.id || 0;
+
+function openModal(key, author, score, votes, isVideo) {
+  modalKey = key;
+  document.getElementById('modal-author').textContent = author;
+  document.getElementById('modal-score').textContent  = `⭐ ${score} (${votes} гол.)`;
+
+  const wrap = document.getElementById('modal-media-wrap');
+  if (isVideo) {
+    wrap.innerHTML = `<video class="modal-media" src="/api/photo/${key}" controls autoplay muted playsinline loop></video>`;
+  } else {
+    wrap.innerHTML = `<img class="modal-media" src="/api/photo/${key}" alt="">`;
+  }
+
+  document.getElementById('comment-input').value = '';
+  document.getElementById('modal-overlay').classList.add('open');
+  document.body.style.overflow = 'hidden';
+  loadComments(key);
+}
+
+function closeModal() {
+  document.getElementById('modal-overlay').classList.remove('open');
+  document.body.style.overflow = '';
+  const wrap = document.getElementById('modal-media-wrap');
+  wrap.innerHTML = '';
+  modalKey = null;
+}
+
+function onOverlayClick(e) {
+  if (e.target === document.getElementById('modal-overlay')) closeModal();
+}
+
+async function loadComments(key) {
+  const list = document.getElementById('comments-list');
+  list.innerHTML = '<div style="color:var(--tg-theme-hint-color,#6e6e73);font-size:13px">Загружаю…</div>';
+  try {
+    const r = await fetch(`/api/comments/${key}`);
+    const data = await r.json();
+    renderComments(data.comments || []);
+  } catch(e) {
+    list.innerHTML = '<div style="color:var(--tg-theme-hint-color,#6e6e73);font-size:13px">Не удалось загрузить</div>';
+  }
+}
+
+function renderComments(comments) {
+  const list = document.getElementById('comments-list');
+  if (!comments.length) {
+    list.innerHTML = '<div class="comments-empty">Комментариев пока нет. Будь первым!</div>';
+    return;
+  }
+  list.innerHTML = comments.map(c => {
+    const initial = (c.commenter_name || '?')[0].toUpperCase();
+    const time = formatTime(c.created_at);
+    return `
+      <div class="comment-item">
+        <div class="comment-avatar">${escHtml(initial)}</div>
+        <div class="comment-body">
+          <div class="comment-header">
+            <span class="comment-name">${escHtml(c.commenter_name)}</span>
+            <span class="comment-time">${time}</span>
+          </div>
+          <div class="comment-text">${escHtml(c.text)}</div>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+function formatTime(isoStr) {
+  if (!isoStr) return '';
+  const d = new Date(isoStr.replace(' ', 'T') + 'Z');
+  const now = new Date();
+  const diff = Math.floor((now - d) / 1000);
+  if (diff < 60)   return 'только что';
+  if (diff < 3600) return `${Math.floor(diff/60)} мин. назад`;
+  if (diff < 86400) return `${Math.floor(diff/3600)} ч. назад`;
+  return d.toLocaleDateString('ru', {day:'numeric', month:'short'});
+}
+
+async function submitComment() {
+  const input = document.getElementById('comment-input');
+  const btn   = document.getElementById('comment-send');
+  const text  = input.value.trim();
+  if (!text || !modalKey) return;
+
+  btn.disabled = true;
+  try {
+    await fetch(`/api/comments/${modalKey}`, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ text, commenter_name: myName, commenter_id: myId }),
+    });
+    input.value = '';
+    input.style.height = '';
+    await loadComments(modalKey);
+    // Скролл вниз к комментариям
+    document.getElementById('comments-list').lastElementChild?.scrollIntoView({behavior:'smooth'});
+  } catch(e) {}
+  btn.disabled = false;
+}
+
+function autoResize(el) {
+  el.style.height = 'auto';
+  el.style.height = Math.min(el.scrollHeight, 100) + 'px';
 }
 
 function escHtml(s) {

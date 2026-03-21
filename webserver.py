@@ -14,7 +14,7 @@ from aiohttp import web
 sys.path.insert(0, os.path.dirname(__file__))
 
 from config import BOT_TOKEN
-from database import get_gallery, get_photo_by_key
+from database import get_gallery, get_photo_by_key, get_comments, add_comment
 from commands.steam import _get_deals, _sort_deals
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
@@ -69,6 +69,44 @@ async def api_gallery(request: web.Request) -> web.Response:
         return web.json_response({"photos": [], "error": str(e)}, status=500)
 
 
+# ── /api/comments/{key} ──────────────────────────────────────────────────────
+
+async def api_get_comments(request: web.Request) -> web.Response:
+    key = request.match_info["key"]
+    row = get_photo_by_key(key)
+    if not row:
+        raise web.HTTPNotFound()
+    comments = get_comments(row["photo_id"])
+    result = [
+        {
+            "id":             c["id"],
+            "commenter_name": c["commenter_name"],
+            "text":           c["text"],
+            "created_at":     c["created_at"],
+        }
+        for c in comments
+    ]
+    return web.json_response({"comments": result})
+
+
+async def api_post_comment(request: web.Request) -> web.Response:
+    key = request.match_info["key"]
+    row = get_photo_by_key(key)
+    if not row:
+        raise web.HTTPNotFound()
+    try:
+        body = await request.json()
+        text = str(body.get("text", "")).strip()
+        commenter_name = str(body.get("commenter_name", "Аноним")).strip() or "Аноним"
+        commenter_id = int(body.get("commenter_id", 0))
+    except Exception:
+        raise web.HTTPBadRequest()
+    if not text or len(text) > 500:
+        raise web.HTTPBadRequest()
+    add_comment(row["photo_id"], commenter_id, commenter_name, text)
+    return web.json_response({"ok": True})
+
+
 # ── /api/photo/{key} — проксируем фото из Telegram ───────────────────────────
 
 async def api_photo(request: web.Request) -> web.Response:
@@ -107,9 +145,11 @@ async def api_photo(request: web.Request) -> web.Response:
 
 def create_app() -> web.Application:
     app = web.Application()
-    app.router.add_get("/api/steam",         api_steam)
-    app.router.add_get("/api/gallery",       api_gallery)
-    app.router.add_get("/api/photo/{key}",   api_photo)
+    app.router.add_get("/api/steam",              api_steam)
+    app.router.add_get("/api/gallery",            api_gallery)
+    app.router.add_get("/api/photo/{key}",        api_photo)
+    app.router.add_get("/api/comments/{key}",     api_get_comments)
+    app.router.add_post("/api/comments/{key}",    api_post_comment)
     return app
 
 

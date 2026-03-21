@@ -101,6 +101,18 @@ def init_db() -> None:
         )
     """)
 
+    # ── photo_comments ───────────────────────────────────────────────────────
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS photo_comments (
+            id             INTEGER PRIMARY KEY AUTOINCREMENT,
+            photo_id       TEXT NOT NULL,
+            commenter_id   INTEGER,
+            commenter_name TEXT NOT NULL,
+            text           TEXT NOT NULL,
+            created_at     TEXT NOT NULL DEFAULT (datetime('now'))
+        )
+    """)
+
     conn.commit()
     conn.close()
 
@@ -290,6 +302,29 @@ def get_gallery(limit: int = 100, chat_id: int = None) -> list:
         """, (limit,)).fetchall()
     conn.close()
     return rows
+
+
+# ── photo_comments ─────────────────────────────────────────────────────────
+
+def get_comments(photo_id: str) -> list:
+    conn = get_connection()
+    rows = conn.execute(
+        "SELECT id, commenter_name, text, created_at FROM photo_comments "
+        "WHERE photo_id = ? ORDER BY created_at ASC",
+        (photo_id,)
+    ).fetchall()
+    conn.close()
+    return rows
+
+
+def add_comment(photo_id: str, commenter_id: int, commenter_name: str, text: str) -> None:
+    conn = get_connection()
+    conn.execute(
+        "INSERT INTO photo_comments (photo_id, commenter_id, commenter_name, text) VALUES (?, ?, ?, ?)",
+        (photo_id, commenter_id, commenter_name, text.strip())
+    )
+    conn.commit()
+    conn.close()
 
 
 def get_photo(photo_id: str):
