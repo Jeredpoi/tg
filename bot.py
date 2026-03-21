@@ -34,6 +34,7 @@ from commands.help import help_command
 from commands.coinflip import coinflip_command
 from commands.weather import weather_command, weather_callback
 from commands.eightball import eightball_command
+from commands.steam import steam_command, steam_callback
 
 logging.basicConfig(
     format="%(asctime)s — %(name)s — %(levelname)s — %(message)s",
@@ -124,8 +125,9 @@ _CMD_COOLDOWNS: dict[str, int] = {
     "/kdecree": 0,
     "/kreward": 0,
     "/ktax":    0,
-    # /weather дольше — каждый вызов бьёт по внешнему API
+    # /weather и /steam бьют по внешним API
     "/weather": 30,
+    "/steam":   20,
     # /rate — фото в личке → чат, лимит 5 минут
     "/rate":    300,
 }
@@ -399,7 +401,10 @@ def main():
     app.add_handler(CommandHandler("ktax",    ktax_command,    filters=filters.ChatType.GROUPS))
 
     # MGE
-    app.add_handler(CommandHandler("mge", mge_command, filters=filters.ChatType.GROUPS))
+    app.add_handler(CommandHandler("mge",   mge_command,   filters=filters.ChatType.GROUPS))
+
+    # Steam скидки
+    app.add_handler(CommandHandler("steam", steam_command, filters=filters.ChatType.GROUPS))
 
     # Ловим любые другие команды в личке и вежливо отказываем
     app.add_handler(MessageHandler(
@@ -420,6 +425,7 @@ def main():
     app.add_handler(CallbackQueryHandler(top_callback,     pattern=r"^top_"))
     app.add_handler(CallbackQueryHandler(rate_callback,    pattern=r"^(anon_|rate_)"))
     app.add_handler(CallbackQueryHandler(weather_callback, pattern=r"^w(forecast|refresh):"))
+    app.add_handler(CallbackQueryHandler(steam_callback,   pattern=r"^steam"))
 
     # Трекинг текстовых сообщений (без команд)
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, _track_message))
@@ -442,6 +448,7 @@ def main():
             BotCommand("kreward",  "[Король] Наградить"),
             BotCommand("ktax",     "[Король] Ввести налог"),
             BotCommand("mge",      "Фраза из МГЕ"),
+            BotCommand("steam",    "Топ скидок в Steam"),
         ]
 
         private_commands = [
