@@ -9,6 +9,7 @@ import random
 import time
 from telegram.ext import (
     ApplicationBuilder,
+    ApplicationHandlerStop,
     CommandHandler,
     MessageHandler,
     CallbackQueryHandler,
@@ -103,6 +104,66 @@ SWEAR_RESPONSES = [
 _swear_last_response: dict[int, float] = {}
 # Минимальная пауза между ответами на маты (секунды)
 _SWEAR_COOLDOWN = 15
+
+# ==============================================================================
+# Rate limiter — кулдаун команд на юзера
+# ==============================================================================
+
+# Кулдаун по умолчанию (секунды). Отдельные команды можно переопределить.
+_DEFAULT_CMD_COOLDOWN = 10
+
+# Переопределения для конкретных команд (0 = без лимита)
+_CMD_COOLDOWNS: dict[str, int] = {
+    "/help":    0,
+    "/start":   0,
+    "/debug":   0,
+    # Королевские команды не ограничиваем — ими пользуется только король
+    "/kfine":   0,
+    "/kpardon": 0,
+    "/kdecree": 0,
+    "/kreward": 0,
+    "/ktax":    0,
+    # /weather дольше — каждый вызов бьёт по внешнему API
+    "/weather": 30,
+    # /rate — фото в личке → чат, лимит 5 минут
+    "/rate":    300,
+}
+
+# Словарь: (user_id, command) → timestamp последнего разрешённого вызова
+_cmd_last_used: dict[tuple[int, str], float] = {}
+
+
+async def _rate_limit_guard(update, context):
+    """Middleware (group=-1): удаляет спам-команды молча."""
+    msg = update.message
+    if not msg or not msg.text or not msg.text.startswith("/"):
+        return
+
+    user = update.effective_user
+    if not user or user.is_bot:
+        return
+
+    # Нормализуем "/mge@botname" → "/mge"
+    command = msg.text.split()[0].split("@")[0].lower()
+    cooldown = _CMD_COOLDOWNS.get(command, _DEFAULT_CMD_COOLDOWN)
+
+    if cooldown == 0:
+        return  # без лимита — пропускаем
+
+    key = (user.id, command)
+    now = time.time()
+    last = _cmd_last_used.get(key, 0)
+
+    if now - last < cooldown:
+        # Спам — удаляем сообщение и останавливаем обработку
+        try:
+            await msg.delete()
+        except Exception:
+            pass
+        raise ApplicationHandlerStop
+
+    # Первый / разрешённый вызов — фиксируем время
+    _cmd_last_used[key] = now
 
 
 async def _send_swear_response(context) -> None:
@@ -223,6 +284,12 @@ def main():
         builder = builder.request(HTTPXRequest(proxy=PROXY_URL))
         logger.info("Используется прокси: %s", PROXY_URL)
     app = builder.build()
+
+    # Rate limiter — должен стоять раньше всех командных хендлеров
+    app.add_handler(
+        MessageHandler(filters.COMMAND, _rate_limit_guard),
+        group=-1,
+    )
 
     # В личке работают только /start, /help, /rate
     app.add_handler(CommandHandler("start",    help_command,    filters=filters.ChatType.PRIVATE))
