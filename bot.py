@@ -346,7 +346,7 @@ async def app_command(update, context):
     kb = InlineKeyboardMarkup([[
         InlineKeyboardButton(
             "🚀 Открыть приложение",
-            web_app=WebAppInfo(url="https://bottgmge.com"),
+            web_app=WebAppInfo(url="https://144.31.75.246.sslip.io"),
         )
     ]])
     await update.message.reply_text("Скидки Steam и галерея рейтингов:", reply_markup=kb)
