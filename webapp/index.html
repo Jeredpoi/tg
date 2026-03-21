@@ -14,6 +14,8 @@
     color: var(--tg-theme-text-color, #f0f0f0);
     min-height: 100vh;
     overflow-x: hidden;
+    max-width: 680px;
+    margin: 0 auto;
   }
 
   /* ── Tab bar ── */
@@ -157,8 +159,11 @@
   /* ── Gallery grid ── */
   .gallery-grid {
     display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 14px;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px;
+  }
+  @media (max-width: 480px) {
+    .gallery-grid { grid-template-columns: 1fr 1fr; gap: 8px; }
   }
   .photo-card {
     background: var(--tg-theme-secondary-bg-color, #1a1a1c);
