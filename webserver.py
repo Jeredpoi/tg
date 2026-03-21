@@ -14,7 +14,7 @@ from aiohttp import web
 sys.path.insert(0, os.path.dirname(__file__))
 
 from config import BOT_TOKEN
-from database import get_gallery, get_photo_by_key, get_comments, add_comment
+from database import init_db, get_gallery, get_photo_by_key, get_comments, add_comment
 from commands.steam import _get_deals, _sort_deals
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
@@ -144,6 +144,7 @@ async def api_photo(request: web.Request) -> web.Response:
 # ── App ──────────────────────────────────────────────────────────────────────
 
 def create_app() -> web.Application:
+    init_db()
     app = web.Application()
     app.router.add_get("/api/steam",              api_steam)
     app.router.add_get("/api/gallery",            api_gallery)
