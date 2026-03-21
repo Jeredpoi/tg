@@ -15,7 +15,7 @@ sys.path.insert(0, os.path.dirname(__file__))
 
 from config import BOT_TOKEN
 from database import init_db, get_gallery, get_photo_by_key, get_comments, add_comment
-from commands.steam import _get_deals, _sort_deals
+from steam_utils import _get_deals, _sort_deals
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
