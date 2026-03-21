@@ -79,7 +79,7 @@ def init_db() -> None:
     if "media_type" not in pr_cols:
         c.execute("ALTER TABLE photo_ratings ADD COLUMN media_type TEXT DEFAULT 'photo'")
     if "created_at" not in pr_cols:
-        c.execute("ALTER TABLE photo_ratings ADD COLUMN created_at TEXT DEFAULT (datetime('now'))")
+        c.execute("ALTER TABLE photo_ratings ADD COLUMN created_at TEXT")
 
     # ── photo_votes ─────────────────────────────────────────────────────────
     c.execute("""
@@ -205,8 +205,8 @@ def save_photo(photo_id: str, message_id: int, chat_id: int,
     conn = get_connection()
     conn.execute("""
         INSERT INTO photo_ratings
-            (photo_id, key, message_id, chat_id, author_id, author_name, anonymous, media_type)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            (photo_id, key, message_id, chat_id, author_id, author_name, anonymous, media_type, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
         ON CONFLICT(photo_id) DO UPDATE SET
             key         = excluded.key,
             message_id  = excluded.message_id,
