@@ -51,11 +51,39 @@
   .section { display: none; padding: 20px 16px; }
   .section.active { display: block; }
 
+  /* ── Search ── */
+  .search-wrap {
+    position: relative;
+    margin-bottom: 14px;
+  }
+  .search-icon {
+    position: absolute;
+    left: 14px;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 15px;
+    opacity: .5;
+    pointer-events: none;
+  }
+  .search-input {
+    width: 100%;
+    padding: 10px 14px 10px 38px;
+    border-radius: 14px;
+    border: 1.5px solid rgba(255,255,255,0.08);
+    background: rgba(255,255,255,0.05);
+    color: var(--tg-theme-text-color, #f0f0f0);
+    font-size: 14px;
+    outline: none;
+    transition: border-color .2s;
+  }
+  .search-input::placeholder { color: var(--tg-theme-hint-color, #6e6e73); }
+  .search-input:focus { border-color: var(--tg-theme-button-color, #3a8ee6); }
+
   /* ── Sort bar ── */
   .sort-bar {
     display: flex;
-    gap: 10px;
-    margin-bottom: 20px;
+    gap: 8px;
+    margin-bottom: 14px;
     overflow-x: auto;
     padding-bottom: 2px;
     scrollbar-width: none;
@@ -63,12 +91,12 @@
   .sort-bar::-webkit-scrollbar { display: none; }
   .sort-btn {
     white-space: nowrap;
-    padding: 9px 20px;
-    border-radius: 22px;
+    padding: 7px 16px;
+    border-radius: 20px;
     border: 1.5px solid rgba(255,255,255,0.1);
     background: rgba(255,255,255,0.04);
     color: var(--tg-theme-hint-color, #6e6e73);
-    font-size: 14px;
+    font-size: 13px;
     font-weight: 500;
     cursor: pointer;
     transition: all .2s;
@@ -79,8 +107,15 @@
     color: #fff;
   }
 
+  /* ── Steam counter ── */
+  .steam-counter {
+    font-size: 12px;
+    color: var(--tg-theme-hint-color, #6e6e73);
+    margin-bottom: 14px;
+  }
+
   /* ── Steam cards ── */
-  .steam-list { display: flex; flex-direction: column; gap: 14px; }
+  .steam-list { display: flex; flex-direction: column; gap: 12px; }
   .steam-card {
     display: flex;
     background: var(--tg-theme-secondary-bg-color, #1a1a1c);
@@ -88,7 +123,7 @@
     overflow: hidden;
     text-decoration: none;
     color: inherit;
-    transition: transform .15s, box-shadow .15s;
+    transition: transform .15s;
     -webkit-tap-highlight-color: transparent;
     border: 1px solid rgba(255,255,255,0.05);
   }
@@ -111,7 +146,7 @@
     font-size: 30px;
   }
   .steam-info {
-    padding: 14px 16px;
+    padding: 12px 14px;
     display: flex;
     flex-direction: column;
     justify-content: space-between;
@@ -131,20 +166,21 @@
   .steam-price-row {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 7px;
     flex-wrap: wrap;
-    margin-top: 8px;
+    margin-top: 7px;
   }
   .steam-badge {
     background: linear-gradient(135deg, #2ecc71, #27ae60);
     color: #fff;
     font-size: 12px;
     font-weight: 800;
-    padding: 3px 10px;
+    padding: 3px 9px;
     border-radius: 8px;
     letter-spacing: 0.02em;
   }
-  .steam-badge.hot { background: linear-gradient(135deg, #ff6b35, #e84118); }
+  .steam-badge.hot  { background: linear-gradient(135deg, #ff6b35, #e84118); }
+  .steam-badge.free { background: linear-gradient(135deg, #a855f7, #7c3aed); }
   .steam-orig {
     font-size: 12px;
     color: var(--tg-theme-hint-color, #6e6e73);
@@ -154,6 +190,11 @@
     font-size: 15px;
     font-weight: 700;
     color: #4cd964;
+  }
+  .steam-free-tag {
+    font-size: 14px;
+    font-weight: 700;
+    color: #a855f7;
   }
 
   /* ── Gallery grid ── */
@@ -193,45 +234,36 @@
     background: #1e1e20;
     display: block;
   }
-
-  /* Score overlay на фото */
   .photo-overlay {
     position: absolute;
     bottom: 0; left: 0; right: 0;
     background: linear-gradient(to top, rgba(0,0,0,0.85) 0%, rgba(0,0,0,0) 100%);
-    padding: 36px 12px 12px;
+    padding: 36px 10px 10px;
     display: flex;
     align-items: flex-end;
     justify-content: space-between;
   }
   .photo-author-overlay {
-    font-size: 12px;
+    font-size: 11px;
     font-weight: 500;
     color: rgba(255,255,255,0.8);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-    max-width: 62%;
+    max-width: 60%;
   }
   .photo-score-overlay {
     display: flex;
     align-items: center;
-    gap: 4px;
+    gap: 3px;
     background: rgba(0,0,0,0.5);
     backdrop-filter: blur(6px);
-    padding: 4px 9px;
-    border-radius: 12px;
+    padding: 3px 8px;
+    border-radius: 10px;
     flex-shrink: 0;
   }
-  .score-num {
-    font-size: 14px;
-    font-weight: 700;
-    color: #ffd60a;
-  }
-  .score-votes {
-    font-size: 11px;
-    color: rgba(255,255,255,0.55);
-  }
+  .score-num { font-size: 13px; font-weight: 700; color: #ffd60a; }
+  .score-votes { font-size: 10px; color: rgba(255,255,255,0.55); }
 
   .photo-img-placeholder {
     width: 100%;
@@ -240,34 +272,28 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 40px;
+    font-size: 36px;
   }
-
-  /* Rank badge */
   .rank-badge {
     position: absolute;
-    top: 10px;
-    left: 10px;
-    font-size: 18px;
+    top: 8px; left: 8px;
+    font-size: 16px;
     line-height: 1;
     filter: drop-shadow(0 1px 4px rgba(0,0,0,0.7));
   }
   .rank-badge.rank-num {
-    font-size: 12px;
+    font-size: 11px;
     font-weight: 700;
     background: rgba(0,0,0,0.55);
     color: rgba(255,255,255,0.85);
-    padding: 3px 9px;
-    border-radius: 12px;
+    padding: 2px 7px;
+    border-radius: 10px;
     backdrop-filter: blur(4px);
   }
-
-  /* Видео-бейдж */
   .video-badge {
     position: absolute;
-    top: 10px;
-    right: 10px;
-    font-size: 18px;
+    top: 8px; right: 8px;
+    font-size: 16px;
     filter: drop-shadow(0 1px 4px rgba(0,0,0,0.8));
   }
 
@@ -290,7 +316,6 @@
     animation: spin .7s linear infinite;
   }
   @keyframes spin { to { transform: rotate(360deg); } }
-
   .empty {
     text-align: center;
     padding: 70px 20px;
@@ -304,16 +329,23 @@
 <body>
 
 <div class="tabs">
-  <button class="tab-btn active" onclick="switchTab('steam', this)">🎮 Steam</button>
-  <button class="tab-btn"       onclick="switchTab('gallery', this)">📸 Галерея</button>
+  <button class="tab-btn" id="tab-btn-steam"   onclick="switchTab('steam', this)">🎮 Steam</button>
+  <button class="tab-btn" id="tab-btn-gallery" onclick="switchTab('gallery', this)">📸 Галерея</button>
 </div>
 
 <!-- ── Steam ── -->
-<div id="tab-steam" class="section active">
-  <div class="sort-bar">
-    <button class="sort-btn active" onclick="steamSort('discount', this)">🔥 По скидке</button>
-    <button class="sort-btn"        onclick="steamSort('price', this)">💎 По цене</button>
+<div id="tab-steam" class="section">
+  <div class="search-wrap">
+    <span class="search-icon">🔍</span>
+    <input class="search-input" id="steam-search" type="text" placeholder="Поиск по названию…" oninput="onSteamSearch(this.value)">
   </div>
+  <div class="sort-bar">
+    <button class="sort-btn active" id="sort-discount" onclick="steamSort('discount', this)">🔥 По скидке</button>
+    <button class="sort-btn"        id="sort-price"    onclick="steamSort('price', this)">💎 По цене</button>
+    <button class="sort-btn"        id="sort-free"     onclick="steamSort('free', this)">🆓 Бесплатные</button>
+    <button class="sort-btn"        id="sort-name"     onclick="steamSort('name', this)">🔤 По названию</button>
+  </div>
+  <div class="steam-counter" id="steam-counter"></div>
   <div id="steam-list"><div class="loader"><div class="spinner"></div><span>Загружаю скидки…</span></div></div>
 </div>
 
@@ -331,26 +363,38 @@ const chatId = tg.initDataUnsafe?.chat?.id || null;
 
 let steamData = null;
 let currentSort = 'discount';
+let steamQuery = '';
 let galleryLoaded = false;
 
-// ── Tabs ──
+// ── Сохранение и восстановление вкладки ──
+const STORAGE_KEY = 'scout_active_tab';
+
 function switchTab(name, btn) {
   document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
   document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
   document.getElementById('tab-' + name).classList.add('active');
   btn.classList.add('active');
+  try { localStorage.setItem(STORAGE_KEY, name); } catch(e) {}
   if (name === 'gallery') loadGallery();
 }
 
+function restoreTab() {
+  let saved = 'steam';
+  try { saved = localStorage.getItem(STORAGE_KEY) || 'steam'; } catch(e) {}
+  const btn = document.getElementById('tab-btn-' + saved);
+  if (btn) switchTab(saved, btn);
+  else switchTab('steam', document.getElementById('tab-btn-steam'));
+}
+
 // ── Steam ──
-async function loadSteam(sort = currentSort) {
+async function loadSteam() {
   const list = document.getElementById('steam-list');
-  if (!steamData) list.innerHTML = '<div class="loader"><div class="spinner"></div><span>Загружаю скидки…</span></div>';
+  list.innerHTML = '<div class="loader"><div class="spinner"></div><span>Загружаю скидки…</span></div>';
   try {
-    const r = await fetch(`/api/steam?sort=${sort}`);
+    const r = await fetch('/api/steam?sort=discount');
     const data = await r.json();
     steamData = data.deals || [];
-    renderSteam(steamData);
+    applyAndRender();
   } catch(e) {
     list.innerHTML = '<div class="empty"><span class="empty-icon">😔</span>Не удалось загрузить скидки</div>';
   }
@@ -360,11 +404,35 @@ function steamSort(sort, btn) {
   currentSort = sort;
   document.querySelectorAll('.sort-btn').forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
-  if (!steamData) { loadSteam(sort); return; }
-  let sorted = [...steamData];
-  if (sort === 'price')    sorted.sort((a, b) => a.final_price - b.final_price);
-  if (sort === 'discount') sorted.sort((a, b) => b.discount - a.discount);
-  renderSteam(sorted);
+  applyAndRender();
+}
+
+function onSteamSearch(q) {
+  steamQuery = q.trim().toLowerCase();
+  applyAndRender();
+}
+
+function applyAndRender() {
+  if (!steamData) return;
+  let list = [...steamData];
+
+  // Фильтр: бесплатные
+  if (currentSort === 'free') {
+    list = list.filter(d => d.final_price === 0);
+  }
+
+  // Поиск по названию
+  if (steamQuery) {
+    list = list.filter(d => d.name.toLowerCase().includes(steamQuery));
+  }
+
+  // Сортировка
+  if (currentSort === 'price') list.sort((a, b) => a.final_price - b.final_price);
+  else if (currentSort === 'name') list.sort((a, b) => a.name.localeCompare(b.name, 'ru'));
+  else if (currentSort === 'free') list.sort((a, b) => b.discount - a.discount);
+  else list.sort((a, b) => b.discount - a.discount); // discount
+
+  renderSteam(list);
 }
 
 function fmtRub(kopecks) {
@@ -374,12 +442,26 @@ function fmtRub(kopecks) {
 
 function renderSteam(deals) {
   const list = document.getElementById('steam-list');
+  const counter = document.getElementById('steam-counter');
+
   if (!deals.length) {
-    list.innerHTML = '<div class="empty"><span class="empty-icon">🎮</span>Скидок не найдено</div>';
+    counter.textContent = '';
+    list.innerHTML = '<div class="empty"><span class="empty-icon">🎮</span>Ничего не найдено</div>';
     return;
   }
+
+  counter.textContent = `Найдено: ${deals.length} игр`;
+
   list.innerHTML = '<div class="steam-list">' + deals.map(d => {
-    const isHot = d.discount >= 70;
+    const isFree = d.final_price === 0;
+    const isHot  = d.discount >= 70 && !isFree;
+    const badgeClass = isFree ? 'free' : isHot ? 'hot' : '';
+    const badgeLabel = isFree ? 'БЕСПЛАТНО' : `-${d.discount}%`;
+    const priceHtml = isFree
+      ? `<span class="steam-free-tag">Бесплатно</span>`
+      : `<span class="steam-orig">${fmtRub(d.original_price)}</span>
+         <span class="steam-sale">${fmtRub(d.final_price)}</span>`;
+
     return `
     <a class="steam-card" href="${d.url}" target="_blank">
       <img class="steam-cover" src="${d.cover}" alt=""
@@ -387,9 +469,8 @@ function renderSteam(deals) {
       <div class="steam-info">
         <div class="steam-name">${escHtml(d.name)}</div>
         <div class="steam-price-row">
-          <span class="steam-badge${isHot ? ' hot' : ''}">-${d.discount}%</span>
-          <span class="steam-orig">${fmtRub(d.original_price)}</span>
-          <span class="steam-sale">${fmtRub(d.final_price)}</span>
+          <span class="steam-badge ${badgeClass}">${badgeLabel}</span>
+          ${priceHtml}
         </div>
       </div>
     </a>`;
@@ -414,31 +495,22 @@ async function loadGallery() {
     const MEDALS = ['🥇','🥈','🥉'];
     grid.innerHTML = '<div class="gallery-grid">' + photos.map((p, i) => {
       const isVideo = p.media_type === 'video';
-
       const rankEl = i < 3
         ? `<div class="rank-badge">${MEDALS[i]}</div>`
         : `<div class="rank-badge rank-num">#${i+1}</div>`;
-
       const videoBadge = isVideo ? `<div class="video-badge">🎥</div>` : '';
-
       const media = isVideo
         ? `<video class="photo-img" src="/api/photo/${p.key}" muted playsinline loop preload="metadata"
                   onerror="this.outerHTML='<div class=\\'photo-img-placeholder\\'>🎥</div>'"
                   ontouchstart="this.play()" onmouseenter="this.play()" onmouseleave="this.pause();this.currentTime=0"></video>`
         : `<img class="photo-img" src="/api/photo/${p.key}" alt=""
                 onerror="this.outerHTML='<div class=\\'photo-img-placeholder\\'>📷</div>'">`;
-
       return `
         <div class="photo-card">
-          ${rankEl}
-          ${videoBadge}
-          ${media}
+          ${rankEl}${videoBadge}${media}
           <div class="photo-overlay">
             <span class="photo-author-overlay">${escHtml(p.author)}</span>
-            <span class="photo-score-overlay">
-              ⭐ <span class="score-num">${p.avg_score.toFixed(1)}</span>
-              <span class="score-votes">(${p.vote_count})</span>
-            </span>
+            <span class="photo-score-overlay">⭐ <span class="score-num">${p.avg_score.toFixed(1)}</span><span class="score-votes"> (${p.vote_count})</span></span>
           </div>
         </div>`;
     }).join('') + '</div>';
@@ -452,6 +524,8 @@ function escHtml(s) {
   return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
+// Восстановить вкладку, затем загрузить Steam
+restoreTab();
 loadSteam();
 </script>
 </body>
