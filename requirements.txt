@@ -1,1 +1,1 @@
-python-telegram-bot[http2]==21.6
+python-telegram-bot[http2,job-queue]==21.6
