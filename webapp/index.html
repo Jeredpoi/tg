@@ -271,6 +271,8 @@ const tg = window.Telegram.WebApp;
 tg.expand();
 tg.setHeaderColor('secondary_bg_color');
 
+const chatId = tg.initDataUnsafe?.chat?.id || null;
+
 let steamData = null;
 let currentSort = 'discount';
 
@@ -347,7 +349,7 @@ async function loadGallery() {
   const grid = document.getElementById('gallery-grid');
 
   try {
-    const r = await fetch('/api/gallery');
+    const r = await fetch('/api/gallery' + (chatId ? `?chat_id=${chatId}` : ''));
     const data = await r.json();
     const photos = data.photos || [];
 

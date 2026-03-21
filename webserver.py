@@ -50,7 +50,9 @@ async def api_steam(request: web.Request) -> web.Response:
 
 async def api_gallery(request: web.Request) -> web.Response:
     try:
-        rows = get_gallery(100)
+        chat_id_raw = request.rel_url.query.get("chat_id")
+        chat_id = int(chat_id_raw) if chat_id_raw else None
+        rows = get_gallery(100, chat_id=chat_id)
         result = [
             {
                 "key":        row["key"],
