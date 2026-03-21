@@ -76,6 +76,8 @@ def init_db() -> None:
         c.execute("ALTER TABLE photo_ratings ADD COLUMN closed INTEGER DEFAULT 0")
     if "key" not in pr_cols:
         c.execute("ALTER TABLE photo_ratings ADD COLUMN key TEXT")
+    if "media_type" not in pr_cols:
+        c.execute("ALTER TABLE photo_ratings ADD COLUMN media_type TEXT DEFAULT 'photo'")
 
     # ── photo_votes ─────────────────────────────────────────────────────────
     c.execute("""
@@ -185,17 +187,18 @@ def set_king_today(chat_id: int, user_id: int, username: str, first_name: str) -
 
 def save_photo(photo_id: str, message_id: int, chat_id: int,
                author_id: int, author_name: str, anonymous: bool,
-               key: str = "") -> None:
+               key: str = "", media_type: str = "photo") -> None:
     conn = get_connection()
     conn.execute("""
         INSERT INTO photo_ratings
-            (photo_id, key, message_id, chat_id, author_id, author_name, anonymous)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
+            (photo_id, key, message_id, chat_id, author_id, author_name, anonymous, media_type)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(photo_id) DO UPDATE SET
             key         = excluded.key,
             message_id  = excluded.message_id,
-            anonymous   = excluded.anonymous
-    """, (photo_id, key, message_id, chat_id, author_id, author_name, int(anonymous)))
+            anonymous   = excluded.anonymous,
+            media_type  = excluded.media_type
+    """, (photo_id, key, message_id, chat_id, author_id, author_name, int(anonymous), media_type))
     conn.commit()
     conn.close()
 

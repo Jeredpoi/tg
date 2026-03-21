@@ -29,7 +29,7 @@ from commands.king import king_command, kfine_command, kpardon_command, kdecree_
 from commands.mge import mge_command
 from commands.roast import roast_command
 from commands.top import top_command, top_callback
-from commands.rate import rate_command, rate_callback, handle_rate_photo
+from commands.rate import rate_command, rate_callback, handle_rate_photo, handle_rate_video
 from commands.help import help_command
 from commands.coinflip import coinflip_command
 from commands.weather import weather_command, weather_callback
@@ -429,10 +429,14 @@ def main():
     # Автоопределение CHAT_ID при добавлении бота в группу
     app.add_handler(ChatMemberHandler(_on_bot_added, ChatMemberHandler.MY_CHAT_MEMBER))
 
-    # Приём фото в личке для /rate
+    # Приём фото/видео в личке для /rate
     app.add_handler(MessageHandler(
         filters.PHOTO & filters.ChatType.PRIVATE,
         handle_rate_photo,
+    ))
+    app.add_handler(MessageHandler(
+        filters.VIDEO & filters.ChatType.PRIVATE,
+        handle_rate_video,
     ))
 
     # Inline-кнопки

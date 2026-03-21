@@ -36,18 +36,18 @@ async def rate_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     if update.effective_chat.type != "private":
         await update.message.reply_text(
             "📸 Команда /rate работает только в личных сообщениях!\n"
-            "Напиши мне в личку — там отправь фото для оценки группой."
+            "Напиши мне в личку — там отправь фото или видео для оценки группой."
         )
         return
 
     await update.message.reply_text(
-        "📸 Отправь мне фото, которое хочешь выставить на оценку группы.\n"
+        "📸🎥 Отправь мне фото или видео, которое хочешь выставить на оценку группы.\n"
         "Голосование будет идти 30 минут, затем покажу итоговый счёт."
     )
 
 
 async def handle_rate_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Принимает любое фото в личке и предлагает выставить на оценку группы."""
+    """Принимает фото в личке и предлагает выставить на оценку группы."""
     photo = update.message.photo[-1]
     photo_id = photo.file_id
     key = _short_key(photo_id)
@@ -62,6 +62,32 @@ async def handle_rate_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         author_name=author_name,
         anonymous=False,
         key=key,
+        media_type="photo",
+    )
+
+    await update.message.reply_text(
+        "🤔 Скрыть тебя как автора в группе?",
+        reply_markup=_anon_keyboard(key),
+    )
+
+
+async def handle_rate_video(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Принимает видео в личке и предлагает выставить на оценку группы."""
+    video = update.message.video
+    video_id = video.file_id
+    key = _short_key(video_id)
+    author = update.effective_user
+    author_name = f"@{author.username}" if author.username else author.first_name
+
+    save_photo(
+        photo_id=video_id,
+        message_id=update.message.message_id,
+        chat_id=config.CHAT_ID,
+        author_id=author.id,
+        author_name=author_name,
+        anonymous=False,
+        key=key,
+        media_type="video",
     )
 
     await update.message.reply_text(
@@ -87,7 +113,10 @@ async def _close_rate_voting(context) -> None:
     votes = photo_row["vote_count"]
     avg = round(total / votes, 2) if votes > 0 else 0
 
-    caption = "🖼 Анонимное фото" if photo_row["anonymous"] else f"🖼 Фото от {photo_row['author_name']}"
+    mt = photo_row["media_type"] if photo_row["media_type"] else "photo"
+    me = "🎥" if mt == "video" else "🖼"
+    mw = "видео" if mt == "video" else "фото"
+    caption = f"{me} Анонимное {mw}" if photo_row["anonymous"] else f"{me} {mw.capitalize()} от {photo_row['author_name']}"
     caption += (
         f"\n\n🏁 Голосование завершено!\n"
         f"⭐ Средняя оценка: {avg} ({votes} голос(ов))"
@@ -135,20 +164,33 @@ async def rate_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
             )
             return
 
-        caption = "🖼 Анонимное фото" if anonymous else f"🖼 Фото от {photo_row['author_name']}"
+        media_type = photo_row["media_type"] if photo_row["media_type"] else "photo"
+        is_video = media_type == "video"
+        media_emoji = "🎥" if is_video else "🖼"
+        media_word = "видео" if is_video else "фото"
+
+        caption = f"{media_emoji} Анонимное {media_word}" if anonymous else f"{media_emoji} {media_word.capitalize()} от {photo_row['author_name']}"
         caption += "\n\n⭐ Голосуй от 1 до 10! Голосование идёт 30 минут.\n📊 Сейчас: нет голосов"
 
         try:
-            sent = await context.bot.send_photo(
-                chat_id=config.CHAT_ID,
-                photo=photo_id,
-                caption=caption,
-                reply_markup=_rating_keyboard(key),
-            )
+            if is_video:
+                sent = await context.bot.send_video(
+                    chat_id=config.CHAT_ID,
+                    video=photo_id,
+                    caption=caption,
+                    reply_markup=_rating_keyboard(key),
+                )
+            else:
+                sent = await context.bot.send_photo(
+                    chat_id=config.CHAT_ID,
+                    photo=photo_id,
+                    caption=caption,
+                    reply_markup=_rating_keyboard(key),
+                )
         except Exception as e:
-            logger.error("send_photo failed: chat_id=%s error=%s", config.CHAT_ID, e)
+            logger.error("send_%s failed: chat_id=%s error=%s", media_type, config.CHAT_ID, e)
             await query.edit_message_text(
-                f"❌ Не удалось отправить фото в группу.\n"
+                f"❌ Не удалось отправить {media_word} в группу.\n"
                 f"CHAT_ID: <code>{config.CHAT_ID}</code>\n"
                 f"Ошибка: <code>{e}</code>\n\n"
                 f"Проверь: бот добавлен в группу? Напиши /debug в группе.",
@@ -158,7 +200,7 @@ async def rate_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
         # Сообщаем пользователю сразу — до любых операций с БД/job_queue
         await query.edit_message_text(
-            "✅ Фото отправлено в группу!\n"
+            f"✅ {media_word.capitalize()} отправлено в группу!\n"
             "Голосование закроется через 30 минут — итог появится там."
         )
 
@@ -170,6 +212,7 @@ async def rate_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
             author_name=photo_row["author_name"],
             anonymous=anonymous,
             key=key,
+            media_type=media_type,
         )
 
         context.job_queue.run_once(
@@ -199,12 +242,17 @@ async def rate_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         voter_id = query.from_user.id
         # Блокируем автора только в публичном режиме
         if voter_id == photo_row["author_id"] and not photo_row["anonymous"]:
-            await query.answer("🚫 Нельзя голосовать за своё фото!", show_alert=True)
+            mt = photo_row["media_type"] if photo_row["media_type"] else "photo"
+            mw = "видео" if mt == "video" else "фото"
+            await query.answer(f"🚫 Нельзя голосовать за своё {mw}!", show_alert=True)
             return
 
         avg, votes = add_vote(photo_id, voter_id, score)
 
-        caption = "🖼 Анонимное фото" if photo_row["anonymous"] else f"🖼 Фото от {photo_row['author_name']}"
+        mt = photo_row["media_type"] if photo_row["media_type"] else "photo"
+        me = "🎥" if mt == "video" else "🖼"
+        mw = "видео" if mt == "video" else "фото"
+        caption = f"{me} Анонимное {mw}" if photo_row["anonymous"] else f"{me} {mw.capitalize()} от {photo_row['author_name']}"
         caption += (
             f"\n\n⭐ Голосуй от 1 до 10! Голосование идёт 30 минут.\n"
             f"📊 Сейчас: средняя {avg} ({votes} голос(ов))"
