@@ -36,7 +36,9 @@ async def _get_deals() -> list:
         data = resp.json()
 
     items = data.get("specials", {}).get("items", [])
-    deals = [i for i in items if i.get("discounted") and i.get("discount_percent", 0) < 0]
+    # discount_percent может быть как -70, так и 70 в зависимости от версии API
+    deals = [i for i in items if i.get("discounted") or abs(i.get("discount_percent", 0)) > 0]
+    logger.info("Steam deals fetched: %d items", len(deals))
 
     _cache["deals"] = deals
     _cache["ts"] = now
@@ -46,8 +48,8 @@ async def _get_deals() -> list:
 def _sort_deals(deals: list, sort_by: str) -> list:
     if sort_by == "price":
         return sorted(deals, key=lambda d: d.get("final_price", 0))
-    # по скидке (discount_percent отрицательный, -70 = 70% скидка)
-    return sorted(deals, key=lambda d: d.get("discount_percent", 0))
+    # по скидке — сортируем по убыванию abs(discount_percent)
+    return sorted(deals, key=lambda d: abs(d.get("discount_percent", 0)), reverse=True)
 
 
 def _fmt_price(kopecks) -> str:
@@ -61,6 +63,9 @@ def _build_text(deals: list, sort_by: str, page: int) -> str:
     start = page * DEALS_PER_PAGE
     chunk = deals[start: start + DEALS_PER_PAGE]
 
+    if not deals:
+        return "🎮 <b>Скидки в Steam</b>\n\nСейчас скидок не найдено. Попробуй позже."
+
     lines = [f"🎮 <b>Скидки в Steam</b>  ·  {sort_label}\n"]
 
     for i, item in enumerate(chunk, start=start + 1):
@@ -68,7 +73,7 @@ def _build_text(deals: list, sort_by: str, page: int) -> str:
         name     = item.get("name", "Неизвестно")
         orig     = item.get("original_price", 0)
         final    = item.get("final_price", 0)
-        discount = abs(item.get("discount_percent", 0))
+        discount = abs(int(item.get("discount_percent", 0)))
         url      = f"https://store.steampowered.com/app/{app_id}"
 
         if len(name) > 35:
