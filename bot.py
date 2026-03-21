@@ -18,7 +18,7 @@ from telegram.ext import (
     filters,
 )
 
-from telegram import BotCommand
+from telegram import BotCommand, WebAppInfo, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.request import HTTPXRequest
 from config import BOT_TOKEN, PROXY_URL
 from database import init_db, track_message
@@ -341,6 +341,17 @@ async def _on_bot_added(update, context):
         pass
 
 
+async def app_command(update, context):
+    """Открывает Mini App с Steam скидками и галереей рейтингов."""
+    kb = InlineKeyboardMarkup([[
+        InlineKeyboardButton(
+            "🚀 Открыть приложение",
+            web_app=WebAppInfo(url="https://bottgmge.com"),
+        )
+    ]])
+    await update.message.reply_text("Скидки Steam и галерея рейтингов:", reply_markup=kb)
+
+
 async def _private_command_guard(update, context):
     """Отвечает на неизвестные команды в личке."""
     await update.message.reply_text(
@@ -406,6 +417,9 @@ def main():
     # Steam скидки
     app.add_handler(CommandHandler("steam", steam_command, filters=filters.ChatType.GROUPS))
 
+    # Mini App
+    app.add_handler(CommandHandler("app", app_command, filters=filters.ChatType.GROUPS))
+
     # Ловим любые другие команды в личке и вежливо отказываем
     app.add_handler(MessageHandler(
         filters.COMMAND & filters.ChatType.PRIVATE,
@@ -449,6 +463,7 @@ def main():
             BotCommand("ktax",     "[Король] Ввести налог"),
             BotCommand("mge",      "Фраза из МГЕ"),
             BotCommand("steam",    "Топ скидок в Steam"),
+            BotCommand("app",      "Открыть мини-приложение"),
         ]
 
         private_commands = [

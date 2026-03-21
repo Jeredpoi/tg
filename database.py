@@ -264,6 +264,21 @@ def add_vote(photo_id: str, voter_id: int, score: int) -> tuple[float, int]:
     return 0.0, 0
 
 
+def get_gallery(limit: int = 100) -> list:
+    """Возвращает фото отсортированные по среднему рейтингу."""
+    conn = get_connection()
+    rows = conn.execute("""
+        SELECT key, photo_id, author_name, anonymous, total_score, vote_count
+        FROM photo_ratings
+        WHERE vote_count > 0 AND key IS NOT NULL
+        ORDER BY CAST(total_score AS FLOAT) / vote_count DESC,
+                 vote_count DESC
+        LIMIT ?
+    """, (limit,)).fetchall()
+    conn.close()
+    return rows
+
+
 def get_photo(photo_id: str):
     conn = get_connection()
     row = conn.execute(
