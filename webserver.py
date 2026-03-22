@@ -126,7 +126,8 @@ async def api_photo(request: web.Request) -> web.Response:
 
     try:
         # getFile — короткий таймаут, просто получаем путь
-        async with httpx.AsyncClient(timeout=10) as client:
+        # trust_env=False: обходим прокси, который может блокировать api.telegram.org
+        async with httpx.AsyncClient(timeout=10, trust_env=False) as client:
             r = await client.get(
                 f"https://api.telegram.org/bot{BOT_TOKEN}/getFile",
                 params={"file_id": row["photo_id"]},
@@ -145,7 +146,7 @@ async def api_photo(request: web.Request) -> web.Response:
 
         default_ct = "video/mp4" if is_video else "image/jpeg"
 
-        async with httpx.AsyncClient(timeout=60) as client:
+        async with httpx.AsyncClient(timeout=60, trust_env=False) as client:
             upstream = await client.get(tg_url, headers=upstream_headers)
 
         resp_headers = {"Cache-Control": "public, max-age=3600", "Accept-Ranges": "bytes"}

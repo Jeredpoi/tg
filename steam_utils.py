@@ -100,28 +100,47 @@ async def _fetch_via_search_api(offset: int, count: int) -> tuple[int, list]:
     return total, items
 
 
+def _extract_discounted(data: dict, seen: set) -> list:
+    """Извлекает скидки из ответа featuredcategories."""
+    result = []
+    for section in data.values():
+        if not isinstance(section, dict):
+            continue
+        for item in section.get("items", []):
+            app_id = item.get("id")
+            if not app_id or app_id in seen:
+                continue
+            if abs(item.get("discount_percent", 0)) > 0 or item.get("discounted"):
+                seen.add(app_id)
+                result.append(item)
+    return result
+
+
 async def _fetch_via_featured_apis() -> tuple[int, list]:
-    """Собирает скидки из featured + featuredcategories (стабильный fallback)."""
+    """Собирает скидки из featuredcategories (nPage 1-5) + featured (стабильный fallback)."""
     seen: set[int] = set()
     deals: list = []
 
     async with httpx.AsyncClient(timeout=15, headers=_STEAM_HEADERS) as client:
-        r1 = await client.get(
-            "https://store.steampowered.com/api/featuredcategories/",
-            params={"cc": "ru", "l": "russian"},
-        )
-        r1.raise_for_status()
-        data1 = r1.json()
-        for section in data1.values():
-            if not isinstance(section, dict):
+        # Параллельно запрашиваем 5 страниц featuredcategories
+        tasks = [
+            client.get(
+                "https://store.steampowered.com/api/featuredcategories/",
+                params={"cc": "ru", "l": "russian", "nPage": str(n)},
+            )
+            for n in range(1, 6)
+        ]
+        import asyncio as _asyncio
+        responses = await _asyncio.gather(*tasks, return_exceptions=True)
+
+        for r in responses:
+            if isinstance(r, Exception):
                 continue
-            for item in section.get("items", []):
-                app_id = item.get("id")
-                if not app_id or app_id in seen:
-                    continue
-                if abs(item.get("discount_percent", 0)) > 0 or item.get("discounted"):
-                    seen.add(app_id)
-                    deals.append(item)
+            try:
+                if r.status_code == 200:
+                    deals.extend(_extract_discounted(r.json(), seen))
+            except Exception:
+                continue
 
         # featured_win + large_capsules
         try:
@@ -153,7 +172,7 @@ async def _fetch_via_featured_apis() -> tuple[int, list]:
         }
         for item in deals
     ]
-    logger.info("Steam featured APIs (fallback): %d deals", len(normalized))
+    logger.info("Steam featured APIs (fallback): %d deals from %d pages", len(normalized), 5)
     return len(normalized), normalized
 
 
