@@ -4,9 +4,18 @@
 set -e
 
 DOMAIN="144.31.75.246.sslip.io"
+BRANCH="claude/steam-style-discount-list-osPyG"
+REPO="https://github.com/Jeredpoi/tg"
 
-echo "==> Устанавливаем nginx и certbot..."
-apt update -q && apt install -y nginx certbot python3-certbot-nginx
+echo "==> Устанавливаем зависимости..."
+apt update -q && apt install -y nginx certbot python3-certbot-nginx git python3-venv python3.12-venv
+
+echo "==> Клонируем репозиторий..."
+if [ ! -d /root/tg/.git ]; then
+    git clone -b "$BRANCH" "$REPO" /root/tg
+else
+    git -C /root/tg pull origin "$BRANCH"
+fi
 
 echo "==> Создаём виртуальное окружение..."
 python3 -m venv /root/tg/venv
