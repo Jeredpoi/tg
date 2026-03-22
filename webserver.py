@@ -123,7 +123,7 @@ async def api_photo(request: web.Request) -> web.Response:
     if not row or not row["photo_id"]:
         raise web.HTTPNotFound()
 
-    media_type = row.get("media_type") or "photo"
+    media_type = row["media_type"] or "photo"
     is_video = media_type == "video"
     default_ct = "video/mp4" if is_video else "image/jpeg"
     ext = "mp4" if is_video else "jpg"
