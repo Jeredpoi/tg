@@ -13,6 +13,8 @@ from aiohttp import web
 
 sys.path.insert(0, os.path.dirname(__file__))
 
+PHOTOS_DIR = os.path.join(os.path.dirname(__file__), "photos")
+
 from config import BOT_TOKEN
 from database import init_db, get_gallery, get_photo_by_key, get_comments, add_comment
 from steam_utils import _get_deals, _sort_deals, _get_deals_paged
@@ -113,7 +115,7 @@ async def api_post_comment(request: web.Request) -> web.Response:
     return web.json_response({"ok": True})
 
 
-# ── /api/photo/{key} — проксируем фото/видео из Telegram ────────────────────
+# ── /api/photo/{key} — отдаём фото/видео (диск → Telegram API) ──────────────
 
 async def api_photo(request: web.Request) -> web.Response:
     key = request.match_info["key"]
@@ -123,10 +125,21 @@ async def api_photo(request: web.Request) -> web.Response:
 
     media_type = row.get("media_type") or "photo"
     is_video = media_type == "video"
+    default_ct = "video/mp4" if is_video else "image/jpeg"
+    ext = "mp4" if is_video else "jpg"
 
+    # 1. Отдаём с диска (бот скачивает туда при публикации)
+    disk_path = os.path.join(PHOTOS_DIR, f"{key}.{ext}")
+    if os.path.exists(disk_path):
+        resp_headers = {
+            "Cache-Control": "public, max-age=86400",
+            "Accept-Ranges": "bytes",
+        }
+        return web.FileResponse(disk_path, headers=resp_headers)
+
+    # 2. Fallback: Telegram API (работает если вебсервер имеет доступ к Telegram)
+    logger.warning("api_photo: файл %s не найден на диске, пробуем Telegram API", disk_path)
     try:
-        # getFile — короткий таймаут, просто получаем путь
-        # trust_env=False: обходим прокси, который может блокировать api.telegram.org
         async with httpx.AsyncClient(timeout=10, trust_env=False) as client:
             r = await client.get(
                 f"https://api.telegram.org/bot{BOT_TOKEN}/getFile",
@@ -134,17 +147,14 @@ async def api_photo(request: web.Request) -> web.Response:
             )
             data = r.json()
             if not data.get("ok"):
+                logger.error("api_photo: Telegram getFile вернул ok=false: %s", data)
                 raise web.HTTPNotFound()
             file_path = data["result"]["file_path"]
 
         tg_url = f"https://api.telegram.org/file/bot{BOT_TOKEN}/{file_path}"
-
-        # Для видео пробрасываем Range-заголовок (нужен браузеру для воспроизведения)
         upstream_headers = {}
         if is_video and "Range" in request.headers:
             upstream_headers["Range"] = request.headers["Range"]
-
-        default_ct = "video/mp4" if is_video else "image/jpeg"
 
         async with httpx.AsyncClient(timeout=60, trust_env=False) as client:
             upstream = await client.get(tg_url, headers=upstream_headers)

@@ -4,6 +4,7 @@
 
 import hashlib
 import logging
+import os
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
 from database import save_photo, add_vote, get_photo, get_photo_by_key, close_photo
@@ -12,6 +13,7 @@ import config
 logger = logging.getLogger(__name__)
 
 VOTE_DURATION = 30 * 60  # 30 минут в секундах
+PHOTOS_DIR = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "photos"))
 
 
 def _short_key(photo_id: str) -> str:
@@ -197,6 +199,18 @@ async def rate_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
                 parse_mode="HTML",
             )
             return
+
+        # Сохраняем файл на диск — чтобы вебсервер мог отдавать его без Telegram API
+        try:
+            os.makedirs(PHOTOS_DIR, exist_ok=True)
+            ext = "mp4" if is_video else "jpg"
+            disk_path = os.path.join(PHOTOS_DIR, f"{key}.{ext}")
+            if not os.path.exists(disk_path):
+                tg_file = await context.bot.get_file(photo_id)
+                await tg_file.download_to_drive(disk_path)
+                logger.info("Файл сохранён на диск: %s", disk_path)
+        except Exception as _e:
+            logger.warning("Не удалось сохранить файл на диск: %s", _e)
 
         # Сообщаем пользователю сразу — до любых операций с БД/job_queue
         await query.edit_message_text(
