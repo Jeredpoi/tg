@@ -15,7 +15,7 @@ sys.path.insert(0, os.path.dirname(__file__))
 
 from config import BOT_TOKEN
 from database import init_db, get_gallery, get_photo_by_key, get_comments, add_comment
-from steam_utils import _get_deals, _sort_deals
+from steam_utils import _get_deals, _sort_deals, _get_deals_paged
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
@@ -24,10 +24,14 @@ logger = logging.getLogger(__name__)
 # ── /api/steam ──────────────────────────────────────────────────────────────
 
 async def api_steam(request: web.Request) -> web.Response:
-    sort = request.rel_url.query.get("sort", "discount")
     try:
-        deals = await _get_deals()
-        sorted_deals = _sort_deals(deals, sort)
+        offset = max(0, int(request.rel_url.query.get("offset", 0)))
+        count  = min(100, max(1, int(request.rel_url.query.get("count", 50))))
+    except (ValueError, TypeError):
+        offset, count = 0, 50
+
+    try:
+        total, deals = await _get_deals_paged(offset, count)
         result = [
             {
                 "id":             item.get("id", 0),
@@ -38,12 +42,12 @@ async def api_steam(request: web.Request) -> web.Response:
                 "cover":  f"https://cdn.akamai.steamstatic.com/steam/apps/{item.get('id', 0)}/header.jpg",
                 "url":    f"https://store.steampowered.com/app/{item.get('id', 0)}",
             }
-            for item in sorted_deals
+            for item in deals
         ]
-        return web.json_response({"deals": result})
+        return web.json_response({"deals": result, "total": total, "offset": offset})
     except Exception as e:
         logger.exception("api_steam error: %s", e)
-        return web.json_response({"deals": [], "error": str(e)}, status=500)
+        return web.json_response({"deals": [], "total": 0, "offset": offset, "error": str(e)}, status=500)
 
 
 # ── /api/gallery ─────────────────────────────────────────────────────────────

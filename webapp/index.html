@@ -608,12 +608,15 @@ tg.setHeaderColor('secondary_bg_color');
 
 const chatId = tg.initDataUnsafe?.chat?.id || null;
 
-let steamData = null;
+let steamData = [];       // все загруженные игры
+let steamTotal = 0;       // всего игр на сервере
+let steamOffset = 0;      // следующий offset для запроса к серверу
+let steamLoading = false; // флаг: идёт ли загрузка
+let steamInitialized = false;
+const STEAM_FETCH_SIZE = 50;  // сколько игр запрашивать за раз
 let currentSort = 'discount';
 let steamQuery = '';
 let steamFiltered = [];
-let steamPage = 0;
-const STEAM_PAGE_SIZE = 20;
 let steamObserver = null;
 let galleryLoaded = false;
 let gallerySort_  = 'score';
@@ -630,6 +633,7 @@ function switchTab(name, btn) {
   btn.classList.add('active');
   try { localStorage.setItem(STORAGE_KEY, name); } catch(e) {}
   if (name === 'gallery') loadGallery();
+  if (name === 'steam') loadSteam();
 }
 
 function restoreTab() {
@@ -642,15 +646,36 @@ function restoreTab() {
 
 // ── Steam ──
 async function loadSteam() {
+  if (steamInitialized) return;
+  steamData = [];
+  steamOffset = 0;
+  steamTotal = 0;
+  steamInitialized = true;
+
   const list = document.getElementById('steam-list');
   list.innerHTML = '<div class="loader"><div class="spinner"></div><span>Загружаю скидки…</span></div>';
+  await fetchSteamPage();
+}
+
+async function fetchSteamPage() {
+  if (steamLoading) return;
+  steamLoading = true;
   try {
-    const r = await fetch('/api/steam?sort=discount');
+    const r = await fetch(`/api/steam?offset=${steamOffset}&count=${STEAM_FETCH_SIZE}`);
     const data = await r.json();
-    steamData = data.deals || [];
-    applyAndRender();
+    const newDeals = data.deals || [];
+    steamTotal = data.total || 0;
+    steamOffset += newDeals.length;
+    steamData = steamData.concat(newDeals);
+    applyAndRender(/* append= */ steamData.length > newDeals.length);
   } catch(e) {
-    list.innerHTML = '<div class="empty"><span class="empty-icon">😔</span>Не удалось загрузить скидки</div>';
+    if (!steamData.length) {
+      document.getElementById('steam-list').innerHTML =
+        '<div class="empty"><span class="empty-icon">😔</span>Не удалось загрузить скидки</div>';
+    }
+  } finally {
+    steamLoading = false;
+    setupSteamSentinel();
   }
 }
 
@@ -667,28 +692,18 @@ function onSteamSearch(q) {
 }
 
 function applyAndRender() {
-  if (!steamData) return;
+  if (!steamData.length) return;
   let list = [...steamData];
 
-  // Фильтр: бесплатные
-  if (currentSort === 'free') {
-    list = list.filter(d => d.final_price === 0);
-  }
+  if (currentSort === 'free') list = list.filter(d => d.final_price === 0);
+  if (steamQuery) list = list.filter(d => d.name.toLowerCase().includes(steamQuery));
 
-  // Поиск по названию
-  if (steamQuery) {
-    list = list.filter(d => d.name.toLowerCase().includes(steamQuery));
-  }
-
-  // Сортировка
   if (currentSort === 'price') list.sort((a, b) => a.final_price - b.final_price);
   else if (currentSort === 'name') list.sort((a, b) => a.name.localeCompare(b.name, 'ru'));
-  else if (currentSort === 'free') list.sort((a, b) => b.discount - a.discount);
   else list.sort((a, b) => b.discount - a.discount);
 
   steamFiltered = list;
-  steamPage = 0;
-  renderSteam();
+  renderSteamList();
 }
 
 function fmtRub(kopecks) {
@@ -719,55 +734,47 @@ function steamCardHtml(d) {
   </a>`;
 }
 
-function updateSteamCounter(shown) {
+function updateSteamCounter() {
   const counter = document.getElementById('steam-counter');
-  counter.textContent = `Показано: ${shown} из ${steamFiltered.length} игр`;
+  const shown = steamFiltered.length;
+  const total = steamTotal;
+  if (!shown) { counter.textContent = ''; return; }
+  const moreOnServer = steamOffset < steamTotal;
+  counter.textContent = moreOnServer
+    ? `Загружено: ${steamData.length} из ${total} игр — прокрути для загрузки ещё`
+    : `Показано: ${shown}${shown !== steamData.length ? ' (из ' + steamData.length + ' загруженных)' : ''} игр`;
 }
 
-function renderSteam() {
+function renderSteamList() {
   const listEl = document.getElementById('steam-list');
-  const deals = steamFiltered;
 
   if (steamObserver) { steamObserver.disconnect(); steamObserver = null; }
 
-  if (!deals.length) {
+  if (!steamFiltered.length) {
     document.getElementById('steam-counter').textContent = '';
     listEl.innerHTML = '<div class="empty"><span class="empty-icon">🎮</span>Ничего не найдено</div>';
     return;
   }
 
-  const first = deals.slice(0, STEAM_PAGE_SIZE);
-  steamPage = 1;
-
-  listEl.innerHTML = '<div class="steam-list" id="steam-items">' +
-    first.map(steamCardHtml).join('') +
+  listEl.innerHTML =
+    '<div class="steam-list" id="steam-items">' +
+    steamFiltered.map(steamCardHtml).join('') +
     '</div><div id="steam-sentinel"></div>';
 
-  updateSteamCounter(Math.min(STEAM_PAGE_SIZE, deals.length));
-
-  if (deals.length > STEAM_PAGE_SIZE) {
-    const sentinel = document.getElementById('steam-sentinel');
-    steamObserver = new IntersectionObserver(entries => {
-      if (entries[0].isIntersecting) loadMoreSteam();
-    }, { rootMargin: '200px' });
-    steamObserver.observe(sentinel);
-  }
+  updateSteamCounter();
+  setupSteamSentinel();
 }
 
-function loadMoreSteam() {
-  const start = steamPage * STEAM_PAGE_SIZE;
-  if (start >= steamFiltered.length) {
-    if (steamObserver) { steamObserver.disconnect(); steamObserver = null; }
-    return;
-  }
-  const chunk = steamFiltered.slice(start, start + STEAM_PAGE_SIZE);
-  steamPage++;
-  const itemsEl = document.getElementById('steam-items');
-  if (itemsEl) itemsEl.insertAdjacentHTML('beforeend', chunk.map(steamCardHtml).join(''));
-  updateSteamCounter(Math.min(steamPage * STEAM_PAGE_SIZE, steamFiltered.length));
-  if (steamPage * STEAM_PAGE_SIZE >= steamFiltered.length) {
-    if (steamObserver) { steamObserver.disconnect(); steamObserver = null; }
-  }
+function setupSteamSentinel() {
+  if (steamObserver) { steamObserver.disconnect(); steamObserver = null; }
+  const hasMore = steamOffset < steamTotal;
+  if (!hasMore) return;
+  const sentinel = document.getElementById('steam-sentinel');
+  if (!sentinel) return;
+  steamObserver = new IntersectionObserver(entries => {
+    if (entries[0].isIntersecting) fetchSteamPage();
+  }, { rootMargin: '300px' });
+  steamObserver.observe(sentinel);
 }
 
 // ── Gallery ──
@@ -994,9 +1001,7 @@ function escHtml(s) {
   return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
-// Восстановить вкладку, затем загрузить Steam
 restoreTab();
-loadSteam();
 </script>
 </body>
 </html>
