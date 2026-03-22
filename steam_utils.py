@@ -9,14 +9,24 @@ import httpx
 logger = logging.getLogger(__name__)
 
 CACHE_TTL = 300
-# Кэш страниц: (offset, count) -> (ts, items, total)
 _page_cache: dict = {}
-# Кэш всех скидок из категорий Steam (fallback)
 _fallback_cache: dict = {}
+
+# Браузерные заголовки для обхода блокировок Steam
+_STEAM_HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) "
+        "Chrome/124.0.0.0 Safari/537.36"
+    ),
+    "Accept-Language": "ru-RU,ru;q=0.9,en-US;q=0.8",
+    "Accept": "application/json, text/javascript, */*; q=0.01",
+    "Referer": "https://store.steampowered.com/",
+}
 
 
 def _parse_search_html(html_content: str) -> list:
-    """Парсит HTML выдачи Steam Search и извлекает данные об играх."""
+    """Парсит HTML Steam Search и извлекает данные об играх."""
     items = []
     for m in re.finditer(
         r'<a\b[^>]+\bdata-ds-appid="(\d+)"[^>]*>(.*?)</a>',
@@ -52,9 +62,9 @@ def _parse_search_html(html_content: str) -> list:
     return items
 
 
-async def _fetch_via_search_api(offset: int, count: int) -> tuple[int, list]:
-    """Использует Steam Search Specials API (может быть недоступен через прокси)."""
-    async with httpx.AsyncClient(timeout=15, trust_env=False) as client:
+async def _try_search_api(offset: int, count: int, trust_env: bool) -> tuple[int, list]:
+    """Одна попытка запроса к Steam Search API."""
+    async with httpx.AsyncClient(timeout=12, trust_env=trust_env, headers=_STEAM_HEADERS) as client:
         r = await client.get(
             "https://store.steampowered.com/search/results/",
             params={
@@ -68,20 +78,34 @@ async def _fetch_via_search_api(offset: int, count: int) -> tuple[int, list]:
         )
         r.raise_for_status()
         data = r.json()
-
     total = data.get("total_count", 0)
     items = _parse_search_html(data.get("results_html", ""))
-    logger.info("Steam search specials: offset=%d parsed=%d total=%d", offset, len(items), total)
     return total, items
 
 
-async def _fetch_via_featured_apis() -> list:
-    """Собирает все скидки из featuredcategories + featured (работает через прокси)."""
+async def _fetch_via_search_api(offset: int, count: int) -> tuple[int, list]:
+    """Пробует Steam Search через прокси, потом напрямую."""
+    # Сначала через прокси (если настроен)
+    try:
+        total, items = await _try_search_api(offset, count, trust_env=True)
+        if items:
+            logger.info("Steam search (proxy): offset=%d parsed=%d total=%d", offset, len(items), total)
+            return total, items
+    except Exception as e:
+        logger.debug("Steam search (proxy) failed: %s", e)
+
+    # Без прокси (прямое соединение)
+    total, items = await _try_search_api(offset, count, trust_env=False)
+    logger.info("Steam search (direct): offset=%d parsed=%d total=%d", offset, len(items), total)
+    return total, items
+
+
+async def _fetch_via_featured_apis() -> tuple[int, list]:
+    """Собирает скидки из featured + featuredcategories (стабильный fallback)."""
     seen: set[int] = set()
     deals: list = []
 
-    async with httpx.AsyncClient(timeout=15) as client:
-        # Все категории (specials, top_sellers, new_releases, etc.)
+    async with httpx.AsyncClient(timeout=15, headers=_STEAM_HEADERS) as client:
         r1 = await client.get(
             "https://store.steampowered.com/api/featuredcategories/",
             params={"cc": "ru", "l": "russian"},
@@ -99,7 +123,7 @@ async def _fetch_via_featured_apis() -> list:
                     seen.add(app_id)
                     deals.append(item)
 
-        # Featured (featured_win, large_capsules)
+        # featured_win + large_capsules
         try:
             r2 = await client.get(
                 "https://store.steampowered.com/api/featured/",
@@ -118,36 +142,36 @@ async def _fetch_via_featured_apis() -> list:
         except Exception:
             pass
 
-    logger.info("Steam featured APIs: %d deals", len(deals))
-    return deals
-
-
-async def _get_fallback_deals() -> tuple[int, list]:
-    """Возвращает скидки из featured APIs с кэшированием."""
-    now = time.time()
-    if _fallback_cache.get("deals") and now - _fallback_cache.get("ts", 0) < CACHE_TTL:
-        items = _fallback_cache["deals"]
-        return len(items), items
-
-    items = await _fetch_via_featured_apis()
-    # Нормализуем поля к единому формату
-    normalized = []
-    for item in items:
-        normalized.append({
+    # Нормализуем поля
+    normalized = [
+        {
             "id": item.get("id", 0),
             "name": item.get("name", ""),
             "discount_percent": abs(item.get("discount_percent", 0)),
             "original_price": item.get("original_price", 0),
             "final_price": item.get("final_price", 0),
-        })
-    _fallback_cache["deals"] = normalized
-    _fallback_cache["ts"] = now
+        }
+        for item in deals
+    ]
+    logger.info("Steam featured APIs (fallback): %d deals", len(normalized))
     return len(normalized), normalized
+
+
+async def _get_fallback_deals() -> tuple[int, list]:
+    """Возвращает fallback-скидки с кэшированием."""
+    now = time.time()
+    if _fallback_cache.get("deals") and now - _fallback_cache.get("ts", 0) < CACHE_TTL:
+        items = _fallback_cache["deals"]
+        return len(items), items
+    total, items = await _fetch_via_featured_apis()
+    _fallback_cache["deals"] = items
+    _fallback_cache["ts"] = now
+    return total, items
 
 
 async def _get_deals_paged(offset: int = 0, count: int = 50) -> tuple[int, list]:
     """Возвращает страницу скидок с кэшированием.
-    Сначала пробует Steam Search API, при неудаче — featured APIs.
+    Пробует Steam Search → при неудаче переходит на featured APIs.
     """
     key = (offset, count)
     now = time.time()
@@ -157,17 +181,15 @@ async def _get_deals_paged(offset: int = 0, count: int = 50) -> tuple[int, list]
         if now - ts < CACHE_TTL:
             return total, items
 
-    # Пробуем Steam Search API (больше игр, поддерживает пагинацию)
     try:
         total, items = await _fetch_via_search_api(offset, count)
         if items:
             _page_cache[key] = (now, items, total)
             return total, items
-        logger.warning("Steam search returned 0 items, falling back to featured APIs")
+        logger.warning("Steam search returned 0 items, falling back")
     except Exception as e:
-        logger.warning("Steam search API unavailable (%s), using featured APIs fallback", e)
+        logger.warning("Steam search unavailable: %s — using fallback", e)
 
-    # Fallback: featured categories (ограниченное количество, но стабильно)
     total, all_deals = await _get_fallback_deals()
     page_items = all_deals[offset: offset + count]
     _page_cache[key] = (now, page_items, total)
