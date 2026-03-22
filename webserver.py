@@ -177,6 +177,21 @@ async def api_photo(request: web.Request) -> web.Response:
         raise web.HTTPInternalServerError()
 
 
+# ── /api/debug/tg — диагностика доступа к Telegram API ──────────────────────
+
+async def api_debug_tg(request: web.Request) -> web.Response:
+    results = {}
+    for trust in (True, False):
+        label = "trust_env=True" if trust else "trust_env=False"
+        try:
+            async with httpx.AsyncClient(timeout=8, trust_env=trust) as c:
+                r = await c.get(f"https://api.telegram.org/bot{BOT_TOKEN}/getMe")
+                results[label] = {"status": r.status_code, "ok": r.json().get("ok")}
+        except Exception as e:
+            results[label] = {"error": type(e).__name__, "detail": str(e)}
+    return web.json_response(results)
+
+
 # ── App ──────────────────────────────────────────────────────────────────────
 
 def create_app() -> web.Application:
@@ -187,6 +202,7 @@ def create_app() -> web.Application:
     app.router.add_get("/api/photo/{key}",        api_photo)
     app.router.add_get("/api/comments/{key}",     api_get_comments)
     app.router.add_post("/api/comments/{key}",    api_post_comment)
+    app.router.add_get("/api/debug/tg",           api_debug_tg)
     return app
 
 
