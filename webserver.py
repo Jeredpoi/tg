@@ -109,7 +109,7 @@ async def api_post_comment(request: web.Request) -> web.Response:
     return web.json_response({"ok": True})
 
 
-# ── /api/photo/{key} — проксируем фото из Telegram ───────────────────────────
+# ── /api/photo/{key} — проксируем фото/видео из Telegram ────────────────────
 
 async def api_photo(request: web.Request) -> web.Response:
     key = request.match_info["key"]
@@ -117,7 +117,11 @@ async def api_photo(request: web.Request) -> web.Response:
     if not row or not row["photo_id"]:
         raise web.HTTPNotFound()
 
+    media_type = row.get("media_type") or "photo"
+    is_video = media_type == "video"
+
     try:
+        # getFile — короткий таймаут, просто получаем путь
         async with httpx.AsyncClient(timeout=10) as client:
             r = await client.get(
                 f"https://api.telegram.org/bot{BOT_TOKEN}/getFile",
@@ -126,16 +130,31 @@ async def api_photo(request: web.Request) -> web.Response:
             data = r.json()
             if not data.get("ok"):
                 raise web.HTTPNotFound()
-
             file_path = data["result"]["file_path"]
-            img = await client.get(
-                f"https://api.telegram.org/file/bot{BOT_TOKEN}/{file_path}"
-            )
-            return web.Response(
-                body=img.content,
-                content_type=img.headers.get("content-type", "image/jpeg"),
-                headers={"Cache-Control": "public, max-age=3600"},
-            )
+
+        tg_url = f"https://api.telegram.org/file/bot{BOT_TOKEN}/{file_path}"
+
+        # Для видео пробрасываем Range-заголовок (нужен браузеру для воспроизведения)
+        upstream_headers = {}
+        if is_video and "Range" in request.headers:
+            upstream_headers["Range"] = request.headers["Range"]
+
+        default_ct = "video/mp4" if is_video else "image/jpeg"
+
+        async with httpx.AsyncClient(timeout=60) as client:
+            upstream = await client.get(tg_url, headers=upstream_headers)
+
+        resp_headers = {"Cache-Control": "public, max-age=3600", "Accept-Ranges": "bytes"}
+        for h in ("Content-Range", "Content-Length"):
+            if h in upstream.headers:
+                resp_headers[h] = upstream.headers[h]
+
+        return web.Response(
+            status=upstream.status_code,
+            body=upstream.content,
+            content_type=upstream.headers.get("content-type", default_ct),
+            headers=resp_headers,
+        )
     except web.HTTPNotFound:
         raise
     except Exception as e:
