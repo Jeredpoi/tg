@@ -611,6 +611,10 @@ const chatId = tg.initDataUnsafe?.chat?.id || null;
 let steamData = null;
 let currentSort = 'discount';
 let steamQuery = '';
+let steamFiltered = [];
+let steamPage = 0;
+const STEAM_PAGE_SIZE = 20;
+let steamObserver = null;
 let galleryLoaded = false;
 let gallerySort_  = 'score';
 let photosData    = [];
@@ -680,9 +684,11 @@ function applyAndRender() {
   if (currentSort === 'price') list.sort((a, b) => a.final_price - b.final_price);
   else if (currentSort === 'name') list.sort((a, b) => a.name.localeCompare(b.name, 'ru'));
   else if (currentSort === 'free') list.sort((a, b) => b.discount - a.discount);
-  else list.sort((a, b) => b.discount - a.discount); // discount
+  else list.sort((a, b) => b.discount - a.discount);
 
-  renderSteam(list);
+  steamFiltered = list;
+  steamPage = 0;
+  renderSteam();
 }
 
 function fmtRub(kopecks) {
@@ -690,41 +696,78 @@ function fmtRub(kopecks) {
   return Math.floor(kopecks / 100).toLocaleString('ru') + '\u20BD';
 }
 
-function renderSteam(deals) {
-  const list = document.getElementById('steam-list');
+function steamCardHtml(d) {
+  const isFree = d.final_price === 0;
+  const isHot  = d.discount >= 70 && !isFree;
+  const badgeClass = isFree ? 'free' : isHot ? 'hot' : '';
+  const badgeLabel = isFree ? 'БЕСПЛАТНО' : `-${d.discount}%`;
+  const priceHtml = isFree
+    ? `<span class="steam-free-tag">Бесплатно</span>`
+    : `<span class="steam-orig">${fmtRub(d.original_price)}</span>
+       <span class="steam-sale">${fmtRub(d.final_price)}</span>`;
+  return `
+  <a class="steam-card" href="${d.url}" target="_blank">
+    <img class="steam-cover" src="${d.cover}" alt=""
+         onerror="this.outerHTML='<div class=\\'steam-cover-placeholder\\'>🎮</div>'">
+    <div class="steam-info">
+      <div class="steam-name">${escHtml(d.name)}</div>
+      <div class="steam-price-row">
+        <span class="steam-badge ${badgeClass}">${badgeLabel}</span>
+        ${priceHtml}
+      </div>
+    </div>
+  </a>`;
+}
+
+function updateSteamCounter(shown) {
   const counter = document.getElementById('steam-counter');
+  counter.textContent = `Показано: ${shown} из ${steamFiltered.length} игр`;
+}
+
+function renderSteam() {
+  const listEl = document.getElementById('steam-list');
+  const deals = steamFiltered;
+
+  if (steamObserver) { steamObserver.disconnect(); steamObserver = null; }
 
   if (!deals.length) {
-    counter.textContent = '';
-    list.innerHTML = '<div class="empty"><span class="empty-icon">🎮</span>Ничего не найдено</div>';
+    document.getElementById('steam-counter').textContent = '';
+    listEl.innerHTML = '<div class="empty"><span class="empty-icon">🎮</span>Ничего не найдено</div>';
     return;
   }
 
-  counter.textContent = `Найдено: ${deals.length} игр`;
+  const first = deals.slice(0, STEAM_PAGE_SIZE);
+  steamPage = 1;
 
-  list.innerHTML = '<div class="steam-list">' + deals.map(d => {
-    const isFree = d.final_price === 0;
-    const isHot  = d.discount >= 70 && !isFree;
-    const badgeClass = isFree ? 'free' : isHot ? 'hot' : '';
-    const badgeLabel = isFree ? 'БЕСПЛАТНО' : `-${d.discount}%`;
-    const priceHtml = isFree
-      ? `<span class="steam-free-tag">Бесплатно</span>`
-      : `<span class="steam-orig">${fmtRub(d.original_price)}</span>
-         <span class="steam-sale">${fmtRub(d.final_price)}</span>`;
+  listEl.innerHTML = '<div class="steam-list" id="steam-items">' +
+    first.map(steamCardHtml).join('') +
+    '</div><div id="steam-sentinel"></div>';
 
-    return `
-    <a class="steam-card" href="${d.url}" target="_blank">
-      <img class="steam-cover" src="${d.cover}" alt=""
-           onerror="this.outerHTML='<div class=\\'steam-cover-placeholder\\'>🎮</div>'">
-      <div class="steam-info">
-        <div class="steam-name">${escHtml(d.name)}</div>
-        <div class="steam-price-row">
-          <span class="steam-badge ${badgeClass}">${badgeLabel}</span>
-          ${priceHtml}
-        </div>
-      </div>
-    </a>`;
-  }).join('') + '</div>';
+  updateSteamCounter(Math.min(STEAM_PAGE_SIZE, deals.length));
+
+  if (deals.length > STEAM_PAGE_SIZE) {
+    const sentinel = document.getElementById('steam-sentinel');
+    steamObserver = new IntersectionObserver(entries => {
+      if (entries[0].isIntersecting) loadMoreSteam();
+    }, { rootMargin: '200px' });
+    steamObserver.observe(sentinel);
+  }
+}
+
+function loadMoreSteam() {
+  const start = steamPage * STEAM_PAGE_SIZE;
+  if (start >= steamFiltered.length) {
+    if (steamObserver) { steamObserver.disconnect(); steamObserver = null; }
+    return;
+  }
+  const chunk = steamFiltered.slice(start, start + STEAM_PAGE_SIZE);
+  steamPage++;
+  const itemsEl = document.getElementById('steam-items');
+  if (itemsEl) itemsEl.insertAdjacentHTML('beforeend', chunk.map(steamCardHtml).join(''));
+  updateSteamCounter(Math.min(steamPage * STEAM_PAGE_SIZE, steamFiltered.length));
+  if (steamPage * STEAM_PAGE_SIZE >= steamFiltered.length) {
+    if (steamObserver) { steamObserver.disconnect(); steamObserver = null; }
+  }
 }
 
 // ── Gallery ──
