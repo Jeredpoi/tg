@@ -350,6 +350,18 @@ async def app_command(update, context):
     await update.message.reply_text("Скидки Steam и галерея рейтингов:", reply_markup=kb)
 
 
+async def gallery_command(update, context):
+    """Отвечает на сообщение с кнопкой открытия галереи в браузере."""
+    kb = InlineKeyboardMarkup([[
+        InlineKeyboardButton("🖼 Галерея", url="https://144.31.75.246.sslip.io")
+    ]])
+    reply_to = update.message.reply_to_message
+    if reply_to:
+        await reply_to.reply_text("🖼 Галерея рейтингов:", reply_markup=kb)
+    else:
+        await update.message.reply_text("🖼 Галерея рейтингов:", reply_markup=kb)
+
+
 async def _private_command_guard(update, context):
     """Отвечает на неизвестные команды в личке."""
     await update.message.reply_text(
@@ -409,7 +421,8 @@ def main():
     app.add_handler(CommandHandler("stats", stats_command, filters=filters.ChatType.GROUPS))
 
     # Mini App
-    app.add_handler(CommandHandler("app", app_command, filters=filters.ChatType.GROUPS))
+    app.add_handler(CommandHandler("app",     app_command,     filters=filters.ChatType.GROUPS))
+    app.add_handler(CommandHandler("gallery", gallery_command, filters=filters.ChatType.GROUPS))
 
     # Ловим любые другие команды в личке и вежливо отказываем
     app.add_handler(MessageHandler(
@@ -451,6 +464,7 @@ def main():
             BotCommand("mge",     "Фраза из МГЕ"),
             BotCommand("steam",   "Топ скидок в Steam"),
             BotCommand("app",     "Открыть мини-приложение"),
+            BotCommand("gallery", "Галерея рейтингов"),
             BotCommand("stats",   "Личная статистика"),
         ]
 

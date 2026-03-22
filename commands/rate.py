@@ -4,7 +4,7 @@
 
 import hashlib
 import logging
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
 from database import save_photo, add_vote, get_photo, get_photo_by_key, close_photo
 import config
@@ -124,7 +124,7 @@ async def _close_rate_voting(context) -> None:
 
     try:
         gallery_btn = InlineKeyboardMarkup([[
-            InlineKeyboardButton("🖼 Галерея", web_app=WebAppInfo(url="https://144.31.75.246.sslip.io"))
+            InlineKeyboardButton("🖼 Галерея", url="https://144.31.75.246.sslip.io")
         ]])
         await context.bot.edit_message_caption(
             chat_id=chat_id,
@@ -237,6 +237,22 @@ async def rate_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
         if photo_row["closed"]:
             await query.answer("⏰ Голосование уже завершено!", show_alert=True)
+            # Убираем кнопки голосования, оставляем только галерею
+            try:
+                total = photo_row["total_score"]
+                votes = photo_row["vote_count"]
+                avg = round(total / votes, 2) if votes > 0 else 0
+                mt = photo_row["media_type"] if photo_row["media_type"] else "photo"
+                me = "🎥" if mt == "video" else "🖼"
+                mw = "видео" if mt == "video" else "фото"
+                caption = f"{me} Анонимное {mw}" if photo_row["anonymous"] else f"{me} {mw.capitalize()} от {photo_row['author_name']}"
+                caption += f"\n\n🏁 Голосование завершено!\n⭐ Средняя оценка: {avg} ({votes} голос(ов))"
+                gallery_btn = InlineKeyboardMarkup([[
+                    InlineKeyboardButton("🖼 Галерея", url="https://144.31.75.246.sslip.io")
+                ]])
+                await query.edit_message_caption(caption=caption, reply_markup=gallery_btn)
+            except Exception:
+                pass
             return
 
         voter_id = query.from_user.id
