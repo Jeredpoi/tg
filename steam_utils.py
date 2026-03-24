@@ -100,6 +100,17 @@ def _cache_info() -> tuple[int, int]:
     return len(_cache["deals"]), _cache["total_api"]
 
 
+async def _get_deals_paged(offset: int, count: int) -> tuple[int, list]:
+    """Возвращает (total, deals[offset:offset+count]), догружает если нужно."""
+    if not _cache["deals"]:
+        await _get_deals()
+    while offset + count > len(_cache["deals"]) and len(_cache["deals"]) < _cache["total_api"]:
+        await _load_more_deals()
+    deals = _cache["deals"][offset: offset + count]
+    total = _cache["total_api"]
+    return total, deals
+
+
 def _sort_deals(deals: list, sort_by: str) -> list:
     if sort_by == "price":
         return sorted(deals, key=lambda d: d.get("final_price", 0))

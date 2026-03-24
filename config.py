@@ -23,6 +23,18 @@ OWNER_ID = 6093532805  # @Jeredpoi
 # Формат: "socks5://user:pass@host:port" или "http://host:port"
 PROXY_URL = None  # "http://user:pass@host:port"
 
+# URL мини-приложения (галерея, Steam скидки)
+WEBAPP_URL = "https://144.31.75.246.sslip.io"
+
+# Кулдауны и задержки (секунды)
+SWEAR_COOLDOWN = 15
+DEFAULT_CMD_COOLDOWN = 10
+SWEAR_RESPONSE_DELAY = 2.5
+SWEAR_RESPONSE_CHANCE = 0.45
+
+# Голосование за фото (/rate)
+VOTE_DURATION = 30 * 60  # 30 минут
+
 # Фразы для команды /mge (из серии МГЕ)
 # Формат: (персонаж/источник, фраза)
 MGE_PHRASES = [

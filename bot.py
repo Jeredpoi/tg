@@ -20,7 +20,9 @@ from telegram.ext import (
 
 from telegram import BotCommand, WebAppInfo, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.request import HTTPXRequest
-from config import BOT_TOKEN, PROXY_URL
+from config import (BOT_TOKEN, PROXY_URL, WEBAPP_URL,
+                    SWEAR_COOLDOWN, DEFAULT_CMD_COOLDOWN,
+                    SWEAR_RESPONSE_DELAY, SWEAR_RESPONSE_CHANCE)
 from database import init_db, track_message
 
 from commands.debug import debug_command
@@ -105,14 +107,14 @@ SWEAR_RESPONSES = [
 # Cooldown: последнее время ответа на мат по chat_id
 _swear_last_response: dict[int, float] = {}
 # Минимальная пауза между ответами на маты (секунды)
-_SWEAR_COOLDOWN = 15
+_SWEAR_COOLDOWN = SWEAR_COOLDOWN
 
 # ==============================================================================
 # Rate limiter — кулдаун команд на юзера
 # ==============================================================================
 
 # Кулдаун по умолчанию (секунды). Отдельные команды можно переопределить.
-_DEFAULT_CMD_COOLDOWN = 10
+_DEFAULT_CMD_COOLDOWN = DEFAULT_CMD_COOLDOWN
 
 # Переопределения для конкретных команд (0 = без лимита)
 _CMD_COOLDOWNS: dict[str, int] = {
@@ -285,10 +287,10 @@ async def _track_message(update, context):
             job.schedule_removal()
 
         # Случайно решаем отвечать ли (50%) — но с учётом cooldown в _send_swear_response
-        if random.random() < 0.45:
+        if random.random() < SWEAR_RESPONSE_CHANCE:
             context.job_queue.run_once(
                 _send_swear_response,
-                2.5,  # 2.5 сек задержка — ждём пока закончат спамить
+                SWEAR_RESPONSE_DELAY,
                 data={
                     "chat_id": chat_id,
                     "name": name,
@@ -347,7 +349,7 @@ async def app_command(update, context):
     kb = InlineKeyboardMarkup([[
         InlineKeyboardButton(
             "🚀 Открыть приложение",
-            web_app=WebAppInfo(url="https://144.31.75.246.sslip.io"),
+            web_app=WebAppInfo(url=WEBAPP_URL),
         )
     ]])
     await update.message.reply_text("Скидки Steam и галерея рейтингов:", reply_markup=kb)
@@ -356,7 +358,7 @@ async def app_command(update, context):
 async def gallery_command(update, context):
     """Отвечает на сообщение с кнопкой открытия галереи в браузере."""
     kb = InlineKeyboardMarkup([[
-        InlineKeyboardButton("🖼 Галерея", url="https://144.31.75.246.sslip.io")
+        InlineKeyboardButton("🖼 Галерея", url=WEBAPP_URL)
     ]])
     reply_to = update.message.reply_to_message
     if reply_to:

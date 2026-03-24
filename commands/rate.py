@@ -9,10 +9,9 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
 from database import save_photo, add_vote, get_photo, get_photo_by_key, close_photo
 import config
+from config import VOTE_DURATION, WEBAPP_URL
 
 logger = logging.getLogger(__name__)
-
-VOTE_DURATION = 30 * 60  # 30 минут в секундах
 PHOTOS_DIR = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "photos"))
 
 
@@ -126,7 +125,7 @@ async def _close_rate_voting(context) -> None:
 
     try:
         gallery_btn = InlineKeyboardMarkup([[
-            InlineKeyboardButton("🖼 Галерея", url="https://144.31.75.246.sslip.io")
+            InlineKeyboardButton("🖼 Галерея", url=WEBAPP_URL)
         ]])
         await context.bot.edit_message_caption(
             chat_id=chat_id,
@@ -262,7 +261,7 @@ async def rate_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
                 caption = f"{me} Анонимное {mw}" if photo_row["anonymous"] else f"{me} {mw.capitalize()} от {photo_row['author_name']}"
                 caption += f"\n\n🏁 Голосование завершено!\n⭐ Средняя оценка: {avg} ({votes} голос(ов))"
                 gallery_btn = InlineKeyboardMarkup([[
-                    InlineKeyboardButton("🖼 Галерея", url="https://144.31.75.246.sslip.io")
+                    InlineKeyboardButton("🖼 Галерея", url=WEBAPP_URL)
                 ]])
                 await query.edit_message_caption(caption=caption, reply_markup=gallery_btn)
             except Exception:

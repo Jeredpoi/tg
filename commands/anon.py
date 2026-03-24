@@ -53,10 +53,13 @@ async def anon_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
                 disable_web_page_preview=True,
             )
             # Удалим подсказку через 15 секунд
-            context.job_queue.run_once(
-                lambda ctx: ctx.bot.delete_message(chat.id, msg.message_id),
-                15,
-            )
+            async def _delete_hint(ctx):
+                try:
+                    await ctx.bot.delete_message(chat.id, msg.message_id)
+                except Exception:
+                    pass
+
+            context.job_queue.run_once(_delete_hint, 15)
         except Exception:
             pass
 
