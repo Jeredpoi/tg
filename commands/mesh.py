@@ -112,20 +112,18 @@ async def _render(offset: int, token: str, student_id: int) -> tuple[str, Inline
     return "\n".join(lines), _keyboard(offset)
 
 
+_ASK_TOKEN_TEXT = (
+    "<b>Авторизация в МЭШ</b>\n\n"
+    "Для привязки аккаунта нужно:\n"
+    f'1. Перейти по <a href="{_TOKEN_LINK}">ссылке</a> и войти в аккаунт\n'
+    "2. Скопировать с открывшейся страницы весь текст и отправить сюда"
+)
+
+
 def _ask_for_token_text(reason: str = "bind") -> str:
-    intro = {
-        "bind":    "🔐 Для просмотра расписания нужно привязать аккаунт МЭШ.",
-        "expired": "⏰ Сессия МЭШ истекла. Нужно обновить токен.",
-    }.get(reason, "")
-    return (
-        f"{intro}\n\n"
-        "Отправь токен <b>ответом на это сообщение</b>.\n\n"
-        f'Как получить токен:\n'
-        f'1. Перейди по <a href="{_TOKEN_LINK}">этой ссылке</a>\n'
-        "2. Войди в МЭШ (через Госуслуги или логин)\n"
-        "3. Скопируй токен со страницы\n\n"
-        "⚠️ Сообщение с токеном будет удалено сразу после получения."
-    )
+    if reason == "expired":
+        return f"⏳ Сессия МЭШ истекла, нужно обновить привязку\n\n{_ASK_TOKEN_TEXT}"
+    return _ASK_TOKEN_TEXT
 
 
 async def mesh_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:

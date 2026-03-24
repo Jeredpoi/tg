@@ -21,10 +21,10 @@ _pending: dict[tuple[int, int], int] = {}
 _TOKEN_LINK = "https://school.mos.ru/?backUrl=https%3A%2F%2Fschool.mos.ru%2Fv2%2Ftoken%2Frefresh"
 
 _HOW_TO_GET_TOKEN = (
-    "Как получить токен:\n"
-    f'1. Перейди по <a href="{_TOKEN_LINK}">этой ссылке</a>\n'
-    "2. Войди в МЭШ (через Госуслуги или логин)\n"
-    "3. Скопируй токен со страницы"
+    "<b>Авторизация в МЭШ</b>\n\n"
+    "Для привязки аккаунта нужно:\n"
+    f'1. Перейти по <a href="{_TOKEN_LINK}">ссылке</a> и войти в аккаунт\n'
+    "2. Скопировать с открывшейся страницы весь текст и отправить сюда"
 )
 
 
@@ -118,16 +118,9 @@ async def _show_grades(update: Update, token: str, student_id: int) -> None:
 
 
 def _ask_for_token_text(reason: str = "bind") -> str:
-    intro = {
-        "bind":    "🔐 Для просмотра оценок нужно привязать аккаунт МЭШ.",
-        "expired": "⏰ Сессия МЭШ истекла. Нужно обновить токен.",
-    }.get(reason, "")
-    return (
-        f"{intro}\n\n"
-        "Отправь токен <b>ответом на это сообщение</b>.\n\n"
-        f"{_HOW_TO_GET_TOKEN}\n\n"
-        "⚠️ Сообщение с токеном будет удалено сразу после получения."
-    )
+    if reason == "expired":
+        return f"⏳ Сессия МЭШ истекла, нужно обновить привязку\n\n{_HOW_TO_GET_TOKEN}"
+    return _HOW_TO_GET_TOKEN
 
 
 async def grades_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
