@@ -49,7 +49,7 @@ async def _validate_and_get_student_id(token: str) -> tuple[int | None, str]:
         "x-mes-subsystem": "familyweb",
     }
     try:
-        async with httpx.AsyncClient(timeout=10, proxy=PROXY_URL) as client:
+        async with httpx.AsyncClient(timeout=10, **({"proxy": PROXY_URL} if PROXY_URL else {})) as client:
             r = await client.get(f"{BASE_URL}/api/family/mobile/v1/profile", headers=headers)
         logger.info("МЭШ profile status=%s body=%s", r.status_code, r.text[:300])
         if r.status_code == 401:
@@ -88,7 +88,7 @@ async def fetch_homeworks(token: str, student_id: int, start: date, end: date) -
         "from": start.strftime("%Y-%m-%d"),
         "to":   end.strftime("%Y-%m-%d"),
     }
-    async with httpx.AsyncClient(timeout=12, proxy=PROXY_URL) as client:
+    async with httpx.AsyncClient(timeout=12, **({"proxy": PROXY_URL} if PROXY_URL else {})) as client:
         r = await client.get(
             f"{BASE_URL}/api/family/mobile/v1/homework/short",
             headers=headers,

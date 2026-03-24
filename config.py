@@ -18,7 +18,7 @@ YANDEX_WEATHER_KEY = "b1a39a50-2887-45d2-8c07-cdcb9ae3d5c1"
 
 # Прокси для российского хостинга (None = отключено)
 # Формат: "socks5://user:pass@host:port" или "http://host:port"
-PROXY_URL = "http://jGqNjV:TY74kA@185.148.25.25:8000"
+PROXY_URL = None  # "http://user:pass@host:port"
 
 # МЭШ (Московская Электронная Школа) — общий токен для /mesh
 # Как получить: dnevnik.mos.ru → F12 → Application → Local Storage → auth_token
