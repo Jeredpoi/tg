@@ -1,4 +1,4 @@
-# steam_utils.py — скидки Steam, простой и лёгкий
+# steam_utils.py — скидки Steam через Search API
 import logging
 import time
 
@@ -6,9 +6,15 @@ import httpx
 
 logger = logging.getLogger(__name__)
 
-CACHE_TTL = 600  # 10 минут
+CACHE_TTL   = 600   # 10 минут
+FETCH_BATCH = 100   # игр за один запрос к Steam
 
-_cache: dict = {}
+_cache: dict = {
+    "deals":       [],    # все загруженные игры (несортированные)
+    "total_api":   0,     # сколько всего скидок на Steam
+    "next_offset": 0,     # с какого offset следующий запрос
+    "ts":          0.0,
+}
 
 _HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
@@ -16,70 +22,82 @@ _HEADERS = {
 }
 
 
-async def _fetch_deals() -> tuple[int, list]:
-    """Один запрос featuredcategories + один featured. Быстро и надёжно."""
-    seen: set[int] = set()
-    deals: list = []
-
+async def _fetch_batch(offset: int) -> tuple[int, list]:
+    """Один запрос к Steam Search API. Возвращает (total_api, normalized_deals)."""
     async with httpx.AsyncClient(timeout=10, headers=_HEADERS) as client:
-        r1 = await client.get(
-            "https://store.steampowered.com/api/featuredcategories/",
-            params={"cc": "ru", "l": "russian"},
+        r = await client.get(
+            "https://store.steampowered.com/search/results/",
+            params={
+                "specials": "1",
+                "json":     "1",
+                "start":    str(offset),
+                "count":    str(FETCH_BATCH),
+                "cc":       "ru",
+                "l":        "russian",
+            },
         )
-        if r1.status_code == 200:
-            for section in r1.json().values():
-                if not isinstance(section, dict):
-                    continue
-                for item in section.get("items", []):
-                    app_id = item.get("id")
-                    if app_id and app_id not in seen and abs(item.get("discount_percent", 0)) > 0:
-                        seen.add(app_id)
-                        deals.append(item)
+        if r.status_code != 200:
+            logger.warning("Steam search HTTP %d", r.status_code)
+            return 0, []
 
-        r2 = await client.get(
-            "https://store.steampowered.com/api/featured/",
-            params={"cc": "ru", "l": "russian"},
-        )
-        if r2.status_code == 200:
-            data2 = r2.json()
-            for items in (data2.get("featured_win", []), data2.get("large_capsules", [])):
-                for item in items:
-                    app_id = item.get("id")
-                    if app_id and app_id not in seen and abs(item.get("discount_percent", 0)) > 0:
-                        seen.add(app_id)
-                        deals.append(item)
+        data  = r.json()
+        total = int(data.get("total_count", 0))
+        items = data.get("items", [])
 
-    normalized = [
-        {
-            "id": d.get("id", 0),
-            "name": d.get("name", ""),
-            "discount_percent": abs(d.get("discount_percent", 0)),
-            "original_price": d.get("original_price", 0),
-            "final_price": d.get("final_price", 0),
-        }
-        for d in deals
-    ]
-    logger.info("Steam: получено %d скидок", len(normalized))
-    return len(normalized), normalized
+        normalized = []
+        for item in items:
+            price    = item.get("price") or {}
+            discount = abs(int(price.get("discount_percent", 0)))
+            if discount <= 0:
+                continue
+            normalized.append({
+                "id":               int(item.get("appid", 0)),
+                "name":             item.get("name", ""),
+                "discount_percent": discount,
+                "original_price":   price.get("initial", 0),
+                "final_price":      price.get("final",   0),
+            })
+
+        logger.info("Steam search offset=%d: %d deals (total_api=%d)", offset, len(normalized), total)
+        return total, normalized
 
 
-async def _get_deals_paged(offset: int = 0, count: int = 50) -> tuple[int, list]:
-    now = time.time()
-    if _cache.get("deals") and now - _cache.get("ts", 0) < CACHE_TTL:
-        all_deals = _cache["deals"]
-        total = _cache["total"]
-    else:
-        total, all_deals = await _fetch_deals()
-        _cache["deals"] = all_deals
-        _cache["total"] = total
-        _cache["ts"] = now
-
-    return total, all_deals[offset: offset + count]
+def _reset_cache() -> None:
+    _cache["deals"]       = []
+    _cache["total_api"]   = 0
+    _cache["next_offset"] = 0
+    _cache["ts"]          = time.time()
 
 
 async def _get_deals() -> list:
-    _, items = await _get_deals_paged(0, 50)
-    return items
+    """Возвращает закэшированные игры (грузит первую пачку, если кэш пустой/устарел)."""
+    now = time.time()
+    if not _cache["deals"] or now - _cache["ts"] > CACHE_TTL:
+        _reset_cache()
+        total, batch = await _fetch_batch(0)
+        _cache["total_api"]   = total
+        _cache["deals"]       = batch
+        _cache["next_offset"] = FETCH_BATCH
+
+    return _cache["deals"]
+
+
+async def _load_more_deals() -> tuple[int, int]:
+    """Подгружает следующую пачку. Возвращает (len(deals), total_api)."""
+    if _cache["total_api"] > 0 and _cache["next_offset"] >= _cache["total_api"]:
+        return len(_cache["deals"]), _cache["total_api"]
+
+    total, batch = await _fetch_batch(_cache["next_offset"])
+    _cache["total_api"]    = total
+    _cache["deals"].extend(batch)
+    _cache["next_offset"] += FETCH_BATCH
+
+    return len(_cache["deals"]), total
+
+
+def _cache_info() -> tuple[int, int]:
+    """(загружено, всего в Steam API)."""
+    return len(_cache["deals"]), _cache["total_api"]
 
 
 def _sort_deals(deals: list, sort_by: str) -> list:

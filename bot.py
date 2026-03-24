@@ -34,6 +34,7 @@ from commands.weather import weather_command, weather_callback
 from commands.steam import steam_command, steam_callback
 from commands.stats import stats_command
 from commands.grades import grades_command, handle_token_reply as grades_token_reply
+from commands.anon import anon_command, handle_anon_cancel, handle_anon_message
 
 logging.basicConfig(
     format="%(asctime)s — %(name)s — %(levelname)s — %(message)s",
@@ -128,6 +129,7 @@ _CMD_COOLDOWNS: dict[str, int] = {
     "/weather": 30,
     "/steam":   20,
     "/grades":  15,
+    "/anon":    30,
     # /rate — фото в личке → чат, лимит 5 минут
     "/rate":    300,
 }
@@ -425,6 +427,10 @@ def main():
     # МЭШ — оценки (личный токен)
     app.add_handler(CommandHandler("grades", grades_command, filters=filters.ChatType.GROUPS))
 
+    # Анонимные сообщения в группу
+    app.add_handler(CommandHandler("anon",   anon_command,   filters=filters.ChatType.GROUPS))
+    app.add_handler(CommandHandler("cancel", handle_anon_cancel, filters=filters.ChatType.PRIVATE))
+
     # Mini App
     app.add_handler(CommandHandler("app",     app_command,     filters=filters.ChatType.GROUPS))
     app.add_handler(CommandHandler("gallery", gallery_command, filters=filters.ChatType.GROUPS))
@@ -463,10 +469,13 @@ def main():
     app.add_handler(CallbackQueryHandler(weather_callback, pattern=r"^w(forecast|refresh):"))
     app.add_handler(CallbackQueryHandler(steam_callback,   pattern=r"^steam"))
 
-    # Перехватчик токена МЭШ (ответ на запрос /grades) — выше трекинга
+    # Перехватчик токена МЭШ и анонимных сообщений — выше трекинга
     async def _maybe_token_reply(update, context):
-        handled = await grades_token_reply(update, context)
-        if not handled:
+        if update.effective_chat and update.effective_chat.type == "private":
+            handled = await grades_token_reply(update, context)
+            if not handled:
+                await handle_anon_message(update, context)
+        else:
             await _track_message(update, context)
 
     # Трекинг текстовых сообщений (без команд)
@@ -487,6 +496,7 @@ def main():
             BotCommand("gallery", "Галерея рейтингов"),
             BotCommand("stats",   "Личная статистика"),
             BotCommand("grades",  "Мои оценки (МЭШ)"),
+            BotCommand("anon",    "Анонимное сообщение в группу"),
         ]
 
         private_commands = [
