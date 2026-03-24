@@ -33,9 +33,8 @@ from commands.help import help_command
 from commands.weather import weather_command, weather_callback
 from commands.steam import steam_command, steam_callback
 from commands.stats import stats_command
-from commands.grades import grades_command, handle_token_reply as grades_token_reply
 from commands.anon import anon_command, handle_anon_cancel, handle_anon_message
-from commands.news import news_command, myid_command
+from commands.news import news_command
 
 logging.basicConfig(
     format="%(asctime)s — %(name)s — %(levelname)s — %(message)s",
@@ -129,7 +128,6 @@ _CMD_COOLDOWNS: dict[str, int] = {
     # /weather и /steam бьют по внешним API
     "/weather": 30,
     "/steam":   20,
-    "/grades":  15,
     "/anon":    30,
     # /rate — фото в личке → чат, лимит 5 минут
     "/rate":    300,
@@ -425,16 +423,12 @@ def main():
     # Личная статистика
     app.add_handler(CommandHandler("stats", stats_command, filters=filters.ChatType.GROUPS))
 
-    # МЭШ — оценки (личный токен)
-    app.add_handler(CommandHandler("grades", grades_command, filters=filters.ChatType.GROUPS))
-
     # Анонимные сообщения в группу
     app.add_handler(CommandHandler("anon",   anon_command,   filters=filters.ChatType.GROUPS))
     app.add_handler(CommandHandler("cancel", handle_anon_cancel, filters=filters.ChatType.PRIVATE))
 
     # Новости от владельца (только личка)
     app.add_handler(CommandHandler("news",  news_command,  filters=filters.ChatType.PRIVATE))
-    app.add_handler(CommandHandler("myid",  myid_command,  filters=filters.ChatType.PRIVATE))
 
     # Mini App
     app.add_handler(CommandHandler("app",     app_command,     filters=filters.ChatType.GROUPS))
@@ -474,13 +468,8 @@ def main():
     app.add_handler(CallbackQueryHandler(weather_callback, pattern=r"^w(forecast|refresh):"))
     app.add_handler(CallbackQueryHandler(steam_callback,   pattern=r"^steam"))
 
-    # Перехватчик токена МЭШ и анонимных сообщений — выше трекинга
+    # Анонимные сообщения в личке + трекинг в группах
     async def _maybe_token_reply(update, context):
-        # grades токен — reply в группе
-        handled = await grades_token_reply(update, context)
-        if handled:
-            return
-        # анонимное сообщение — текст в личке
         if update.effective_chat and update.effective_chat.type == "private":
             await handle_anon_message(update, context)
         else:
@@ -503,14 +492,12 @@ def main():
             BotCommand("app",     "Открыть мини-приложение"),
             BotCommand("gallery", "Галерея рейтингов"),
             BotCommand("stats",   "Личная статистика"),
-            BotCommand("grades",  "Мои оценки (МЭШ)"),
             BotCommand("anon",    "Анонимное сообщение в группу"),
         ]
 
         private_commands = [
             BotCommand("rate",  "Отправить фото на оценку группы"),
             BotCommand("help",  "Список команд группы"),
-            BotCommand("myid",  "Узнать свой Telegram ID"),
             BotCommand("news",  "Написать в группу от бота"),
         ]
 

@@ -24,13 +24,3 @@ async def news_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 
     await context.bot.send_message(CHAT_ID, text)
     await update.message.reply_text("✅ Отправлено.")
-
-
-async def myid_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """/myid — показывает твой Telegram User ID (личка)."""
-    user = update.effective_user
-    await update.message.reply_text(
-        f"Твой <b>User ID</b>: <code>{user.id}</code>\n\n"
-        f"Вставь это число в <code>config.py</code> → <code>OWNER_ID = {user.id}</code>",
-        parse_mode="HTML",
-    )
