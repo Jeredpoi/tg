@@ -20,7 +20,25 @@ _cache: dict = {
     "source":     None,  # какой источник сработал
 }
 
-USD_TO_RUB = 90  # приблизительный курс для отображения
+_RATE_CACHE: dict = {"rate": 90.0, "ts": 0.0}
+_RATE_TTL = 3600  # обновлять курс раз в час
+
+
+async def _get_usd_rub() -> float:
+    """Возвращает актуальный курс USD/RUB из ЦБ РФ (кэш 1 час)."""
+    if time.time() - _RATE_CACHE["ts"] < _RATE_TTL:
+        return _RATE_CACHE["rate"]
+    try:
+        async with httpx.AsyncClient(timeout=5) as client:
+            r = await client.get("https://www.cbr-xml-daily.ru/daily_json.js")
+        rate = float(r.json()["Valute"]["USD"]["Value"])
+        _RATE_CACHE["rate"] = rate
+        _RATE_CACHE["ts"]   = time.time()
+        logger.info("USD/RUB курс обновлён: %.2f", rate)
+    except Exception as e:
+        logger.warning("Не удалось получить курс USD/RUB: %s, используем %.2f", e, _RATE_CACHE["rate"])
+    return _RATE_CACHE["rate"]
+
 
 _HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
@@ -32,6 +50,7 @@ _HEADERS = {
 # ── Источник 1: CheapShark ────────────────────────────────────────────────
 
 async def _fetch_cheapshark(page: int) -> tuple[int, list]:
+    usd_rub = await _get_usd_rub()
     async with httpx.AsyncClient(timeout=8) as client:
         r = await client.get(
             "https://www.cheapshark.com/api/1.0/deals",
@@ -53,13 +72,13 @@ async def _fetch_cheapshark(page: int) -> tuple[int, list]:
             discount = round(float(item.get("savings", 0)))
             if discount <= 0 or not app_id:
                 continue
-            # Конвертируем USD → RUB копейки
+            # Конвертируем USD → RUB копейки по курсу ЦБ
             normalized.append({
                 "id":               app_id,
                 "name":             item.get("title", ""),
                 "discount_percent": discount,
-                "original_price":   round(float(item.get("normalPrice", 0)) * USD_TO_RUB * 100),
-                "final_price":      round(float(item.get("salePrice",   0)) * USD_TO_RUB * 100),
+                "original_price":   round(float(item.get("normalPrice", 0)) * usd_rub * 100),
+                "final_price":      round(float(item.get("salePrice",   0)) * usd_rub * 100),
                 "currency":         "RUB",
             })
         except (ValueError, TypeError):
