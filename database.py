@@ -115,6 +115,16 @@ def init_db() -> None:
         )
     """)
 
+    # ── mesh_tokens ─────────────────────────────────────────────────────────
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS mesh_tokens (
+            user_id    INTEGER PRIMARY KEY,
+            token      TEXT NOT NULL,
+            student_id INTEGER,
+            updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+        )
+    """)
+
     conn.commit()
     conn.close()
 
@@ -379,6 +389,32 @@ def get_user_stats(user_id: int, chat_id: int) -> dict:
         "avg_score":   avg_score,
         "best_score":  best_score,
     }
+
+
+# ── mesh_tokens ────────────────────────────────────────────────────────────
+
+def get_mesh_token(user_id: int):
+    """Возвращает (token, student_id) или None."""
+    conn = get_connection()
+    row = conn.execute(
+        "SELECT token, student_id FROM mesh_tokens WHERE user_id = ?", (user_id,)
+    ).fetchone()
+    conn.close()
+    return (row["token"], row["student_id"]) if row else None
+
+
+def save_mesh_token(user_id: int, token: str, student_id: int) -> None:
+    conn = get_connection()
+    conn.execute("""
+        INSERT INTO mesh_tokens (user_id, token, student_id, updated_at)
+        VALUES (?, ?, ?, datetime('now'))
+        ON CONFLICT(user_id) DO UPDATE SET
+            token      = excluded.token,
+            student_id = excluded.student_id,
+            updated_at = excluded.updated_at
+    """, (user_id, token, student_id))
+    conn.commit()
+    conn.close()
 
 
 def get_photo(photo_id: str):

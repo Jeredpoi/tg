@@ -20,6 +20,11 @@ YANDEX_WEATHER_KEY = "b1a39a50-2887-45d2-8c07-cdcb9ae3d5c1"
 # Формат: "socks5://user:pass@host:port" или "http://host:port"
 PROXY_URL = None
 
+# МЭШ (Московская Электронная Школа) — общий токен для /mesh
+# Как получить: dnevnik.mos.ru → F12 → Application → Local Storage → auth_token
+MESH_TOKEN = ""       # вставьте свой токен
+MESH_STUDENT_ID = 0   # ID ученика (из профиля МЭШ)
+
 # Фразы для команды /mge (из серии МГЕ)
 # Формат: (персонаж/источник, фраза)
 MGE_PHRASES = [

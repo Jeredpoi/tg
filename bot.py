@@ -33,6 +33,8 @@ from commands.help import help_command
 from commands.weather import weather_command, weather_callback
 from commands.steam import steam_command, steam_callback
 from commands.stats import stats_command
+from commands.mesh import mesh_command, mesh_callback
+from commands.grades import grades_command, handle_token_reply
 
 logging.basicConfig(
     format="%(asctime)s — %(name)s — %(levelname)s — %(message)s",
@@ -126,6 +128,8 @@ _CMD_COOLDOWNS: dict[str, int] = {
     # /weather и /steam бьют по внешним API
     "/weather": 30,
     "/steam":   20,
+    "/mesh":    20,
+    "/grades":  15,
     # /rate — фото в личке → чат, лимит 5 минут
     "/rate":    300,
 }
@@ -420,6 +424,10 @@ def main():
     # Личная статистика
     app.add_handler(CommandHandler("stats", stats_command, filters=filters.ChatType.GROUPS))
 
+    # МЭШ — расписание (общий токен) и оценки (личный токен)
+    app.add_handler(CommandHandler("mesh",   mesh_command,   filters=filters.ChatType.GROUPS))
+    app.add_handler(CommandHandler("grades", grades_command, filters=filters.ChatType.GROUPS))
+
     # Mini App
     app.add_handler(CommandHandler("app",     app_command,     filters=filters.ChatType.GROUPS))
     app.add_handler(CommandHandler("gallery", gallery_command, filters=filters.ChatType.GROUPS))
@@ -448,9 +456,16 @@ def main():
     app.add_handler(CallbackQueryHandler(rate_callback,    pattern=r"^(anon_|rate_)"))
     app.add_handler(CallbackQueryHandler(weather_callback, pattern=r"^w(forecast|refresh):"))
     app.add_handler(CallbackQueryHandler(steam_callback,   pattern=r"^steam"))
+    app.add_handler(CallbackQueryHandler(mesh_callback,    pattern=r"^mesh_nav:"))
+
+    # Перехватчик токена МЭШ (ответ на запрос /grades) — выше трекинга
+    async def _maybe_token_reply(update, context):
+        handled = await handle_token_reply(update, context)
+        if not handled:
+            await _track_message(update, context)
 
     # Трекинг текстовых сообщений (без команд)
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, _track_message))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, _maybe_token_reply))
 
     async def set_commands(app):
         from telegram import BotCommandScopeAllGroupChats, BotCommandScopeAllPrivateChats, BotCommandScopeDefault
@@ -466,6 +481,8 @@ def main():
             BotCommand("app",     "Открыть мини-приложение"),
             BotCommand("gallery", "Галерея рейтингов"),
             BotCommand("stats",   "Личная статистика"),
+            BotCommand("mesh",    "Расписание и ДЗ (МЭШ)"),
+            BotCommand("grades",  "Мои оценки (МЭШ)"),
         ]
 
         private_commands = [
