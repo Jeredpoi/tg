@@ -34,7 +34,8 @@ from commands.weather import weather_command, weather_callback
 from commands.steam import steam_command, steam_callback
 from commands.stats import stats_command
 from commands.mesh import mesh_command, mesh_callback
-from commands.grades import grades_command, handle_token_reply
+from commands.mesh import handle_token_reply as mesh_token_reply
+from commands.grades import grades_command, handle_token_reply as grades_token_reply
 
 logging.basicConfig(
     format="%(asctime)s — %(name)s — %(levelname)s — %(message)s",
@@ -458,9 +459,11 @@ def main():
     app.add_handler(CallbackQueryHandler(steam_callback,   pattern=r"^steam"))
     app.add_handler(CallbackQueryHandler(mesh_callback,    pattern=r"^mesh_nav:"))
 
-    # Перехватчик токена МЭШ (ответ на запрос /grades) — выше трекинга
+    # Перехватчик токена МЭШ (ответ на запрос /grades или /mesh) — выше трекинга
     async def _maybe_token_reply(update, context):
-        handled = await handle_token_reply(update, context)
+        handled = await grades_token_reply(update, context)
+        if not handled:
+            handled = await mesh_token_reply(update, context)
         if not handled:
             await _track_message(update, context)
 

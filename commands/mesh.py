@@ -9,12 +9,17 @@ import httpx
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import ContextTypes
 
-from config import MESH_STUDENT_ID, MESH_TOKEN
+from database import get_mesh_token, save_mesh_token
 
 logger = logging.getLogger(__name__)
 
 BASE_URL = "https://school.mos.ru"
 DAYS_RU = ["Понедельник", "Вторник", "Среда", "Четверг", "Пятница", "Суббота", "Воскресенье"]
+
+_TOKEN_LINK = "https://school.mos.ru/?backUrl=https%3A%2F%2Fschool.mos.ru%2Fv2%2Ftoken%2Frefresh"
+
+# (chat_id, bot_message_id) -> user_id — ожидаем токен ответом
+_pending: dict[tuple[int, int], int] = {}
 
 
 def _week_monday(offset: int = 0) -> date:
@@ -35,10 +40,35 @@ def _week_label(monday: date) -> str:
     return label
 
 
+async def _validate_and_get_student_id(token: str) -> int | None:
+    headers = {
+        "Authorization":   f"Bearer {token}",
+        "x-mes-subsystem": "familyweb",
+    }
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            r = await client.get(f"{BASE_URL}/api/family/mobile/v1/profile", headers=headers)
+            if r.status_code != 200:
+                return None
+            data = r.json()
+            if isinstance(data, list) and data:
+                data = data[0]
+            if isinstance(data, dict):
+                return (
+                    data.get("studentProfileId")
+                    or data.get("id")
+                    or (data.get("children") or [{}])[0].get("id")
+                    or (data.get("profiles") or [{}])[0].get("id")
+                )
+    except Exception as e:
+        logger.error("МЭШ validate token: %s", e)
+    return None
+
+
 async def fetch_homeworks(token: str, student_id: int, start: date, end: date) -> dict[str, int]:
     """Возвращает {date_str: кол-во_дз}."""
     headers = {
-        "Authorization":    f"Bearer {token}",
+        "Authorization":   f"Bearer {token}",
         "x-mes-subsystem": "familyweb",
     }
     params = {
@@ -69,13 +99,10 @@ def _keyboard(offset: int) -> InlineKeyboardMarkup:
     ]])
 
 
-async def _render(offset: int, token: str | None = None, student_id: int | None = None) -> tuple[str, InlineKeyboardMarkup]:
-    t   = token      or MESH_TOKEN
-    sid = student_id or MESH_STUDENT_ID
+async def _render(offset: int, token: str, student_id: int) -> tuple[str, InlineKeyboardMarkup]:
     monday = _week_monday(offset)
     sunday = monday + timedelta(days=6)
-
-    hw = await fetch_homeworks(t, sid, monday, sunday)
+    hw = await fetch_homeworks(token, student_id, monday, sunday)
 
     lines = [f"📅 <b>Неделя {_week_label(monday)}</b>\n"]
     for i, day in enumerate(DAYS_RU[:6]):
@@ -85,14 +112,50 @@ async def _render(offset: int, token: str | None = None, student_id: int | None 
     return "\n".join(lines), _keyboard(offset)
 
 
+def _ask_for_token_text(reason: str = "bind") -> str:
+    intro = {
+        "bind":    "🔐 Для просмотра расписания нужно привязать аккаунт МЭШ.",
+        "expired": "⏰ Сессия МЭШ истекла. Нужно обновить токен.",
+    }.get(reason, "")
+    return (
+        f"{intro}\n\n"
+        "Отправь токен <b>ответом на это сообщение</b>.\n\n"
+        f'Как получить токен:\n'
+        f'1. Перейди по <a href="{_TOKEN_LINK}">этой ссылке</a>\n'
+        "2. Войди в МЭШ (через Госуслуги или логин)\n"
+        "3. Скопируй токен со страницы\n\n"
+        "⚠️ Сообщение с токеном будет удалено сразу после получения."
+    )
+
+
 async def mesh_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    user_id = update.effective_user.id
+    row = get_mesh_token(user_id)
+
+    if not row:
+        msg = await update.message.reply_text(
+            _ask_for_token_text("bind"), parse_mode="HTML"
+        )
+        _pending[(update.effective_chat.id, msg.message_id)] = user_id
+        return
+
+    token, student_id = row
+
+    valid_id = await _validate_and_get_student_id(token)
+    if not valid_id:
+        msg = await update.message.reply_text(
+            _ask_for_token_text("expired"), parse_mode="HTML"
+        )
+        _pending[(update.effective_chat.id, msg.message_id)] = user_id
+        return
+
     msg = await update.message.reply_text("⏳ Загружаю расписание...")
     try:
-        text, kb = await _render(0)
+        text, kb = await _render(0, token, student_id or valid_id)
         await msg.edit_text(text, reply_markup=kb, parse_mode="HTML")
     except httpx.HTTPStatusError as e:
         logger.error("МЭШ HTTP %s", e.response.status_code)
-        await msg.edit_text("❌ МЭШ вернул ошибку. Проверь токен и student_id в конфиге.")
+        await msg.edit_text("❌ МЭШ вернул ошибку.")
     except Exception as e:
         logger.error("МЭШ ошибка: %s", e)
         await msg.edit_text("❌ Не удалось получить данные из МЭШ.")
@@ -102,9 +165,73 @@ async def mesh_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     query = update.callback_query
     await query.answer()
     offset = int(query.data.split(":")[1])
+
+    row = get_mesh_token(query.from_user.id)
+    if not row:
+        await query.edit_message_text("⏰ Токен не найден. Запусти /mesh снова.")
+        return
+
+    token, student_id = row
     try:
-        text, kb = await _render(offset)
+        text, kb = await _render(offset, token, student_id)
         await query.edit_message_text(text, reply_markup=kb, parse_mode="HTML")
     except Exception as e:
         logger.error("МЭШ callback: %s", e)
         await query.edit_message_text("❌ Не удалось получить данные из МЭШ.")
+
+
+async def handle_token_reply(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
+    """
+    Вызывается из общего обработчика текста.
+    Если сообщение — ответ на запрос токена, обрабатывает его.
+    Возвращает True если обработано.
+    """
+    msg = update.message
+    if not msg or not msg.reply_to_message or not msg.text:
+        return False
+
+    chat_id     = update.effective_chat.id
+    reply_to_id = msg.reply_to_message.message_id
+    key         = (chat_id, reply_to_id)
+
+    if key not in _pending:
+        return False
+
+    expected_uid = _pending[key]
+    if update.effective_user.id != expected_uid:
+        return False
+
+    token = msg.text.strip()
+
+    try:
+        await msg.delete()
+    except Exception:
+        pass
+
+    del _pending[key]
+
+    if not token:
+        await context.bot.send_message(
+            chat_id=chat_id,
+            text="❌ Пустой токен. Запусти /mesh снова.",
+        )
+        return True
+
+    wait_msg = await context.bot.send_message(
+        chat_id=chat_id,
+        text="⏳ Проверяю токен...",
+    )
+
+    student_id = await _validate_and_get_student_id(token)
+    if not student_id:
+        await wait_msg.edit_text(
+            "❌ Токен недействителен или истёк. "
+            "Убедись, что скопировал правильно, и попробуй снова."
+        )
+        return True
+
+    save_mesh_token(expected_uid, token, student_id)
+    await wait_msg.edit_text(
+        "✅ Аккаунт МЭШ привязан! Используй /mesh для просмотра расписания."
+    )
+    return True
