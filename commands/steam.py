@@ -18,9 +18,10 @@ SORT_OPTIONS = [
 ]
 
 
-def _fmt_price(cents) -> str:
-    """Центы → доллары с символом $."""
-    return f"${int(cents) / 100:.2f}"
+def _fmt_price(kopecks) -> str:
+    """Копейки → рубли с символом ₽."""
+    rubles = int(kopecks) // 100
+    return f"{rubles:,}₽".replace(",", " ")
 
 
 def _build_text(deals: list, sort_by: str, page: int, total_api: int) -> str:

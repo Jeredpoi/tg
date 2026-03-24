@@ -20,6 +20,8 @@ _cache: dict = {
     "source":     None,  # какой источник сработал
 }
 
+USD_TO_RUB = 90  # приблизительный курс для отображения
+
 _HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
                   "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
@@ -51,14 +53,14 @@ async def _fetch_cheapshark(page: int) -> tuple[int, list]:
             discount = round(float(item.get("savings", 0)))
             if discount <= 0 or not app_id:
                 continue
-            # Цены в центах USD
+            # Конвертируем USD → RUB копейки
             normalized.append({
                 "id":               app_id,
                 "name":             item.get("title", ""),
                 "discount_percent": discount,
-                "original_price":   round(float(item.get("normalPrice", 0)) * 100),
-                "final_price":      round(float(item.get("salePrice",   0)) * 100),
-                "currency":         "USD",
+                "original_price":   round(float(item.get("normalPrice", 0)) * USD_TO_RUB * 100),
+                "final_price":      round(float(item.get("salePrice",   0)) * USD_TO_RUB * 100),
+                "currency":         "RUB",
             })
         except (ValueError, TypeError):
             continue
