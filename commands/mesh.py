@@ -43,12 +43,13 @@ def _week_label(monday: date) -> str:
 
 async def _validate_and_get_student_id(token: str) -> int | None:
     headers = {
-        "Authorization":   f"Bearer {token}",
+        "auth-token":      token,
         "x-mes-subsystem": "familyweb",
     }
     try:
         async with httpx.AsyncClient(timeout=10) as client:
             r = await client.get(f"{BASE_URL}/api/family/mobile/v1/profile", headers=headers)
+            logger.info("МЭШ profile status=%s body=%s", r.status_code, r.text[:200])
             if r.status_code != 200:
                 return None
             data = r.json()
@@ -69,7 +70,7 @@ async def _validate_and_get_student_id(token: str) -> int | None:
 async def fetch_homeworks(token: str, student_id: int, start: date, end: date) -> dict[str, int]:
     """Возвращает {date_str: кол-во_дз}."""
     headers = {
-        "Authorization":   f"Bearer {token}",
+        "auth-token":      token,
         "x-mes-subsystem": "familyweb",
     }
     params = {
@@ -204,8 +205,8 @@ async def handle_token_reply(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
     try:
         await msg.delete()
-    except Exception:
-        pass
+    except Exception as e:
+        logger.warning("Не удалось удалить сообщение с токеном: %s", e)
 
     del _pending[key]
 

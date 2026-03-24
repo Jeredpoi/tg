@@ -32,8 +32,8 @@ _HOW_TO_GET_TOKEN = (
 async def _validate_and_get_student_id(token: str) -> int | None:
     """Проверяет токен, возвращает studentProfileId или None если токен недействителен."""
     headers = {
-        "Authorization":    f"Bearer {token}",
-        "x-mes-subsystem": "familyweb",
+        "auth-token":       token,
+        "x-mes-subsystem":  "familyweb",
     }
     try:
         async with httpx.AsyncClient(timeout=10) as client:
@@ -41,6 +41,7 @@ async def _validate_and_get_student_id(token: str) -> int | None:
                 f"{BASE_URL}/api/family/mobile/v1/profile",
                 headers=headers,
             )
+            logger.info("МЭШ profile status=%s body=%s", r.status_code, r.text[:200])
             if r.status_code != 200:
                 return None
             data = r.json()
@@ -175,8 +176,8 @@ async def handle_token_reply(update: Update, context: ContextTypes.DEFAULT_TYPE)
     # Сразу удаляем сообщение с токеном
     try:
         await msg.delete()
-    except Exception:
-        pass
+    except Exception as e:
+        logger.warning("Не удалось удалить сообщение с токеном: %s", e)
 
     del _pending[key]
 
