@@ -711,9 +711,9 @@ function applyAndRender() {
   renderSteamList();
 }
 
-function fmtRub(kopecks) {
-  if (!kopecks) return '?';
-  return Math.floor(kopecks / 100).toLocaleString('ru') + '\u20BD';
+function fmtRub(cents) {
+  if (!cents) return '?';
+  return '$' + (cents / 100).toFixed(2);
 }
 
 function steamCardHtml(d) {

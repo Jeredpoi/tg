@@ -1,4 +1,5 @@
-# steam_utils.py — скидки Steam через Search API
+# steam_utils.py — скидки Steam через CheapShark API
+# Docs: https://apidocs.cheapshark.com/
 import logging
 import time
 
@@ -7,117 +8,117 @@ import httpx
 logger = logging.getLogger(__name__)
 
 CACHE_TTL   = 600   # 10 минут
-FETCH_BATCH = 100   # игр за один запрос к Steam
+PAGE_SIZE   = 60    # игр за один запрос
 
 _cache: dict = {
-    "deals":       [],    # все загруженные игры (несортированные)
-    "total_api":   0,     # сколько всего скидок на Steam
-    "next_offset": 0,     # с какого offset следующий запрос
-    "ts":          0.0,
+    "deals":      [],
+    "total":      0,
+    "next_page":  0,
+    "ts":         0.0,
 }
 
-_HEADERS = {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-    "Accept-Language": "ru-RU,ru;q=0.9",
-}
+_URL = "https://www.cheapshark.com/api/1.0/deals"
 
 
-async def _fetch_batch(offset: int) -> tuple[int, list]:
-    """Один запрос к Steam Search API. Возвращает (total_api, normalized_deals)."""
-    async with httpx.AsyncClient(timeout=10, headers=_HEADERS) as client:
-        r = await client.get(
-            "https://store.steampowered.com/search/results/",
-            params={
-                "specials": "1",
-                "json":     "1",
-                "start":    str(offset),
-                "count":    str(FETCH_BATCH),
-                "cc":       "ru",
-                "l":        "russian",
-            },
-        )
-        if r.status_code != 200:
-            logger.warning("Steam search HTTP %d", r.status_code)
-            return 0, []
+async def _fetch_page(page: int) -> tuple[int, list]:
+    """Один запрос к CheapShark. Возвращает (total_approx, normalized_deals)."""
+    async with httpx.AsyncClient(timeout=10) as client:
+        r = await client.get(_URL, params={
+            "storeID":    "1",        # Steam
+            "sortBy":     "Savings",  # сортировка по размеру скидки
+            "pageSize":   str(PAGE_SIZE),
+            "pageNumber": str(page),
+            "onSale":     "1",
+        })
 
-        data  = r.json()
-        total = int(data.get("total_count", 0))
-        items = data.get("items", [])
+    if r.status_code != 200:
+        logger.warning("CheapShark HTTP %d", r.status_code)
+        return 0, []
 
-        normalized = []
-        for item in items:
-            price    = item.get("price") or {}
-            discount = abs(int(price.get("discount_percent", 0)))
-            if discount <= 0:
+    total_pages = int(r.headers.get("X-Total-Page-Count", 1))
+    total = total_pages * PAGE_SIZE
+
+    normalized = []
+    for item in r.json():
+        try:
+            app_id   = int(item.get("steamAppID") or 0)
+            discount = round(float(item.get("savings", 0)))
+            if discount <= 0 or not app_id:
                 continue
+            # Цены в центах (USD)
+            sale   = round(float(item.get("salePrice",   0)) * 100)
+            normal = round(float(item.get("normalPrice", 0)) * 100)
             normalized.append({
-                "id":               int(item.get("appid", 0)),
-                "name":             item.get("name", ""),
+                "id":               app_id,
+                "name":             item.get("title", ""),
                 "discount_percent": discount,
-                "original_price":   price.get("initial", 0),
-                "final_price":      price.get("final",   0),
+                "original_price":   normal,
+                "final_price":      sale,
             })
+        except (ValueError, TypeError):
+            continue
 
-        logger.info("Steam search offset=%d: %d deals (total_api=%d)", offset, len(normalized), total)
-        return total, normalized
+    logger.info("CheapShark page=%d: %d deals (total_pages=%d)", page, len(normalized), total_pages)
+    return total, normalized
 
 
 def _reset_cache() -> None:
-    _cache["deals"]       = []
-    _cache["total_api"]   = 0
-    _cache["next_offset"] = 0
-    _cache["ts"]          = time.time()
+    _cache["deals"]     = []
+    _cache["total"]     = 0
+    _cache["next_page"] = 0
+    _cache["ts"]        = time.time()
 
 
 async def _get_deals() -> list:
-    """Возвращает закэшированные игры (грузит первую пачку, если кэш пустой/устарел)."""
+    """Возвращает закэшированные игры (грузит первую страницу, если кэш пустой/устарел)."""
     now = time.time()
     if not _cache["deals"] or now - _cache["ts"] > CACHE_TTL:
         _reset_cache()
-        total, batch = await _fetch_batch(0)
-        _cache["total_api"]   = total
-        _cache["deals"]       = batch
-        _cache["next_offset"] = FETCH_BATCH
-
+        total, batch = await _fetch_page(0)
+        _cache["total"]     = total
+        _cache["deals"]     = batch
+        _cache["next_page"] = 1
     return _cache["deals"]
 
 
 async def _load_more_deals() -> tuple[int, int]:
-    """Подгружает следующую пачку. Возвращает (len(deals), total_api)."""
-    if _cache["total_api"] > 0 and _cache["next_offset"] >= _cache["total_api"]:
-        return len(_cache["deals"]), _cache["total_api"]
+    """Подгружает следующую страницу. Возвращает (len(deals), total)."""
+    max_pages = (_cache["total"] + PAGE_SIZE - 1) // PAGE_SIZE
+    if _cache["next_page"] >= max_pages:
+        return len(_cache["deals"]), _cache["total"]
 
-    total, batch = await _fetch_batch(_cache["next_offset"])
-    _cache["total_api"]    = total
+    total, batch = await _fetch_page(_cache["next_page"])
+    _cache["total"]  = total
     _cache["deals"].extend(batch)
-    _cache["next_offset"] += FETCH_BATCH
+    _cache["next_page"] += 1
 
     return len(_cache["deals"]), total
 
 
 def _cache_info() -> tuple[int, int]:
-    """(загружено, всего в Steam API)."""
-    return len(_cache["deals"]), _cache["total_api"]
+    """(загружено, всего)."""
+    return len(_cache["deals"]), _cache["total"]
 
 
 async def _get_deals_paged(offset: int, count: int) -> tuple[int, list]:
     """Возвращает (total, deals[offset:offset+count]), догружает если нужно."""
     if not _cache["deals"]:
         await _get_deals()
-    while offset + count > len(_cache["deals"]) and _cache["next_offset"] < _cache["total_api"]:
+
+    max_pages = (_cache["total"] + PAGE_SIZE - 1) // PAGE_SIZE
+    while offset + count > len(_cache["deals"]) and _cache["next_page"] < max_pages:
         prev = len(_cache["deals"])
         await _load_more_deals()
         if len(_cache["deals"]) == prev:
-            break  # батч пришёл пустым после фильтрации — дальше нет смысла
+            break
+
     deals = _cache["deals"][offset: offset + count]
-    # Если все батчи уже загружены — возвращаем реальное кол-во отфильтрованных игр,
-    # иначе фронтенд будет считать что есть ещё данные и бесконечно скролить
-    all_loaded = _cache["next_offset"] >= _cache["total_api"]
-    total = len(_cache["deals"]) if all_loaded else _cache["total_api"]
+    all_loaded = _cache["next_page"] >= max_pages
+    total = len(_cache["deals"]) if all_loaded else _cache["total"]
     return total, deals
 
 
 def _sort_deals(deals: list, sort_by: str) -> list:
     if sort_by == "price":
         return sorted(deals, key=lambda d: d.get("final_price", 0))
-    return sorted(deals, key=lambda d: abs(d.get("discount_percent", 0)), reverse=True)
+    return sorted(deals, key=lambda d: d.get("discount_percent", 0), reverse=True)
