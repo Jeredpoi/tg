@@ -13,36 +13,45 @@ from database import get_mesh_token, save_mesh_token
 
 logger = logging.getLogger(__name__)
 
-BASE_URL = "https://dnevnik.mos.ru"
+BASE_URL = "https://school.mos.ru"
 
 # (chat_id, bot_message_id) -> user_id  — ожидаем токен ответом
 _pending: dict[tuple[int, int], int] = {}
 
+_TOKEN_LINK = "https://school.mos.ru/?backUrl=https%3A%2F%2Fschool.mos.ru%2Fv2%2Ftoken%2Frefresh"
+
 _HOW_TO_GET_TOKEN = (
     "Как получить токен:\n"
-    "1. Зайди на dnevnik.mos.ru\n"
-    "2. Открой DevTools → F12 → Console\n"
-    "3. Введи: <code>localStorage.getItem('auth_token')</code>\n"
-    "4. Скопируй значение без кавычек"
+    f'1. Перейди по <a href="{_TOKEN_LINK}">этой ссылке</a>\n'
+    "2. Войди в МЭШ (через Госуслуги или логин)\n"
+    "3. Скопируй токен со страницы"
 )
 
 
 async def _validate_and_get_student_id(token: str) -> int | None:
-    """Проверяет токен, возвращает student_id или None если токен недействителен."""
-    headers = {"auth-token": token}
+    """Проверяет токен, возвращает studentProfileId или None если токен недействителен."""
+    headers = {
+        "Authorization":    f"Bearer {token}",
+        "x-mes-subsystem": "familyweb",
+    }
     try:
         async with httpx.AsyncClient(timeout=10) as client:
-            r = await client.get(f"{BASE_URL}/api/profile", headers=headers)
+            r = await client.get(
+                f"{BASE_URL}/api/family/mobile/v1/profile",
+                headers=headers,
+            )
             if r.status_code != 200:
                 return None
             data = r.json()
-            # Пробуем вытащить student_id из разных форматов ответа
+            # Профиль может быть dict или list
             if isinstance(data, list) and data:
-                return data[0].get("id") or data[0].get("student_id")
+                data = data[0]
             if isinstance(data, dict):
+                # Пробуем разные поля в порядке приоритета
                 return (
-                    data.get("id")
-                    or data.get("student_id")
+                    data.get("studentProfileId")
+                    or data.get("id")
+                    or (data.get("children") or [{}])[0].get("id")
                     or (data.get("profiles") or [{}])[0].get("id")
                 )
     except Exception as e:
@@ -57,14 +66,21 @@ async def _show_grades(update: Update, token: str, student_id: int) -> None:
         monday = today - timedelta(days=today.weekday())
         sunday = monday + timedelta(days=6)
 
-        headers = {"auth-token": token, "profile-id": str(student_id)}
+        headers = {
+            "Authorization":    f"Bearer {token}",
+            "x-mes-subsystem": "familyweb",
+        }
         params = {
-            "student_id": student_id,
-            "begin_date": monday.strftime("%Y-%m-%d"),
-            "end_date":   sunday.strftime("%Y-%m-%d"),
+            "studentProfileId": student_id,
+            "from": monday.strftime("%Y-%m-%d"),
+            "to":   sunday.strftime("%Y-%m-%d"),
         }
         async with httpx.AsyncClient(timeout=12) as client:
-            r = await client.get(f"{BASE_URL}/api/marks", headers=headers, params=params)
+            r = await client.get(
+                f"{BASE_URL}/api/family/mobile/v1/marks",
+                headers=headers,
+                params=params,
+            )
             r.raise_for_status()
 
         marks = r.json()

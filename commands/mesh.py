@@ -13,7 +13,7 @@ from config import MESH_STUDENT_ID, MESH_TOKEN
 
 logger = logging.getLogger(__name__)
 
-BASE_URL = "https://dnevnik.mos.ru"
+BASE_URL = "https://school.mos.ru"
 DAYS_RU = ["Понедельник", "Вторник", "Среда", "Четверг", "Пятница", "Суббота", "Воскресенье"]
 
 
@@ -37,14 +37,21 @@ def _week_label(monday: date) -> str:
 
 async def fetch_homeworks(token: str, student_id: int, start: date, end: date) -> dict[str, int]:
     """Возвращает {date_str: кол-во_дз}."""
-    headers = {"auth-token": token, "profile-id": str(student_id)}
+    headers = {
+        "Authorization":    f"Bearer {token}",
+        "x-mes-subsystem": "familyweb",
+    }
     params = {
-        "student_id": student_id,
-        "begin_date": start.strftime("%Y-%m-%d"),
-        "end_date":   end.strftime("%Y-%m-%d"),
+        "studentProfileId": student_id,
+        "from": start.strftime("%Y-%m-%d"),
+        "to":   end.strftime("%Y-%m-%d"),
     }
     async with httpx.AsyncClient(timeout=12) as client:
-        r = await client.get(f"{BASE_URL}/api/homeworks", headers=headers, params=params)
+        r = await client.get(
+            f"{BASE_URL}/api/family/mobile/v1/homework/short",
+            headers=headers,
+            params=params,
+        )
         r.raise_for_status()
 
     result: dict[str, int] = {}
