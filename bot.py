@@ -425,8 +425,8 @@ def main():
     # Личная статистика
     app.add_handler(CommandHandler("stats", stats_command, filters=filters.ChatType.GROUPS))
 
-    # МЭШ — расписание (общий токен) и оценки (личный токен)
-    app.add_handler(CommandHandler("mesh",   mesh_command,   filters=filters.ChatType.GROUPS))
+    # МЭШ — расписание отключено, оценки (личный токен)
+    # app.add_handler(CommandHandler("mesh",   mesh_command,   filters=filters.ChatType.GROUPS))
     app.add_handler(CommandHandler("grades", grades_command, filters=filters.ChatType.GROUPS))
 
     # Mini App
@@ -437,6 +437,15 @@ def main():
     app.add_handler(MessageHandler(
         filters.COMMAND & filters.ChatType.PRIVATE,
         _private_command_guard,
+    ))
+
+    # Неизвестные команды в группе
+    async def _unknown_command(update, context):
+        await update.message.reply_text("Сосунок я таких слов не знаю!")
+
+    app.add_handler(MessageHandler(
+        filters.COMMAND & filters.ChatType.GROUPS,
+        _unknown_command,
     ))
 
     # Автоопределение CHAT_ID при добавлении бота в группу
@@ -457,7 +466,7 @@ def main():
     app.add_handler(CallbackQueryHandler(rate_callback,    pattern=r"^(anon_|rate_)"))
     app.add_handler(CallbackQueryHandler(weather_callback, pattern=r"^w(forecast|refresh):"))
     app.add_handler(CallbackQueryHandler(steam_callback,   pattern=r"^steam"))
-    app.add_handler(CallbackQueryHandler(mesh_callback,    pattern=r"^mesh_nav:"))
+    # app.add_handler(CallbackQueryHandler(mesh_callback,    pattern=r"^mesh_nav:"))
 
     # Перехватчик токена МЭШ (ответ на запрос /grades или /mesh) — выше трекинга
     async def _maybe_token_reply(update, context):
@@ -484,7 +493,6 @@ def main():
             BotCommand("app",     "Открыть мини-приложение"),
             BotCommand("gallery", "Галерея рейтингов"),
             BotCommand("stats",   "Личная статистика"),
-            BotCommand("mesh",    "Расписание и ДЗ (МЭШ)"),
             BotCommand("grades",  "Мои оценки (МЭШ)"),
         ]
 
