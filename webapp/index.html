@@ -711,10 +711,12 @@ function applyAndRender() {
   renderSteamList();
 }
 
-function fmtRub(cents) {
+function fmtPrice(cents, currency) {
   if (!cents) return '?';
-  return '$' + (cents / 100).toFixed(2);
+  if (currency === 'USD') return '$' + (cents / 100).toFixed(2);
+  return Math.floor(cents / 100).toLocaleString('ru') + '\u20BD';
 }
+function fmtRub(cents, currency) { return fmtPrice(cents, currency); }
 
 function steamCardHtml(d) {
   const isFree = d.final_price === 0;
@@ -723,8 +725,8 @@ function steamCardHtml(d) {
   const badgeLabel = isFree ? 'БЕСПЛАТНО' : `-${d.discount}%`;
   const priceHtml = isFree
     ? `<span class="steam-free-tag">Бесплатно</span>`
-    : `<span class="steam-orig">${fmtRub(d.original_price)}</span>
-       <span class="steam-sale">${fmtRub(d.final_price)}</span>`;
+    : `<span class="steam-orig">${fmtPrice(d.original_price, d.currency)}</span>
+       <span class="steam-sale">${fmtPrice(d.final_price, d.currency)}</span>`;
   return `
   <a class="steam-card" href="${d.url}" target="_blank">
     <img class="steam-cover" src="${d.cover}" alt=""

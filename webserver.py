@@ -41,6 +41,7 @@ async def api_steam(request: web.Request) -> web.Response:
                 "original_price": item.get("original_price", 0),
                 "final_price":    item.get("final_price", 0),
                 "discount":       abs(int(item.get("discount_percent", 0))),
+                "currency":       item.get("currency", "RUB"),
                 "cover":  f"https://cdn.akamai.steamstatic.com/steam/apps/{item.get('id', 0)}/header.jpg",
                 "url":    f"https://store.steampowered.com/app/{item.get('id', 0)}",
             }
