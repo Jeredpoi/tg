@@ -17,7 +17,7 @@ DATABASE_PATH = "bot_stats.db"
 YANDEX_WEATHER_KEY = "b1a39a50-2887-45d2-8c07-cdcb9ae3d5c1"
 
 # Telegram User ID владельца бота (узнать через /myid в личке бота)
-OWNER_ID = 0  # Замените на свой ID
+OWNER_ID = 6093532805  # @Jeredpoi
 
 # Прокси для российского хостинга (None = отключено)
 # Формат: "socks5://user:pass@host:port" или "http://host:port"
