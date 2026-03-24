@@ -33,8 +33,6 @@ from commands.help import help_command
 from commands.weather import weather_command, weather_callback
 from commands.steam import steam_command, steam_callback
 from commands.stats import stats_command
-from commands.mesh import mesh_command, mesh_callback
-from commands.mesh import handle_token_reply as mesh_token_reply
 from commands.grades import grades_command, handle_token_reply as grades_token_reply
 
 logging.basicConfig(
@@ -129,7 +127,6 @@ _CMD_COOLDOWNS: dict[str, int] = {
     # /weather и /steam бьют по внешним API
     "/weather": 30,
     "/steam":   20,
-    "/mesh":    20,
     "/grades":  15,
     # /rate — фото в личке → чат, лимит 5 минут
     "/rate":    300,
@@ -425,8 +422,7 @@ def main():
     # Личная статистика
     app.add_handler(CommandHandler("stats", stats_command, filters=filters.ChatType.GROUPS))
 
-    # МЭШ — расписание отключено, оценки (личный токен)
-    # app.add_handler(CommandHandler("mesh",   mesh_command,   filters=filters.ChatType.GROUPS))
+    # МЭШ — оценки (личный токен)
     app.add_handler(CommandHandler("grades", grades_command, filters=filters.ChatType.GROUPS))
 
     # Mini App
@@ -466,13 +462,10 @@ def main():
     app.add_handler(CallbackQueryHandler(rate_callback,    pattern=r"^(anon_|rate_)"))
     app.add_handler(CallbackQueryHandler(weather_callback, pattern=r"^w(forecast|refresh):"))
     app.add_handler(CallbackQueryHandler(steam_callback,   pattern=r"^steam"))
-    # app.add_handler(CallbackQueryHandler(mesh_callback,    pattern=r"^mesh_nav:"))
 
-    # Перехватчик токена МЭШ (ответ на запрос /grades или /mesh) — выше трекинга
+    # Перехватчик токена МЭШ (ответ на запрос /grades) — выше трекинга
     async def _maybe_token_reply(update, context):
         handled = await grades_token_reply(update, context)
-        if not handled:
-            handled = await mesh_token_reply(update, context)
         if not handled:
             await _track_message(update, context)
 
