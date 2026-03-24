@@ -17,41 +17,12 @@ PHOTOS_DIR = os.path.join(os.path.dirname(__file__), "photos")
 
 from config import BOT_TOKEN
 from database import init_db, get_gallery, get_photo_by_key, get_comments, add_comment
-from steam_utils import _get_deals, _sort_deals, _get_deals_paged
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
 
 
 # ── /api/steam ──────────────────────────────────────────────────────────────
-
-async def api_steam(request: web.Request) -> web.Response:
-    try:
-        offset = max(0, int(request.rel_url.query.get("offset", 0)))
-        count  = min(100, max(1, int(request.rel_url.query.get("count", 50))))
-    except (ValueError, TypeError):
-        offset, count = 0, 50
-
-    try:
-        total, deals = await _get_deals_paged(offset, count)
-        result = [
-            {
-                "id":             item.get("id", 0),
-                "name":           item.get("name", ""),
-                "original_price": item.get("original_price", 0),
-                "final_price":    item.get("final_price", 0),
-                "discount":       abs(int(item.get("discount_percent", 0))),
-                "currency":       item.get("currency", "RUB"),
-                "cover":  f"https://cdn.akamai.steamstatic.com/steam/apps/{item.get('id', 0)}/header.jpg",
-                "url":    f"https://store.steampowered.com/app/{item.get('id', 0)}",
-            }
-            for item in deals
-        ]
-        return web.json_response({"deals": result, "total": total, "offset": offset})
-    except Exception as e:
-        logger.exception("api_steam error: %s", e)
-        return web.json_response({"deals": [], "total": 0, "offset": offset, "error": str(e)}, status=500)
-
 
 # ── /api/gallery ─────────────────────────────────────────────────────────────
 
@@ -198,7 +169,6 @@ async def api_debug_tg(request: web.Request) -> web.Response:
 def create_app() -> web.Application:
     init_db()
     app = web.Application()
-    app.router.add_get("/api/steam",              api_steam)
     app.router.add_get("/api/gallery",            api_gallery)
     app.router.add_get("/api/photo/{key}",        api_photo)
     app.router.add_get("/api/comments/{key}",     api_get_comments)

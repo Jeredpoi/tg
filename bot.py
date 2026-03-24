@@ -23,6 +23,7 @@ from telegram.request import HTTPXRequest
 from config import (BOT_TOKEN, PROXY_URL, WEBAPP_URL,
                     SWEAR_COOLDOWN, DEFAULT_CMD_COOLDOWN,
                     SWEAR_RESPONSE_DELAY, SWEAR_RESPONSE_CHANCE)
+
 from database import init_db, track_message
 
 from commands.debug import debug_command
@@ -33,7 +34,6 @@ from commands.top import top_command, top_callback
 from commands.rate import rate_command, rate_callback, handle_rate_photo, handle_rate_video
 from commands.help import help_command
 from commands.weather import weather_command, weather_callback
-from commands.steam import steam_command, steam_callback
 from commands.stats import stats_command
 from commands.anon import anon_command, handle_anon_cancel, handle_anon_message
 
@@ -127,9 +127,7 @@ _CMD_COOLDOWNS: dict[str, int] = {
     "/kdecree": 0,
     "/kreward": 0,
     "/ktax":    0,
-    # /weather и /steam бьют по внешним API
     "/weather": 30,
-    "/steam":   20,
     "/anon":    30,
     # /rate — фото в личке → чат, лимит 5 минут
     "/rate":    300,
@@ -344,17 +342,6 @@ async def _on_bot_added(update, context):
         pass
 
 
-async def app_command(update, context):
-    """Открывает Mini App с Steam скидками и галереей рейтингов."""
-    kb = InlineKeyboardMarkup([[
-        InlineKeyboardButton(
-            "🚀 Открыть приложение",
-            web_app=WebAppInfo(url=WEBAPP_URL),
-        )
-    ]])
-    await update.message.reply_text("Скидки Steam и галерея рейтингов:", reply_markup=kb)
-
-
 async def gallery_command(update, context):
     """Отвечает на сообщение с кнопкой открытия галереи в браузере."""
     kb = InlineKeyboardMarkup([[
@@ -419,8 +406,6 @@ def main():
     # MGE
     app.add_handler(CommandHandler("mge",   mge_command,   filters=filters.ChatType.GROUPS))
 
-    # Steam скидки
-    app.add_handler(CommandHandler("steam", steam_command, filters=filters.ChatType.GROUPS))
 
     # Личная статистика
     app.add_handler(CommandHandler("stats", stats_command, filters=filters.ChatType.GROUPS))
@@ -429,8 +414,6 @@ def main():
     app.add_handler(CommandHandler("anon",   anon_command,   filters=filters.ChatType.GROUPS))
     app.add_handler(CommandHandler("cancel", handle_anon_cancel, filters=filters.ChatType.PRIVATE))
 
-    # Mini App
-    app.add_handler(CommandHandler("app",     app_command,     filters=filters.ChatType.GROUPS))
     app.add_handler(CommandHandler("gallery", gallery_command, filters=filters.ChatType.GROUPS))
 
     # Ловим любые другие команды в личке и вежливо отказываем
@@ -465,7 +448,6 @@ def main():
     app.add_handler(CallbackQueryHandler(top_callback,     pattern=r"^top_"))
     app.add_handler(CallbackQueryHandler(rate_callback,    pattern=r"^(anon_|rate_)"))
     app.add_handler(CallbackQueryHandler(weather_callback, pattern=r"^w(forecast|refresh):"))
-    app.add_handler(CallbackQueryHandler(steam_callback,   pattern=r"^steam"))
 
     # Анонимные сообщения в личке + трекинг в группах
     async def _maybe_token_reply(update, context):
@@ -489,8 +471,6 @@ def main():
             BotCommand("roast",   "Подколоть участника"),
             BotCommand("weather", "Погода"),
             BotCommand("mge",     "Фраза из МГЕ"),
-            BotCommand("steam",   "Топ скидок в Steam"),
-            BotCommand("app",     "Открыть мини-приложение"),
             BotCommand("gallery", "Галерея рейтингов"),
             BotCommand("stats",   "Личная статистика"),
             BotCommand("anon",    "Анонимное сообщение в группу"),

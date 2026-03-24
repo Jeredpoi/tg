@@ -51,34 +51,6 @@
   .section { display: none; padding: 20px 16px; }
   .section.active { display: block; }
 
-  /* ── Search ── */
-  .search-wrap {
-    position: relative;
-    margin-bottom: 14px;
-  }
-  .search-icon {
-    position: absolute;
-    left: 14px;
-    top: 50%;
-    transform: translateY(-50%);
-    font-size: 15px;
-    opacity: .5;
-    pointer-events: none;
-  }
-  .search-input {
-    width: 100%;
-    padding: 10px 14px 10px 38px;
-    border-radius: 14px;
-    border: 1.5px solid rgba(255,255,255,0.08);
-    background: rgba(255,255,255,0.05);
-    color: var(--tg-theme-text-color, #f0f0f0);
-    font-size: 14px;
-    outline: none;
-    transition: border-color .2s;
-  }
-  .search-input::placeholder { color: var(--tg-theme-hint-color, #6e6e73); }
-  .search-input:focus { border-color: var(--tg-theme-button-color, #3a8ee6); }
-
   /* ── Sort bar ── */
   .sort-bar {
     display: flex;
@@ -105,96 +77,6 @@
     background: var(--tg-theme-button-color, #3a8ee6);
     border-color: transparent;
     color: #fff;
-  }
-
-  /* ── Steam counter ── */
-  .steam-counter {
-    font-size: 12px;
-    color: var(--tg-theme-hint-color, #6e6e73);
-    margin-bottom: 14px;
-  }
-
-  /* ── Steam cards ── */
-  .steam-list { display: flex; flex-direction: column; gap: 12px; }
-  .steam-card {
-    display: flex;
-    background: var(--tg-theme-secondary-bg-color, #1a1a1c);
-    border-radius: 18px;
-    overflow: hidden;
-    text-decoration: none;
-    color: inherit;
-    transition: transform .15s;
-    -webkit-tap-highlight-color: transparent;
-    border: 1px solid rgba(255,255,255,0.05);
-  }
-  .steam-card:active { transform: scale(0.975); }
-  .steam-cover {
-    width: 130px;
-    min-width: 130px;
-    height: 90px;
-    object-fit: cover;
-    background: #222;
-  }
-  .steam-cover-placeholder {
-    width: 130px;
-    min-width: 130px;
-    height: 90px;
-    background: linear-gradient(135deg, #1a2f4a, #0d1f30);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 30px;
-  }
-  .steam-info {
-    padding: 12px 14px;
-    display: flex;
-    flex-direction: column;
-    justify-content: space-between;
-    flex: 1;
-    min-width: 0;
-  }
-  .steam-name {
-    font-size: 14px;
-    font-weight: 600;
-    line-height: 1.4;
-    overflow: hidden;
-    display: -webkit-box;
-    -webkit-line-clamp: 2;
-    -webkit-box-orient: vertical;
-    color: var(--tg-theme-text-color, #f0f0f0);
-  }
-  .steam-price-row {
-    display: flex;
-    align-items: center;
-    gap: 7px;
-    flex-wrap: wrap;
-    margin-top: 7px;
-  }
-  .steam-badge {
-    background: linear-gradient(135deg, #2ecc71, #27ae60);
-    color: #fff;
-    font-size: 12px;
-    font-weight: 800;
-    padding: 3px 9px;
-    border-radius: 8px;
-    letter-spacing: 0.02em;
-  }
-  .steam-badge.hot  { background: linear-gradient(135deg, #ff6b35, #e84118); }
-  .steam-badge.free { background: linear-gradient(135deg, #a855f7, #7c3aed); }
-  .steam-orig {
-    font-size: 12px;
-    color: var(--tg-theme-hint-color, #6e6e73);
-    text-decoration: line-through;
-  }
-  .steam-sale {
-    font-size: 15px;
-    font-weight: 700;
-    color: #4cd964;
-  }
-  .steam-free-tag {
-    font-size: 14px;
-    font-weight: 700;
-    color: #a855f7;
   }
 
   /* ── Gallery toolbar ── */
@@ -539,24 +421,7 @@
 <body>
 
 <div class="tabs">
-  <button class="tab-btn" id="tab-btn-steam"   onclick="switchTab('steam', this)">🎮 Steam</button>
-  <button class="tab-btn" id="tab-btn-gallery" onclick="switchTab('gallery', this)">📸 Галерея</button>
-</div>
-
-<!-- ── Steam ── -->
-<div id="tab-steam" class="section">
-  <div class="search-wrap">
-    <span class="search-icon">🔍</span>
-    <input class="search-input" id="steam-search" type="text" placeholder="Поиск по названию…" oninput="onSteamSearch(this.value)">
-  </div>
-  <div class="sort-bar">
-    <button class="sort-btn active" id="sort-discount" onclick="steamSort('discount', this)">🔥 По скидке</button>
-    <button class="sort-btn"        id="sort-price"    onclick="steamSort('price', this)">💎 По цене</button>
-    <button class="sort-btn"        id="sort-free"     onclick="steamSort('free', this)">🆓 Бесплатные</button>
-    <button class="sort-btn"        id="sort-name"     onclick="steamSort('name', this)">🔤 По названию</button>
-  </div>
-  <div class="steam-counter" id="steam-counter"></div>
-  <div id="steam-list"><div class="loader"><div class="spinner"></div><span>Загружаю скидки…</span></div></div>
+  <button class="tab-btn active" id="tab-btn-gallery" onclick="switchTab('gallery', this)">📸 Галерея</button>
 </div>
 
 <!-- ── Gallery ── -->
@@ -608,16 +473,6 @@ tg.setHeaderColor('secondary_bg_color');
 
 const chatId = tg.initDataUnsafe?.chat?.id || null;
 
-let steamData = [];       // все загруженные игры
-let steamTotal = 0;       // всего игр на сервере
-let steamOffset = 0;      // следующий offset для запроса к серверу
-let steamLoading = false; // флаг: идёт ли загрузка
-let steamInitialized = false;
-const STEAM_FETCH_SIZE = 50;  // сколько игр запрашивать за раз
-let currentSort = 'discount';
-let steamQuery = '';
-let steamFiltered = [];
-let steamObserver = null;
 let galleryLoaded = false;
 let gallerySort_  = 'score';
 let photosData    = [];
@@ -633,154 +488,10 @@ function switchTab(name, btn) {
   btn.classList.add('active');
   try { localStorage.setItem(STORAGE_KEY, name); } catch(e) {}
   if (name === 'gallery') loadGallery();
-  if (name === 'steam') loadSteam();
 }
 
 function restoreTab() {
-  let saved = 'steam';
-  try { saved = localStorage.getItem(STORAGE_KEY) || 'steam'; } catch(e) {}
-  const btn = document.getElementById('tab-btn-' + saved);
-  if (btn) switchTab(saved, btn);
-  else switchTab('steam', document.getElementById('tab-btn-steam'));
-}
-
-// ── Steam ──
-async function loadSteam() {
-  if (steamInitialized) return;
-  steamData = [];
-  steamOffset = 0;
-  steamTotal = 0;
-  steamInitialized = true;
-
-  const list = document.getElementById('steam-list');
-  list.innerHTML = '<div class="loader"><div class="spinner"></div><span>Загружаю скидки…</span></div>';
-  await fetchSteamPage();
-}
-
-async function fetchSteamPage() {
-  if (steamLoading) return;
-  steamLoading = true;
-  try {
-    const r = await fetch(`/api/steam?offset=${steamOffset}&count=${STEAM_FETCH_SIZE}`);
-    const data = await r.json();
-    const newDeals = data.deals || [];
-    steamTotal = data.total || 0;
-    steamOffset += newDeals.length;
-    steamData = steamData.concat(newDeals);
-    if (!steamData.length) {
-      document.getElementById('steam-list').innerHTML =
-        '<div class="empty"><span class="empty-icon">😔</span>Не удалось загрузить скидки. Попробуй позже.</div>';
-    } else {
-      applyAndRender(steamData.length > newDeals.length);
-    }
-  } catch(e) {
-    if (!steamData.length) {
-      document.getElementById('steam-list').innerHTML =
-        '<div class="empty"><span class="empty-icon">😔</span>Не удалось загрузить скидки. Попробуй позже.</div>';
-    }
-  } finally {
-    steamLoading = false;
-    setupSteamSentinel();
-  }
-}
-
-function steamSort(sort, btn) {
-  currentSort = sort;
-  document.querySelectorAll('.sort-btn').forEach(b => b.classList.remove('active'));
-  btn.classList.add('active');
-  applyAndRender();
-}
-
-function onSteamSearch(q) {
-  steamQuery = q.trim().toLowerCase();
-  applyAndRender();
-}
-
-function applyAndRender() {
-  if (!steamData.length) return;
-  let list = [...steamData];
-
-  if (currentSort === 'free') list = list.filter(d => d.final_price === 0);
-  if (steamQuery) list = list.filter(d => d.name.toLowerCase().includes(steamQuery));
-
-  if (currentSort === 'price') list.sort((a, b) => a.final_price - b.final_price);
-  else if (currentSort === 'name') list.sort((a, b) => a.name.localeCompare(b.name, 'ru'));
-  else list.sort((a, b) => b.discount - a.discount);
-
-  steamFiltered = list;
-  renderSteamList();
-}
-
-function fmtPrice(kopecks) {
-  if (!kopecks) return '?';
-  return Math.floor(kopecks / 100).toLocaleString('ru') + '\u20BD';
-}
-function fmtRub(kopecks) { return fmtPrice(kopecks); }
-
-function steamCardHtml(d) {
-  const isFree = d.final_price === 0;
-  const isHot  = d.discount >= 70 && !isFree;
-  const badgeClass = isFree ? 'free' : isHot ? 'hot' : '';
-  const badgeLabel = isFree ? 'БЕСПЛАТНО' : `-${d.discount}%`;
-  const priceHtml = isFree
-    ? `<span class="steam-free-tag">Бесплатно</span>`
-    : `<span class="steam-orig">${fmtPrice(d.original_price)}</span>
-       <span class="steam-sale">${fmtPrice(d.final_price)}</span>`;
-  return `
-  <a class="steam-card" href="${d.url}" target="_blank">
-    <img class="steam-cover" src="${d.cover}" alt=""
-         onerror="this.outerHTML='<div class=\\'steam-cover-placeholder\\'>🎮</div>'">
-    <div class="steam-info">
-      <div class="steam-name">${escHtml(d.name)}</div>
-      <div class="steam-price-row">
-        <span class="steam-badge ${badgeClass}">${badgeLabel}</span>
-        ${priceHtml}
-      </div>
-    </div>
-  </a>`;
-}
-
-function updateSteamCounter() {
-  const counter = document.getElementById('steam-counter');
-  const shown = steamFiltered.length;
-  const total = steamTotal;
-  if (!shown) { counter.textContent = ''; return; }
-  const moreOnServer = steamOffset < steamTotal;
-  counter.textContent = moreOnServer
-    ? `Загружено: ${steamData.length} из ${total} игр — прокрути для загрузки ещё`
-    : `Показано: ${shown}${shown !== steamData.length ? ' (из ' + steamData.length + ' загруженных)' : ''} игр`;
-}
-
-function renderSteamList() {
-  const listEl = document.getElementById('steam-list');
-
-  if (steamObserver) { steamObserver.disconnect(); steamObserver = null; }
-
-  if (!steamFiltered.length) {
-    document.getElementById('steam-counter').textContent = '';
-    listEl.innerHTML = '<div class="empty"><span class="empty-icon">🎮</span>Ничего не найдено</div>';
-    return;
-  }
-
-  listEl.innerHTML =
-    '<div class="steam-list" id="steam-items">' +
-    steamFiltered.map(steamCardHtml).join('') +
-    '</div><div id="steam-sentinel"></div>';
-
-  updateSteamCounter();
-  setupSteamSentinel();
-}
-
-function setupSteamSentinel() {
-  if (steamObserver) { steamObserver.disconnect(); steamObserver = null; }
-  const hasMore = steamOffset < steamTotal;
-  if (!hasMore) return;
-  const sentinel = document.getElementById('steam-sentinel');
-  if (!sentinel) return;
-  steamObserver = new IntersectionObserver(entries => {
-    if (entries[0].isIntersecting) fetchSteamPage();
-  }, { rootMargin: '300px' });
-  steamObserver.observe(sentinel);
+  switchTab('gallery', document.getElementById('tab-btn-gallery'));
 }
 
 // ── Gallery ──
