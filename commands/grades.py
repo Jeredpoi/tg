@@ -63,7 +63,7 @@ async def _validate_and_get_student_id(token: str) -> tuple[int | None, str]:
             return None, f"Токен принят, но не удалось найти ID ученика. Ответ: {str(data)[:150]}"
     except Exception as e:
         logger.error("МЭШ validate token: %s", e)
-        return None, f"Ошибка соединения: {e}"
+        return None, f"Ошибка соединения: {type(e).__name__}: {e}"
     return None, "Неожиданный формат ответа от МЭШ."
 
 
