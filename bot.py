@@ -408,7 +408,7 @@ def main():
     app.add_handler(CommandHandler("rate",     rate_command,    filters=filters.ChatType.PRIVATE))
 
     # Команды только для групп
-    app.add_handler(CommandHandler("debug",   debug_command,   filters=filters.ChatType.GROUPS))
+    app.add_handler(CommandHandler("debug",   debug_command))
     app.add_handler(CommandHandler("dice",    dice_command,    filters=filters.ChatType.GROUPS))
     app.add_handler(CommandHandler("roast",   roast_command,   filters=filters.ChatType.GROUPS))
     app.add_handler(CommandHandler("top",     top_command,     filters=filters.ChatType.GROUPS))
@@ -497,6 +497,7 @@ def main():
         private_commands = [
             BotCommand("rate",  "Отправить фото на оценку группы"),
             BotCommand("help",  "Список команд группы"),
+            BotCommand("debug", "Отладочная информация"),
         ]
 
         # Для дефолтного scope — пустой список (не показываем /start нигде)
