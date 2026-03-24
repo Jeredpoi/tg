@@ -16,6 +16,9 @@ DATABASE_PATH = "bot_stats.db"
 # Ключ Яндекс.Погода API
 YANDEX_WEATHER_KEY = "b1a39a50-2887-45d2-8c07-cdcb9ae3d5c1"
 
+# Telegram User ID владельца бота (узнать через /myid в личке бота)
+OWNER_ID = 0  # Замените на свой ID
+
 # Прокси для российского хостинга (None = отключено)
 # Формат: "socks5://user:pass@host:port" или "http://host:port"
 PROXY_URL = None  # "http://user:pass@host:port"
