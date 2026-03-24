@@ -2,6 +2,7 @@
 # commands/mesh.py — Команда /mesh (расписание и ДЗ из МЭШ)
 # ==============================================================================
 
+import json
 import logging
 from datetime import date, timedelta
 
@@ -199,7 +200,7 @@ async def handle_token_reply(update: Update, context: ContextTypes.DEFAULT_TYPE)
     if update.effective_user.id != expected_uid:
         return False
 
-    token = msg.text.strip()
+    raw = msg.text.strip()
 
     try:
         await msg.delete()
@@ -207,6 +208,12 @@ async def handle_token_reply(update: Update, context: ContextTypes.DEFAULT_TYPE)
         pass
 
     del _pending[key]
+
+    # Страница school.mos.ru отдаёт JSON — вытаскиваем поле token
+    try:
+        token = json.loads(raw).get("token", raw)
+    except (json.JSONDecodeError, AttributeError):
+        token = raw
 
     if not token:
         await context.bot.send_message(
