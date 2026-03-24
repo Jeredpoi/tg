@@ -477,6 +477,7 @@ def main():
 
     async def on_startup(app):
         await app.bot.set_my_description("Скаут на связи 🟢")
+        await app.bot.set_my_short_description("Скаут на связи 🟢")
         from telegram import BotCommandScopeAllGroupChats, BotCommandScopeAllPrivateChats, BotCommandScopeDefault
 
         group_commands = [
@@ -507,6 +508,7 @@ def main():
     async def on_shutdown(app):
         try:
             await app.bot.set_my_description("Скаут недоступен 🔴")
+            await app.bot.set_my_short_description("Скаут недоступен 🔴")
         except Exception:
             pass
 
