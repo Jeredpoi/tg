@@ -34,7 +34,7 @@ from commands.weather import weather_command, weather_callback
 from commands.steam import steam_command, steam_callback
 from commands.stats import stats_command
 from commands.anon import anon_command, handle_anon_cancel, handle_anon_message
-from commands.news import news_command
+
 
 logging.basicConfig(
     format="%(asctime)s — %(name)s — %(levelname)s — %(message)s",
@@ -427,9 +427,6 @@ def main():
     app.add_handler(CommandHandler("anon",   anon_command,   filters=filters.ChatType.GROUPS))
     app.add_handler(CommandHandler("cancel", handle_anon_cancel, filters=filters.ChatType.PRIVATE))
 
-    # Новости от владельца (только личка)
-    app.add_handler(CommandHandler("news",  news_command,  filters=filters.ChatType.PRIVATE))
-
     # Mini App
     app.add_handler(CommandHandler("app",     app_command,     filters=filters.ChatType.GROUPS))
     app.add_handler(CommandHandler("gallery", gallery_command, filters=filters.ChatType.GROUPS))
@@ -478,7 +475,8 @@ def main():
     # Трекинг текстовых сообщений (без команд)
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, _maybe_token_reply))
 
-    async def set_commands(app):
+    async def on_startup(app):
+        await app.bot.set_my_description("Скаут на связи 🟢")
         from telegram import BotCommandScopeAllGroupChats, BotCommandScopeAllPrivateChats, BotCommandScopeDefault
 
         group_commands = [
@@ -498,7 +496,6 @@ def main():
         private_commands = [
             BotCommand("rate",  "Отправить фото на оценку группы"),
             BotCommand("help",  "Список команд группы"),
-            BotCommand("news",  "Написать в группу от бота"),
         ]
 
         # Для дефолтного scope — пустой список (не показываем /start нигде)
@@ -507,7 +504,14 @@ def main():
         await app.bot.set_my_commands(private_commands, scope=BotCommandScopeAllPrivateChats())
         logger.info("Команды обновлены для всех scope-ов")
 
-    app.post_init = set_commands
+    async def on_shutdown(app):
+        try:
+            await app.bot.set_my_description("Скаут недоступен 🔴")
+        except Exception:
+            pass
+
+    app.post_init = on_startup
+    app.post_shutdown = on_shutdown
 
     logger.info("Бот запущен")
     app.run_polling(poll_interval=0, drop_pending_updates=True)
