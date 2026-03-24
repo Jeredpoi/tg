@@ -104,10 +104,16 @@ async def _get_deals_paged(offset: int, count: int) -> tuple[int, list]:
     """Возвращает (total, deals[offset:offset+count]), догружает если нужно."""
     if not _cache["deals"]:
         await _get_deals()
-    while offset + count > len(_cache["deals"]) and len(_cache["deals"]) < _cache["total_api"]:
+    while offset + count > len(_cache["deals"]) and _cache["next_offset"] < _cache["total_api"]:
+        prev = len(_cache["deals"])
         await _load_more_deals()
+        if len(_cache["deals"]) == prev:
+            break  # батч пришёл пустым после фильтрации — дальше нет смысла
     deals = _cache["deals"][offset: offset + count]
-    total = _cache["total_api"]
+    # Если все батчи уже загружены — возвращаем реальное кол-во отфильтрованных игр,
+    # иначе фронтенд будет считать что есть ещё данные и бесконечно скролить
+    all_loaded = _cache["next_offset"] >= _cache["total_api"]
+    total = len(_cache["deals"]) if all_loaded else _cache["total_api"]
     return total, deals
 
 
