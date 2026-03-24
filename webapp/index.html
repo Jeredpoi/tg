@@ -886,7 +886,7 @@ function openModal(index) {
   const wrap = document.getElementById('modal-media-wrap');
   const isVideo = p.media_type === 'video';
   if (isVideo) {
-    wrap.innerHTML = `<video class="modal-media" src="/api/photo/${p.key}" controls autoplay muted playsinline loop></video>`;
+    wrap.innerHTML = `<video class="modal-media" src="/api/photo/${p.key}" controls autoplay playsinline loop></video>`;
   } else {
     wrap.innerHTML = `<img class="modal-media" src="/api/photo/${p.key}" alt="">`;
   }
