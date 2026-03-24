@@ -29,11 +29,11 @@ _HOW_TO_GET_TOKEN = (
 )
 
 
-async def _validate_and_get_student_id(token: str) -> int | None:
-    """Проверяет токен, возвращает studentProfileId или None если токен недействителен."""
+async def _validate_and_get_student_id(token: str) -> tuple[int | None, str]:
+    """Возвращает (studentProfileId, error_msg). error_msg пустой если успех."""
     headers = {
-        "auth-token":       token,
-        "x-mes-subsystem":  "familyweb",
+        "auth-token":      token,
+        "x-mes-subsystem": "familyweb",
     }
     try:
         async with httpx.AsyncClient(timeout=10) as client:
@@ -41,24 +41,30 @@ async def _validate_and_get_student_id(token: str) -> int | None:
                 f"{BASE_URL}/api/family/mobile/v1/profile",
                 headers=headers,
             )
-            logger.info("МЭШ profile status=%s body=%s", r.status_code, r.text[:200])
-            if r.status_code != 200:
-                return None
-            data = r.json()
-            # Профиль может быть dict или list
-            if isinstance(data, list) and data:
-                data = data[0]
-            if isinstance(data, dict):
-                # Пробуем разные поля в порядке приоритета
-                return (
-                    data.get("studentProfileId")
-                    or data.get("id")
-                    or (data.get("children") or [{}])[0].get("id")
-                    or (data.get("profiles") or [{}])[0].get("id")
-                )
+        logger.info("МЭШ profile status=%s body=%s", r.status_code, r.text[:300])
+        if r.status_code == 401:
+            return None, f"Токен отклонён сервером (401). Получи новый по ссылке."
+        if r.status_code == 403:
+            return None, f"Доступ запрещён (403). Возможно токен истёк."
+        if r.status_code != 200:
+            return None, f"Сервер МЭШ ответил {r.status_code}. Попробуй позже."
+        data = r.json()
+        if isinstance(data, list) and data:
+            data = data[0]
+        if isinstance(data, dict):
+            sid = (
+                data.get("studentProfileId")
+                or data.get("id")
+                or (data.get("children") or [{}])[0].get("id")
+                or (data.get("profiles") or [{}])[0].get("id")
+            )
+            if sid:
+                return sid, ""
+            return None, f"Токен принят, но не удалось найти ID ученика. Ответ: {str(data)[:150]}"
     except Exception as e:
         logger.error("МЭШ validate token: %s", e)
-    return None
+        return None, f"Ошибка соединения: {e}"
+    return None, "Неожиданный формат ответа от МЭШ."
 
 
 async def _show_grades(update: Update, token: str, student_id: int) -> None:
@@ -139,7 +145,7 @@ async def grades_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     token, student_id = row
 
     # Быстрая проверка токена
-    valid_id = await _validate_and_get_student_id(token)
+    valid_id, err = await _validate_and_get_student_id(token)
     if not valid_id:
         msg = await update.message.reply_text(
             _ask_for_token_text("expired"), parse_mode="HTML"
@@ -201,12 +207,9 @@ async def handle_token_reply(update: Update, context: ContextTypes.DEFAULT_TYPE)
         reply_to_message_id=reply_to_id,
     )
 
-    student_id = await _validate_and_get_student_id(token)
+    student_id, err = await _validate_and_get_student_id(token)
     if not student_id:
-        await wait_msg.edit_text(
-            "❌ Токен недействителен или истёк. "
-            "Убедись, что скопировал правильно, и попробуй снова."
-        )
+        await wait_msg.edit_text(f"❌ {err}")
         return True
 
     save_mesh_token(expected_uid, token, student_id)
