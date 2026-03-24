@@ -667,11 +667,16 @@ async function fetchSteamPage() {
     steamTotal = data.total || 0;
     steamOffset += newDeals.length;
     steamData = steamData.concat(newDeals);
-    applyAndRender(/* append= */ steamData.length > newDeals.length);
+    if (!steamData.length) {
+      document.getElementById('steam-list').innerHTML =
+        '<div class="empty"><span class="empty-icon">😔</span>Не удалось загрузить скидки. Попробуй позже.</div>';
+    } else {
+      applyAndRender(steamData.length > newDeals.length);
+    }
   } catch(e) {
     if (!steamData.length) {
       document.getElementById('steam-list').innerHTML =
-        '<div class="empty"><span class="empty-icon">😔</span>Не удалось загрузить скидки</div>';
+        '<div class="empty"><span class="empty-icon">😔</span>Не удалось загрузить скидки. Попробуй позже.</div>';
     }
   } finally {
     steamLoading = false;
