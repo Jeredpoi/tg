@@ -60,6 +60,16 @@ async def debug_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
     status = "🟢 Все системы работают" if all([db_ok, w_ok, s_ok]) else "🟡 Есть проблемы"
 
+    # Список команд бота
+    bot_commands = await context.bot.get_my_commands()
+    if bot_commands:
+        cmds_text = "\n".join(f"✅ /{cmd.command} — {cmd.description}" for cmd in bot_commands)
+    else:
+        # Нет команд для текущего scope — запросим для групп
+        from telegram import BotCommandScopeAllGroupChats
+        bot_commands = await context.bot.get_my_commands(scope=BotCommandScopeAllGroupChats())
+        cmds_text = "\n".join(f"✅ /{cmd.command} — {cmd.description}" for cmd in bot_commands)
+
     text = (
         "🛠 <b>Debug информация</b>\n\n"
         f"<b>Chat ID:</b> <code>{chat.id}</code>\n"
@@ -71,7 +81,8 @@ async def debug_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         f"<b>Статус компонентов:</b> {status}\n"
         f"{db_txt}\n"
         f"{w_txt}\n"
-        f"{s_txt}"
+        f"{s_txt}\n\n"
+        f"<b>Команды:</b>\n{cmds_text}"
     )
 
     await message.reply_text(text, parse_mode="HTML")
