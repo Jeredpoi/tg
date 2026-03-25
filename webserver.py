@@ -75,6 +75,7 @@ async def api_gallery(request: web.Request) -> web.Response:
                 "closed":        bool(row["closed"]),
                 "media_type":    row["media_type"] if row["media_type"] else "photo",
                 "comment_count": row["comment_count"] or 0,
+                "created_at":    row["created_at"] or "",
             }
             for row in rows
         ]

@@ -9,6 +9,7 @@ import re
 import random
 import time
 import datetime
+import urllib.parse
 from telegram.ext import (
     ApplicationBuilder,
     ApplicationHandlerStop,
@@ -385,8 +386,12 @@ async def _on_bot_added(update, context):
 
 async def gallery_command(update, context):
     """Отвечает на сообщение с кнопкой открытия галереи в браузере."""
+    user = update.effective_user
+    chat = update.effective_chat
+    uname = urllib.parse.quote(user.username or user.first_name, safe='')
+    url = f"{WEBAPP_URL}?uid={user.id}&uname={uname}&chat_id={chat.id}"
     kb = InlineKeyboardMarkup([[
-        InlineKeyboardButton("🖼 Галерея", url=WEBAPP_URL)
+        InlineKeyboardButton("🖼 Галерея", url=url)
     ]])
     reply_to = update.message.reply_to_message
     if reply_to:

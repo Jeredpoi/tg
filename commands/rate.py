@@ -125,7 +125,7 @@ async def _close_rate_voting(context) -> None:
 
     try:
         gallery_btn = InlineKeyboardMarkup([[
-            InlineKeyboardButton("🖼 Галерея", url=WEBAPP_URL)
+            InlineKeyboardButton("🖼 Галерея", url=f"{WEBAPP_URL}?chat_id={chat_id}")
         ]])
         await context.bot.edit_message_caption(
             chat_id=chat_id,
@@ -261,7 +261,7 @@ async def rate_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
                 caption = f"{me} Анонимное {mw}" if photo_row["anonymous"] else f"{me} {mw.capitalize()} от {photo_row['author_name']}"
                 caption += f"\n\n🏁 Голосование завершено!\n⭐ Средняя оценка: {avg} ({votes} голос(ов))"
                 gallery_btn = InlineKeyboardMarkup([[
-                    InlineKeyboardButton("🖼 Галерея", url=WEBAPP_URL)
+                    InlineKeyboardButton("🖼 Галерея", url=f"{WEBAPP_URL}?chat_id={query.message.chat_id}")
                 ]])
                 await query.edit_message_caption(caption=caption, reply_markup=gallery_btn)
             except Exception:
