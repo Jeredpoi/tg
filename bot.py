@@ -386,7 +386,7 @@ async def _on_bot_added(update, context):
 async def gallery_command(update, context):
     """Отвечает на сообщение с кнопкой открытия галереи в браузере."""
     kb = InlineKeyboardMarkup([[
-        InlineKeyboardButton("🖼 Галерея", web_app=WebAppInfo(url=WEBAPP_URL))
+        InlineKeyboardButton("🖼 Галерея", url=WEBAPP_URL)
     ]])
     reply_to = update.message.reply_to_message
     if reply_to:
