@@ -449,6 +449,20 @@ def get_user_stats(user_id: int, chat_id: int) -> dict:
     }
 
 
+def clear_all_photos() -> None:
+    """Удаляет все фото/видео рейтинги, голоса и комментарии из БД."""
+    conn = get_connection()
+    try:
+        conn.executescript("""
+            DELETE FROM photo_votes;
+            DELETE FROM photo_comments;
+            DELETE FROM photo_ratings;
+        """)
+        conn.commit()
+    finally:
+        conn.close()
+
+
 def get_photo(photo_id: str):
     conn = get_connection()
     try:

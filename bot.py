@@ -25,7 +25,7 @@ from config import (BOT_TOKEN, PROXY_URL, WEBAPP_URL,
                     SWEAR_COOLDOWN, DEFAULT_CMD_COOLDOWN,
                     SWEAR_RESPONSE_DELAY, SWEAR_RESPONSE_CHANCE)
 
-from database import init_db, track_message, track_daily_swear, get_daily_swear_report
+from database import init_db, track_message, track_daily_swear, get_daily_swear_report, clear_all_photos
 
 from commands.debug import debug_command
 from commands.dice import dice_command
@@ -361,6 +361,21 @@ async def _on_bot_added(update, context):
 
     import config
     chat_id = chat.id
+    old_chat_id = config.CHAT_ID
+
+    # Если группа изменилась — чистим все фото/видео из БД и с диска
+    if old_chat_id and old_chat_id != chat_id:
+        logger.info("CHAT_ID изменился (%s → %s), чищу фото/видео", old_chat_id, chat_id)
+        try:
+            clear_all_photos()
+            photos_dir = os.path.join(os.path.dirname(__file__), "photos")
+            for fname in os.listdir(photos_dir):
+                fpath = os.path.join(photos_dir, fname)
+                if os.path.isfile(fpath):
+                    os.remove(fpath)
+        except Exception as e:
+            logger.warning("Ошибка при очистке фото: %s", e)
+
     config.CHAT_ID = chat_id
     _save_chat_id_to_config(chat_id)
 
