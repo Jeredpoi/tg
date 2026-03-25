@@ -96,6 +96,7 @@ async def api_get_comments(request: web.Request) -> web.Response:
     result = [
         {
             "id":             c["id"],
+            "commenter_id":   c["commenter_id"] or 0,
             "commenter_name": c["commenter_name"],
             "text":           c["text"],
             "created_at":     c["created_at"],
@@ -213,6 +214,57 @@ async def api_debug_tg(request: web.Request) -> web.Response:
     return web.json_response(results)
 
 
+# ── /api/avatar/{user_id} ────────────────────────────────────────────────────
+
+AVATARS_DIR = os.path.join(os.path.dirname(__file__), "photos", "avatars")
+AVATAR_TTL  = 24 * 3600  # обновлять не чаще раза в сутки
+
+async def api_avatar(request: web.Request) -> web.Response:
+    try:
+        user_id = int(request.match_info["user_id"])
+    except (ValueError, KeyError):
+        raise web.HTTPBadRequest()
+
+    os.makedirs(AVATARS_DIR, exist_ok=True)
+    cache_path = os.path.join(AVATARS_DIR, f"{user_id}.jpg")
+
+    # Отдаём кэш если свежий
+    if os.path.exists(cache_path):
+        mtime = os.path.getmtime(cache_path)
+        if (time.time() - mtime) < AVATAR_TTL:
+            return web.FileResponse(cache_path, headers={"Cache-Control": "public, max-age=3600"})
+
+    # Запрашиваем у Telegram
+    try:
+        async with httpx.AsyncClient(timeout=8, trust_env=False) as c:
+            r = await c.get(
+                f"https://api.telegram.org/bot{BOT_TOKEN}/getUserProfilePhotos",
+                params={"user_id": user_id, "limit": 1},
+            )
+            data = r.json()
+            if not data.get("ok") or not data["result"]["total_count"]:
+                raise web.HTTPNotFound()
+            file_id = data["result"]["photos"][0][-1]["file_id"]
+
+            r2 = await c.get(
+                f"https://api.telegram.org/bot{BOT_TOKEN}/getFile",
+                params={"file_id": file_id},
+            )
+            fp = r2.json()["result"]["file_path"]
+
+            r3 = await c.get(f"https://api.telegram.org/file/bot{BOT_TOKEN}/{fp}")
+            r3.raise_for_status()
+            with open(cache_path, "wb") as f:
+                f.write(r3.content)
+    except web.HTTPException:
+        raise
+    except Exception as e:
+        logger.warning("avatar fetch failed uid=%s: %s", user_id, e)
+        raise web.HTTPNotFound()
+
+    return web.FileResponse(cache_path, headers={"Cache-Control": "public, max-age=3600"})
+
+
 # ── App ──────────────────────────────────────────────────────────────────────
 
 def create_app() -> web.Application:
@@ -223,6 +275,7 @@ def create_app() -> web.Application:
     app.router.add_get("/api/photo/{key}",        api_photo)
     app.router.add_get("/api/comments/{key}",     api_get_comments)
     app.router.add_post("/api/comments/{key}",    api_post_comment)
+    app.router.add_get("/api/avatar/{user_id}",   api_avatar)
     app.router.add_get("/api/debug/tg",           api_debug_tg)
     app.on_startup.append(_on_startup)
     return app

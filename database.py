@@ -378,7 +378,7 @@ def get_comments(photo_id: str) -> list:
     conn = get_connection()
     try:
         return conn.execute(
-            "SELECT id, commenter_name, text, created_at FROM photo_comments "
+            "SELECT id, commenter_id, commenter_name, text, created_at FROM photo_comments "
             "WHERE photo_id = ? ORDER BY created_at ASC",
             (photo_id,)
         ).fetchall()
