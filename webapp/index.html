@@ -190,6 +190,18 @@
   }
   .score-num { font-size: 12px; font-weight: 700; color: #ffd60a; }
   .score-votes { font-size: 10px; color: rgba(255,255,255,0.55); }
+  .voting-badge {
+    position: absolute;
+    top: 8px; right: 8px;
+    background: rgba(58,142,230,0.85);
+    backdrop-filter: blur(4px);
+    color: #fff;
+    font-size: 10px;
+    font-weight: 700;
+    padding: 3px 7px;
+    border-radius: 8px;
+    letter-spacing: 0.03em;
+  }
   .photo-comments-badge {
     display: flex;
     align-items: center;
@@ -571,6 +583,7 @@ async function loadGallery() {
         ? `<div class="rank-badge">${MEDALS[i]}</div>`
         : `<div class="rank-badge rank-num">#${i+1}</div>`;
       const videoBadge = isVideo ? `<div class="video-badge">🎥</div>` : '';
+      const votingBadge = !p.closed ? `<div class="voting-badge">🗳 Голосование</div>` : '';
       const media = isVideo
         ? `<video class="photo-img" src="/api/photo/${p.key}" muted playsinline loop preload="metadata"
                   onerror="this.outerHTML='<div class=\\'photo-img-placeholder\\'>🎥</div>'"
@@ -582,11 +595,14 @@ async function loadGallery() {
         : '';
       return `
         <div class="photo-card" onclick="openModal(${i})" style="cursor:pointer">
-          ${rankEl}${videoBadge}${media}
+          ${rankEl}${videoBadge}${votingBadge}${media}
           <div class="photo-overlay">
             <div class="photo-overlay-row">
               <span class="photo-author-overlay">${escHtml(p.author)}</span>
-              <span class="photo-score-overlay">⭐ <span class="score-num">${p.avg_score.toFixed(1)}</span><span class="score-votes"> (${p.vote_count})</span></span>
+              ${p.vote_count > 0
+                ? `<span class="photo-score-overlay">⭐ <span class="score-num">${p.avg_score.toFixed(1)}</span><span class="score-votes"> (${p.vote_count})</span></span>`
+                : `<span class="photo-score-overlay"><span class="score-votes">нет голосов</span></span>`
+              }
               ${commentsEl}
             </div>
           </div>
@@ -695,7 +711,9 @@ function openModal(index) {
   modalKey = p.key;
 
   document.getElementById('modal-author').textContent = p.author;
-  document.getElementById('modal-score').textContent  = `⭐ ${p.avg_score.toFixed(1)} · ${p.vote_count} гол.`;
+  document.getElementById('modal-score').textContent  = p.vote_count > 0
+    ? `⭐ ${p.avg_score.toFixed(1)} · ${p.vote_count} гол.`
+    : (p.closed ? 'Голосов нет' : '🗳 Голосование идёт...');
 
   const counter = document.getElementById('modal-counter');
   counter.textContent = photosData.length > 1 ? `${index + 1} / ${photosData.length}` : '';

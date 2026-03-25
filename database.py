@@ -359,11 +359,11 @@ def get_gallery(limit: int = 100, chat_id: int = None, sort: str = "score", excl
         params = tuple(filter(lambda x: x is not None, [chat_id, limit]))
         return conn.execute(f"""
             SELECT pr.key, pr.photo_id, pr.author_name, pr.anonymous,
-                   pr.total_score, pr.vote_count, pr.media_type, pr.created_at,
+                   pr.total_score, pr.vote_count, pr.closed, pr.media_type, pr.created_at,
                    COUNT(pc.id) AS comment_count
             FROM photo_ratings pr
             LEFT JOIN photo_comments pc ON pc.photo_id = pr.photo_id
-            WHERE pr.vote_count > 0 AND pr.key IS NOT NULL {chat_filter} {anon_filter}
+            WHERE pr.key IS NOT NULL {chat_filter} {anon_filter}
             GROUP BY pr.photo_id
             ORDER BY {order}
             LIMIT ?

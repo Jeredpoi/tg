@@ -73,6 +73,7 @@ async def api_gallery(request: web.Request) -> web.Response:
                 "author":        "Анонимно" if row["anonymous"] else (row["author_name"] or "Аноним"),
                 "avg_score":     round(row["total_score"] / row["vote_count"], 2) if row["vote_count"] else 0,
                 "vote_count":    row["vote_count"],
+                "closed":        bool(row["closed"]),
                 "media_type":    row["media_type"] if row["media_type"] else "photo",
                 "comment_count": row["comment_count"] or 0,
             }
