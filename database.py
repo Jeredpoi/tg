@@ -104,6 +104,18 @@ def init_db() -> None:
             )
         """)
 
+        # ── daily_swears ─────────────────────────────────────────────────────────
+        c.execute("""
+            CREATE TABLE IF NOT EXISTS daily_swears (
+                chat_id     INTEGER,
+                date        TEXT,
+                user_id     INTEGER,
+                first_name  TEXT,
+                swear_count INTEGER DEFAULT 0,
+                PRIMARY KEY (chat_id, date, user_id)
+            )
+        """)
+
         # ── photo_comments ───────────────────────────────────────────────────────
         c.execute("""
             CREATE TABLE IF NOT EXISTS photo_comments (
@@ -165,6 +177,41 @@ def get_top_swears(chat_id: int = 0, limit: int = 10) -> list:
             "WHERE chat_id = ? ORDER BY swear_count DESC LIMIT ?",
             (chat_id, limit)
         ).fetchall()
+    finally:
+        conn.close()
+
+
+def track_daily_swear(chat_id: int, user_id: int, first_name: str, count: int) -> None:
+    """Добавляет маты пользователя в дневную статистику."""
+    today = str(_date.today())
+    try:
+        conn = get_connection()
+        try:
+            conn.execute("""
+                INSERT INTO daily_swears (chat_id, date, user_id, first_name, swear_count)
+                VALUES (?, ?, ?, ?, ?)
+                ON CONFLICT(chat_id, date, user_id) DO UPDATE SET
+                    first_name  = excluded.first_name,
+                    swear_count = swear_count + excluded.swear_count
+            """, (chat_id, today, user_id, first_name, count))
+            conn.commit()
+        finally:
+            conn.close()
+    except Exception as e:
+        logger.error("track_daily_swear FAILED: %s", e, exc_info=True)
+
+
+def get_daily_swear_report(chat_id: int, date: str) -> tuple:
+    """Возвращает (total, [(first_name, count), ...]) по матам за дату."""
+    conn = get_connection()
+    try:
+        rows = conn.execute(
+            "SELECT first_name, swear_count FROM daily_swears "
+            "WHERE chat_id = ? AND date = ? ORDER BY swear_count DESC",
+            (chat_id, date)
+        ).fetchall()
+        total = sum(r["swear_count"] for r in rows)
+        return total, [(r["first_name"], r["swear_count"]) for r in rows]
     finally:
         conn.close()
 

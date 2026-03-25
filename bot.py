@@ -8,6 +8,7 @@ import os
 import re
 import random
 import time
+import datetime
 from telegram.ext import (
     ApplicationBuilder,
     ApplicationHandlerStop,
@@ -24,7 +25,7 @@ from config import (BOT_TOKEN, PROXY_URL, WEBAPP_URL,
                     SWEAR_COOLDOWN, DEFAULT_CMD_COOLDOWN,
                     SWEAR_RESPONSE_DELAY, SWEAR_RESPONSE_CHANCE)
 
-from database import init_db, track_message
+from database import init_db, track_message, track_daily_swear, get_daily_swear_report
 
 from commands.debug import debug_command
 from commands.dice import dice_command
@@ -46,21 +47,49 @@ logger = logging.getLogger(__name__)
 
 # Точные слова (ё → е нормализуется при сравнении)
 SWEAR_WORDS = {
-    "блять", "блядь", "блядина", "сука", "сучка", "пизда", "пиздец",
-    "пиздёж", "хуй", "хуйня", "хуета", "ебать", "ёбаный", "ёб", "еби",
-    "ебал", "ебло", "ёблан", "ебанат", "мудак", "мудила",
-    "мудачок", "пидор", "пидорас", "пиздюк", "залупа", "шлюха",
-    "шлюшка", "бля", "нахуй", "похуй", "похуйку", "ёпт", "ёпта",
-    "заебал", "заебала", "заебали", "заебись", "заёб",
-    "пиздить", "пиздит", "отъебись", "отъебите",
-    "выёбываться", "выёбывается",
-    "долбоёб", "долбоёбина", "дебил", "дебилизм",
-    "ублюдок", "чмо", "уёбок", "уёбище",
+    # блядь и формы
+    "блять", "блядь", "блядина", "блядский", "блядство",
+    # сука и формы
+    "сука", "сучка", "сучара", "сученок", "сучий",
+    # пизда и формы
+    "пизда", "пиздец", "пиздёж", "пиздюк", "пиздатый", "пиздато",
+    "пиздить", "пиздит",
+    # хуй и формы
+    "хуй", "хуйня", "хуета", "нахуй", "похуй", "похуйку",
+    # ебать и формы
+    "ебать", "ёбаный", "ёб", "еби", "ебал", "ебло", "ёблан",
+    "ебанат", "заебал", "заебала", "заебали", "заебись", "заёб",
+    "отъебись", "отъебите", "выёбываться", "выёбывается",
+    # мудак и формы
+    "мудак", "мудила", "мудачок",
+    # пидор и формы
+    "пидор", "пидорас", "пидрила",
+    # залупа
+    "залупа",
+    # шлюха
+    "шлюха", "шлюшка",
+    # мягкие
+    "бля", "ёпт", "ёпта",
+    # долбоёб
+    "долбоёб", "долбоёбина",
+    # дебил
+    "дебил", "дебилизм", "дебильный",
+    # другие
+    "ублюдок", "чмо", "уёбок", "уёбище", "урод",
+    # говно и формы
+    "говно", "говнюк", "говняный", "говнистый", "говнище",
+    # жопа и формы
+    "жопа", "жопой", "жопу", "жопный",
+    # срань
+    "срань", "срать", "засрать", "насрать",
+    # мразь, тварь
+    "мразь", "мразота",
+    # ёбаный в рот (составные)
+    "еблан", "ёблан",
 }
 _SWEAR_NORMALIZED = {w.replace("ё", "е") for w in SWEAR_WORDS}
 
 # Корни — если корень встречается внутри любого слова, считается матом
-# Покрывают все словоформы: ебал/ебут/наебал/выебал и т.д.
 _SWEAR_ROOTS = [
     "еба", "еби", "ебё", "ебу", "ебл",   # ебать и все формы
     "ёба", "ёби", "ёбл",
@@ -71,6 +100,9 @@ _SWEAR_ROOTS = [
     "пидар", "пидор",                       # все формы
     "мудак", "мудил",                       # мудак, мудила...
     "дрочи",                                # дрочить...
+    "говн",                                 # говно, говнюк...
+    "жоп",                                  # жопа и формы
+    "сран", "срат",                         # срань, срать...
 ]
 _SWEAR_ROOTS = [r.replace("ё", "е") for r in _SWEAR_ROOTS]
 
@@ -282,6 +314,9 @@ async def _track_message(update, context):
 
     track_message(user.id, user.username, user.first_name, swear_count, chat_id)
 
+    if swear_count and update.effective_chat.type in ("group", "supergroup"):
+        track_daily_swear(chat_id, user.id, user.first_name or user.username or "Аноним", swear_count)
+
     if swear_count and update.effective_chat.type != "private":
         name = user.first_name or user.username or "дружок"
 
@@ -366,6 +401,41 @@ async def _private_command_guard(update, context):
         "/rate — отправить фото на оценку группы\n"
         "/help — список команд группы"
     )
+
+
+_MIDNIGHT_MSGS = [
+    "За сегодня вы насматерились <b>{total}</b> раз. Какие же вы мелочные 🤡",
+    "Итог дня: <b>{total}</b> матерных слов. Культурный чат, ничего не скажешь 👏",
+    "Папочка посчитал: <b>{total}</b> матов за день. Вы этим гордитесь? 😐",
+    "Дневной рекорд по матам: <b>{total}</b>. Молодцы, сосунки 🏆",
+    "Сегодня вы произнесли <b>{total}</b> матерных слов. Мама была бы в шоке 😳",
+]
+
+_MEDALS = ["🥇", "🥈", "🥉"]
+
+
+async def _midnight_swear_report(context) -> None:
+    """Job: в 00:00 МСК отправляет отчёт по матам за прошедший день."""
+    yesterday = (datetime.date.today() - datetime.timedelta(days=1)).isoformat()
+    for chat_id in list(_setup_chats):
+        total, rows = get_daily_swear_report(chat_id, yesterday)
+        if total == 0:
+            continue
+
+        header = random.choice(_MIDNIGHT_MSGS).format(total=total)
+        lines = [f"🤬 {header}\n"]
+        for i, (name, count) in enumerate(rows[:5]):
+            medal = _MEDALS[i] if i < 3 else f"{i + 1}."
+            lines.append(f"{medal} {name} — {count} раз(а)")
+
+        try:
+            await context.bot.send_message(
+                chat_id=chat_id,
+                text="\n".join(lines),
+                parse_mode="HTML",
+            )
+        except Exception as e:
+            logger.warning("midnight_swear_report chat=%s: %s", chat_id, e)
 
 
 def main():
@@ -492,6 +562,12 @@ def main():
         await app.bot.set_my_commands(group_commands, scope=BotCommandScopeAllGroupChats())
         await app.bot.set_my_commands(private_commands, scope=BotCommandScopeAllPrivateChats())
         logger.info("Команды обновлены для всех scope-ов")
+
+        # Ночной отчёт в 00:00 по Москве (UTC+3)
+        msk = datetime.timezone(datetime.timedelta(hours=3))
+        midnight = datetime.time(0, 0, 0, tzinfo=msk)
+        app.job_queue.run_daily(_midnight_swear_report, time=midnight, name="midnight_swear")
+        logger.info("Ночной отчёт запланирован на 00:00 МСК")
 
     async def on_shutdown(app):
         try:
