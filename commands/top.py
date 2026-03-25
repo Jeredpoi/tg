@@ -85,7 +85,7 @@ async def top_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         text = _build_swears_text(rows)
         keyboard = _get_keyboard("swears")
     elif query.data == "top_rating":
-        rows = get_gallery(limit=10, chat_id=chat_id)
+        rows = get_gallery(limit=10, chat_id=chat_id, exclude_anonymous=True)
         text = _build_rating_text(rows)
         keyboard = _get_keyboard("rating")
     else:

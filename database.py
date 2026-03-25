@@ -297,7 +297,7 @@ def add_vote(photo_id: str, voter_id: int, score: int) -> tuple[float, int]:
         conn.close()
 
 
-def get_gallery(limit: int = 100, chat_id: int = None, sort: str = "score") -> list:
+def get_gallery(limit: int = 100, chat_id: int = None, sort: str = "score", exclude_anonymous: bool = False) -> list:
     """Возвращает фото с кол-вом комментариев, отсортированные по выбранному критерию."""
     order_map = {
         "votes": "pr.vote_count DESC",
@@ -308,6 +308,7 @@ def get_gallery(limit: int = 100, chat_id: int = None, sort: str = "score") -> l
     conn = get_connection()
     try:
         chat_filter = "AND pr.chat_id = ?" if chat_id is not None else ""
+        anon_filter = "AND pr.anonymous = 0" if exclude_anonymous else ""
         params = tuple(filter(lambda x: x is not None, [chat_id, limit]))
         return conn.execute(f"""
             SELECT pr.key, pr.photo_id, pr.author_name, pr.anonymous,
@@ -315,7 +316,7 @@ def get_gallery(limit: int = 100, chat_id: int = None, sort: str = "score") -> l
                    COUNT(pc.id) AS comment_count
             FROM photo_ratings pr
             LEFT JOIN photo_comments pc ON pc.photo_id = pr.photo_id
-            WHERE pr.vote_count > 0 AND pr.key IS NOT NULL {chat_filter}
+            WHERE pr.vote_count > 0 AND pr.key IS NOT NULL {chat_filter} {anon_filter}
             GROUP BY pr.photo_id
             ORDER BY {order}
             LIMIT ?

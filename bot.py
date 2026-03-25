@@ -169,6 +169,11 @@ async def _rate_limit_guard(update, context):
     # Первый / разрешённый вызов — фиксируем время
     _cmd_last_used[key] = now
 
+    # Считаем команду как сообщение пользователя в группе
+    chat = update.effective_chat
+    if chat and chat.type in ("group", "supergroup"):
+        track_message(user.id, user.username, user.first_name, 0, chat.id)
+
 
 # ==============================================================================
 # Setup guard — бот требует /start и права на удаление сообщений
@@ -345,7 +350,7 @@ async def _on_bot_added(update, context):
 async def gallery_command(update, context):
     """Отвечает на сообщение с кнопкой открытия галереи в браузере."""
     kb = InlineKeyboardMarkup([[
-        InlineKeyboardButton("🖼 Галерея", url=WEBAPP_URL)
+        InlineKeyboardButton("🖼 Галерея", web_app=WebAppInfo(url=WEBAPP_URL))
     ]])
     reply_to = update.message.reply_to_message
     if reply_to:
