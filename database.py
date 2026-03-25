@@ -350,7 +350,7 @@ def get_gallery(limit: int = 100, chat_id: int = None, sort: str = "score", excl
         "votes": "pr.vote_count DESC",
         "date":  "pr.created_at DESC",
     }
-    order = order_map.get(sort, "CAST(pr.total_score AS FLOAT) / pr.vote_count DESC, pr.vote_count DESC")
+    order = order_map.get(sort, "CAST(pr.total_score AS FLOAT) / NULLIF(pr.vote_count, 0) DESC, pr.vote_count DESC")
 
     conn = get_connection()
     try:

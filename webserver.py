@@ -14,6 +14,9 @@ import time
 import httpx
 from aiohttp import web
 
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+logger = logging.getLogger(__name__)
+
 sys.path.insert(0, os.path.dirname(__file__))
 
 PHOTOS_DIR = os.path.join(os.path.dirname(__file__), "photos")
@@ -52,10 +55,6 @@ async def _on_startup(app: web.Application) -> None:
                 logger.info("Bot username: @%s", _bot_username)
     except Exception as e:
         logger.warning("Не удалось получить username бота: %s", e)
-
-logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
-logger = logging.getLogger(__name__)
-
 
 # ── /api/steam ──────────────────────────────────────────────────────────────
 
