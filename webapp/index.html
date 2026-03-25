@@ -674,6 +674,7 @@ function onTelegramAuth(user) {
 
 function logoutTg() {
   try { localStorage.removeItem('tg_auth'); } catch(e) {}
+  try { localStorage.removeItem('tg_url_auth'); } catch(e) {}
   myName = 'Аноним'; myId = 0; myAuthData = null;
   _showAuthBanner(false);
   _loadWidget();
@@ -688,15 +689,30 @@ function initAuth() {
     _showAuthBanner(true);
     return;
   }
-  // 2. URL-параметры от бота (?uid=...&uname=...)
+  // 2. URL-параметры от бота (?uid=...&uname=...) — сохраняем на 30 дней
   const urlUid   = _urlParams.get('uid');
   const urlUname = _urlParams.get('uname');
   if (urlUid && urlUname) {
     myId   = parseInt(urlUid);
     myName = urlUname.startsWith('@') ? urlUname : '@' + urlUname;
+    try { localStorage.setItem('tg_url_auth', JSON.stringify({id: myId, name: myName, ts: Date.now()})); } catch(e) {}
     _showAuthBanner(true);
     return;
   }
+  // 3. Сохранённая идентификация из прошлого перехода по ссылке
+  try {
+    const saved = localStorage.getItem('tg_url_auth');
+    if (saved) {
+      const auth = JSON.parse(saved);
+      if (Date.now() - auth.ts < 30 * 24 * 3600 * 1000) {
+        myId   = auth.id;
+        myName = auth.name;
+        _showAuthBanner(true);
+        return;
+      }
+      localStorage.removeItem('tg_url_auth');
+    }
+  } catch(e) {}
   // 4. Сохранённая авторизация через виджет
   try {
     const saved = localStorage.getItem('tg_auth');
