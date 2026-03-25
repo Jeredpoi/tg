@@ -26,7 +26,8 @@ from config import (BOT_TOKEN, PROXY_URL, WEBAPP_URL,
                     SWEAR_COOLDOWN, DEFAULT_CMD_COOLDOWN,
                     SWEAR_RESPONSE_DELAY, SWEAR_RESPONSE_CHANCE)
 
-from database import init_db, track_message, track_daily_swear, get_daily_swear_report
+from database import (init_db, track_message, track_daily_swear, get_daily_swear_report,
+                       get_best_photo_since, get_and_delete_old_photos)
 
 from commands.debug import debug_command
 from commands.dice import dice_command
@@ -447,6 +448,54 @@ async def _midnight_swear_report(context) -> None:
             logger.warning("midnight_swear_report chat=%s: %s", chat_id, e)
 
 
+async def _weekly_best_photo(context) -> None:
+    """Каждый понедельник в 00:00 МСК постит лучшее фото за неделю."""
+    import config as cfg
+    for chat_id in list(_setup_chats):
+        try:
+            row = get_best_photo_since(days=7, chat_id=chat_id)
+            if not row:
+                continue
+            votes = row["vote_count"]
+            avg   = round(row["avg_score"], 1)
+            author = "Аноним" if row["anonymous"] else (row["author_name"] or "Аноним")
+            photo_id  = row["photo_id"]
+            media_type = row["media_type"] or "photo"
+            uname_q   = urllib.parse.quote("Скаут", safe="")
+            gallery_url = f"{WEBAPP_URL}?chat_id={chat_id}&uname={uname_q}"
+            caption = (
+                f"🏆 <b>Лучшее фото недели!</b>\n\n"
+                f"👤 Автор: {author}\n"
+                f"⭐ Средняя оценка: {avg} ({votes} голос(ов))"
+            )
+            kb = InlineKeyboardMarkup([[InlineKeyboardButton("🖼 Галерея", url=gallery_url)]])
+            if media_type == "video":
+                await context.bot.send_video(chat_id=chat_id, video=photo_id, caption=caption, parse_mode="HTML", reply_markup=kb)
+            else:
+                await context.bot.send_photo(chat_id=chat_id, photo=photo_id, caption=caption, parse_mode="HTML", reply_markup=kb)
+            logger.info("weekly_best_photo: отправлено в чат %s", chat_id)
+        except Exception as e:
+            logger.warning("weekly_best_photo chat=%s: %s", chat_id, e)
+
+
+async def _cleanup_old_photos(context) -> None:
+    """Ежедневно в 03:00 МСК удаляет фото/видео старше 30 дней с диска и из БД."""
+    photos_dir = os.path.join(os.path.dirname(__file__), "photos")
+    deleted_count = 0
+    try:
+        old = get_and_delete_old_photos(days=30)
+        for key, media_type in old:
+            ext = "mp4" if media_type == "video" else "jpg"
+            fpath = os.path.join(photos_dir, f"{key}.{ext}")
+            if os.path.exists(fpath):
+                os.remove(fpath)
+                deleted_count += 1
+        if deleted_count:
+            logger.info("cleanup_old_photos: удалено %d файлов", deleted_count)
+    except Exception as e:
+        logger.error("cleanup_old_photos: %s", e)
+
+
 def main():
     init_db()
 
@@ -573,11 +622,26 @@ def main():
         await app.bot.set_my_commands(private_commands, scope=BotCommandScopeAllPrivateChats())
         logger.info("Команды обновлены для всех scope-ов")
 
-        # Ночной отчёт в 00:00 по Москве (UTC+3)
         msk = datetime.timezone(datetime.timedelta(hours=3))
+
+        # Ночной отчёт о матах в 00:00 МСК
         midnight = datetime.time(0, 0, 0, tzinfo=msk)
         app.job_queue.run_daily(_midnight_swear_report, time=midnight, name="midnight_swear")
         logger.info("Ночной отчёт запланирован на 00:00 МСК")
+
+        # Лучшее фото недели — каждый понедельник 00:00 МСК
+        app.job_queue.run_daily(
+            _weekly_best_photo,
+            time=midnight,
+            days=(0,),          # 0 = понедельник
+            name="weekly_best_photo",
+        )
+        logger.info("Еженедельное лучшее фото запланировано на пн 00:00 МСК")
+
+        # Авточистка файлов старше 30 дней — ежедневно в 03:00 МСК
+        three_am = datetime.time(3, 0, 0, tzinfo=msk)
+        app.job_queue.run_daily(_cleanup_old_photos, time=three_am, name="cleanup_old_photos")
+        logger.info("Авточистка старых фото запланирована на 03:00 МСК")
 
     async def on_shutdown(app):
         try:

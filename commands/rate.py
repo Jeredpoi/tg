@@ -136,6 +136,24 @@ async def _close_rate_voting(context) -> None:
     except Exception as e:
         logger.error("Не удалось закрыть голосование chat=%s msg=%s: %s", chat_id, message_id, e)
 
+    # Уведомление автору в личку
+    author_id = photo_row.get("author_id")
+    if author_id and not photo_row["anonymous"]:
+        try:
+            result_text = f"⭐ {avg} из 10 ({votes} голос(ов))" if votes > 0 else "Голосов не было 😔"
+            await context.bot.send_message(
+                chat_id=author_id,
+                text=(
+                    f"🏁 <b>Голосование завершено!</b>\n\n"
+                    f"Твоё {mw} набрало: {result_text}\n\n"
+                    f"<a href=\"{WEBAPP_URL}?chat_id={chat_id}\">👀 Открыть галерею</a>"
+                ),
+                parse_mode="HTML",
+                disable_web_page_preview=True,
+            )
+        except Exception:
+            pass  # пользователь не начал диалог с ботом — молча игнорируем
+
 
 async def rate_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query

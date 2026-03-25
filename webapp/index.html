@@ -338,6 +338,21 @@
     display: flex; align-items: center; justify-content: center;
     backdrop-filter: blur(4px);
   }
+  .delete-photo-btn {
+    margin: 0 16px 4px;
+    padding: 9px 0;
+    width: calc(100% - 32px);
+    background: rgba(255,59,48,0.12);
+    border: 1.5px solid rgba(255,59,48,0.3);
+    border-radius: 12px;
+    color: #ff3b30;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background .2s;
+    display: none;
+  }
+  .delete-photo-btn:hover { background: rgba(255,59,48,0.22); }
   .comments-section { padding: 14px 16px; }
   .comments-title {
     font-size: 13px;
@@ -502,6 +517,7 @@
         <span class="modal-score"  id="modal-score"></span>
       </div>
     </div>
+    <button class="delete-photo-btn" id="delete-photo-btn" onclick="deleteMyPhoto()">🗑 Удалить своё фото</button>
     <div class="comments-section">
       <div class="comments-title">Комментарии</div>
       <div class="auth-banner" id="auth-banner">
@@ -773,6 +789,10 @@ function openModal(index) {
     wrap.innerHTML = `<img class="modal-media" src="/api/photo/${p.key}" alt="">`;
   }
 
+  // Показываем кнопку удаления только автору (не для анонимных фото)
+  const deleteBtn = document.getElementById('delete-photo-btn');
+  deleteBtn.style.display = (myId && p.author_id && myId === p.author_id) ? 'block' : 'none';
+
   document.getElementById('comment-input').value = '';
   document.getElementById('modal-overlay').classList.add('open');
   document.body.style.overflow = 'hidden';
@@ -862,6 +882,25 @@ function formatTime(isoStr) {
   if (diff < 3600) return `${Math.floor(diff/60)} мин. назад`;
   if (diff < 86400) return `${Math.floor(diff/3600)} ч. назад`;
   return d.toLocaleDateString('ru', {day:'numeric', month:'short'});
+}
+
+async function deleteMyPhoto() {
+  if (!modalKey || !myId) return;
+  if (!confirm('Удалить своё фото из галереи? Это действие необратимо.')) return;
+  const btn = document.getElementById('delete-photo-btn');
+  btn.disabled = true;
+  btn.textContent = 'Удаляю…';
+  try {
+    const r = await fetch(`/api/photo/${modalKey}?uid=${myId}`, { method: 'DELETE' });
+    if (!r.ok) throw new Error('forbidden');
+    closeModal();
+    galleryLoaded = false;
+    loadGallery();
+  } catch(e) {
+    btn.textContent = '🗑 Удалить своё фото';
+    btn.disabled = false;
+    alert('Не удалось удалить. Попробуй ещё раз.');
+  }
 }
 
 async function submitComment() {

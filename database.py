@@ -358,7 +358,7 @@ def get_gallery(limit: int = 100, chat_id: int = None, sort: str = "score", excl
         anon_filter = "AND pr.anonymous = 0" if exclude_anonymous else ""
         params = tuple(filter(lambda x: x is not None, [chat_id, limit]))
         return conn.execute(f"""
-            SELECT pr.key, pr.photo_id, pr.author_name, pr.anonymous,
+            SELECT pr.key, pr.photo_id, pr.author_id, pr.author_name, pr.anonymous,
                    pr.total_score, pr.vote_count, pr.closed, pr.media_type, pr.created_at,
                    COUNT(pc.id) AS comment_count
             FROM photo_ratings pr
@@ -469,5 +469,82 @@ def get_photo(photo_id: str):
         return conn.execute(
             "SELECT * FROM photo_ratings WHERE photo_id = ?", (photo_id,)
         ).fetchone()
+    finally:
+        conn.close()
+
+
+def delete_photo_by_key(key: str, requester_id: int) -> tuple[bool, str, str]:
+    """
+    Удаляет фото если requester_id == author_id.
+    Возвращает (success, photo_id, media_type).
+    """
+    conn = get_connection()
+    try:
+        row = conn.execute(
+            "SELECT photo_id, author_id, media_type FROM photo_ratings WHERE key = ?", (key,)
+        ).fetchone()
+        if not row:
+            return False, "", ""
+        if row["author_id"] != requester_id:
+            return False, "", ""
+        photo_id = row["photo_id"]
+        media_type = row["media_type"] or "photo"
+        conn.execute("DELETE FROM photo_votes    WHERE photo_id = ?", (photo_id,))
+        conn.execute("DELETE FROM photo_comments WHERE photo_id = ?", (photo_id,))
+        conn.execute("DELETE FROM photo_ratings  WHERE photo_id = ?", (photo_id,))
+        conn.commit()
+        return True, photo_id, media_type
+    finally:
+        conn.close()
+
+
+def get_best_photo_since(days: int, chat_id: int = None):
+    """Возвращает лучшее фото за последние N дней (по средней оценке, мин. 1 голос)."""
+    conn = get_connection()
+    try:
+        chat_filter = "AND pr.chat_id = ?" if chat_id is not None else ""
+        params = [days]
+        if chat_id is not None:
+            params.insert(0, chat_id)
+        return conn.execute(f"""
+            SELECT pr.*, CAST(pr.total_score AS FLOAT) / pr.vote_count AS avg_score
+            FROM photo_ratings pr
+            WHERE pr.key IS NOT NULL
+              AND pr.vote_count >= 1
+              AND pr.created_at >= datetime('now', '-' || ? || ' days')
+              {chat_filter}
+            ORDER BY avg_score DESC, pr.vote_count DESC
+            LIMIT 1
+        """, params).fetchone()
+    finally:
+        conn.close()
+
+
+def get_and_delete_old_photos(days: int) -> list:
+    """
+    Возвращает и удаляет из БД фото старше N дней.
+    Возвращает список (key, media_type) для удаления с диска.
+    """
+    conn = get_connection()
+    try:
+        rows = conn.execute(
+            "SELECT key, media_type FROM photo_ratings "
+            "WHERE created_at IS NOT NULL AND created_at < datetime('now', '-' || ? || ' days')",
+            (days,)
+        ).fetchall()
+        if not rows:
+            return []
+        keys = [r["key"] for r in rows]
+        photo_ids = conn.execute(
+            f"SELECT photo_id FROM photo_ratings WHERE key IN ({','.join('?' * len(keys))})",
+            keys
+        ).fetchall()
+        ids = [r["photo_id"] for r in photo_ids]
+        if ids:
+            conn.execute(f"DELETE FROM photo_votes    WHERE photo_id IN ({','.join('?' * len(ids))})", ids)
+            conn.execute(f"DELETE FROM photo_comments WHERE photo_id IN ({','.join('?' * len(ids))})", ids)
+            conn.execute(f"DELETE FROM photo_ratings  WHERE photo_id IN ({','.join('?' * len(ids))})", ids)
+        conn.commit()
+        return [(r["key"], r["media_type"] or "photo") for r in rows]
     finally:
         conn.close()

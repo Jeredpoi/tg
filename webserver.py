@@ -22,7 +22,7 @@ sys.path.insert(0, os.path.dirname(__file__))
 PHOTOS_DIR = os.path.join(os.path.dirname(__file__), "photos")
 
 from config import BOT_TOKEN
-from database import init_db, get_gallery, get_photo_by_key, get_comments, add_comment
+from database import init_db, get_gallery, get_photo_by_key, get_comments, add_comment, delete_photo_by_key
 
 _bot_username: str = ""
 
@@ -76,6 +76,7 @@ async def api_gallery(request: web.Request) -> web.Response:
                 "media_type":    row["media_type"] if row["media_type"] else "photo",
                 "comment_count": row["comment_count"] or 0,
                 "created_at":    row["created_at"] or "",
+                "author_id":     row["author_id"] if not row["anonymous"] else 0,
             }
             for row in rows
         ]
@@ -104,6 +105,31 @@ async def api_get_comments(request: web.Request) -> web.Response:
         for c in comments
     ]
     return web.json_response({"comments": result})
+
+
+async def api_delete_photo(request: web.Request) -> web.Response:
+    key = request.match_info["key"]
+    try:
+        uid = int(request.rel_url.query.get("uid", "0"))
+    except ValueError:
+        raise web.HTTPBadRequest()
+    if not uid:
+        raise web.HTTPForbidden()
+
+    ok, _, media_type = delete_photo_by_key(key, uid)
+    if not ok:
+        raise web.HTTPForbidden()
+
+    # Удаляем файл с диска
+    ext = "mp4" if media_type == "video" else "jpg"
+    fpath = os.path.join(PHOTOS_DIR, f"{key}.{ext}")
+    try:
+        if os.path.exists(fpath):
+            os.remove(fpath)
+    except OSError as e:
+        logger.warning("api_delete_photo: не удалось удалить файл %s: %s", fpath, e)
+
+    return web.json_response({"ok": True})
 
 
 async def api_config(request: web.Request) -> web.Response:
@@ -286,6 +312,7 @@ def create_app() -> web.Application:
     app.router.add_get("/api/photo/{key}",        api_photo)
     app.router.add_get("/api/comments/{key}",     api_get_comments)
     app.router.add_post("/api/comments/{key}",    api_post_comment)
+    app.router.add_delete("/api/photo/{key}",     api_delete_photo)
     app.router.add_get("/api/avatar/{user_id}",   api_avatar)
     app.router.add_get("/api/debug/tg",           api_debug_tg)
     app.on_startup.append(_on_startup)
