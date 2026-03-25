@@ -242,24 +242,35 @@ async def api_avatar(request: web.Request) -> web.Response:
                 params={"user_id": user_id, "limit": 1},
             )
             data = r.json()
-            if not data.get("ok") or not data["result"]["total_count"]:
+            result = data.get("result") or {}
+            if not data.get("ok") or not result.get("total_count"):
                 raise web.HTTPNotFound()
-            file_id = data["result"]["photos"][0][-1]["file_id"]
+            photos = result.get("photos") or []
+            if not photos:
+                raise web.HTTPNotFound()
+            file_id = photos[0][-1]["file_id"]
 
             r2 = await c.get(
                 f"https://api.telegram.org/bot{BOT_TOKEN}/getFile",
                 params={"file_id": file_id},
             )
-            fp = r2.json()["result"]["file_path"]
+            fp = (r2.json().get("result") or {}).get("file_path")
+            if not fp:
+                raise web.HTTPNotFound()
 
             r3 = await c.get(f"https://api.telegram.org/file/bot{BOT_TOKEN}/{fp}")
             r3.raise_for_status()
             with open(cache_path, "wb") as f:
                 f.write(r3.content)
     except web.HTTPException:
+        # Если есть хоть stale-кэш — отдаём его вместо 404
+        if os.path.exists(cache_path):
+            return web.FileResponse(cache_path, headers={"Cache-Control": "no-cache"})
         raise
     except Exception as e:
         logger.warning("avatar fetch failed uid=%s: %s", user_id, e)
+        if os.path.exists(cache_path):
+            return web.FileResponse(cache_path, headers={"Cache-Control": "no-cache"})
         raise web.HTTPNotFound()
 
     return web.FileResponse(cache_path, headers={"Cache-Control": "public, max-age=3600"})

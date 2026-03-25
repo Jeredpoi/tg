@@ -345,9 +345,12 @@ def _save_chat_id_to_config(new_id: int) -> None:
     config_path = os.path.join(os.path.dirname(__file__), "config.py")
     with open(config_path, "r", encoding="utf-8") as f:
         content = f.read()
-    content = re.sub(r"^CHAT_ID\s*=.*$", f"CHAT_ID = {new_id}", content, flags=re.MULTILINE)
+    new_content, count = re.subn(r"^CHAT_ID\s*=.*$", f"CHAT_ID = {new_id}", content, flags=re.MULTILINE)
+    if count == 0:
+        logger.warning("_save_chat_id_to_config: строка CHAT_ID не найдена в config.py — ID не сохранится после перезапуска")
+        return
     with open(config_path, "w", encoding="utf-8") as f:
-        f.write(content)
+        f.write(new_content)
 
 
 async def _on_bot_added(update, context):

@@ -357,11 +357,18 @@
     font-size: 13px; font-weight: 700; color: #fff;
     flex-shrink: 0;
     overflow: hidden;
+    position: relative;
   }
   .comment-avatar img {
+    position: absolute;
+    inset: 0;
     width: 100%; height: 100%;
     object-fit: cover;
     border-radius: 50%;
+  }
+  .avatar-letter {
+    position: relative;
+    z-index: 0;
   }
   .comment-body { flex: 1; min-width: 0; }
   .comment-header { display: flex; align-items: baseline; gap: 8px; margin-bottom: 2px; }
@@ -823,18 +830,21 @@ function renderComments(comments) {
     return;
   }
   list.innerHTML = comments.map(c => {
-    const initial = (c.commenter_name || '?')[0].toUpperCase();
+    const name = c.commenter_name || 'Аноним';
+    const initial = name[0].toUpperCase();
     const time = formatTime(c.created_at);
     const avatarContent = c.commenter_id
-      ? `<img src="/api/avatar/${c.commenter_id}" alt="${escHtml(initial)}"
-              onerror="this.outerHTML='${escHtml(initial)}'">`
+      ? `<span class="avatar-letter">${escHtml(initial)}</span>` +
+        `<img src="/api/avatar/${c.commenter_id}" alt="${escHtml(initial)}"
+              onload="this.previousElementSibling.style.display='none'"
+              onerror="this.remove()">`
       : escHtml(initial);
     return `
       <div class="comment-item">
         <div class="comment-avatar">${avatarContent}</div>
         <div class="comment-body">
           <div class="comment-header">
-            <span class="comment-name">${escHtml(c.commenter_name)}</span>
+            <span class="comment-name">${escHtml(name)}</span>
             <span class="comment-time">${time}</span>
           </div>
           <div class="comment-text">${escHtml(c.text)}</div>

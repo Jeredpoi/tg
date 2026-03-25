@@ -237,7 +237,11 @@ async def rate_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     # ── Голосование ───────────────────────────────────────────────────────
     elif data.startswith("rate_"):
         parts = data.rsplit("_", 1)
-        score = int(parts[1])
+        try:
+            score = int(parts[1])
+        except (IndexError, ValueError):
+            await query.answer("❌ Некорректные данные.", show_alert=True)
+            return
         key = parts[0][5:]  # убираем "rate_"
 
         # Ищем по ключу из БД
