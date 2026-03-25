@@ -389,6 +389,30 @@
   }
   .comment-send:disabled { opacity: .4; cursor: default; }
 
+  /* ── Auth banner ── */
+  .auth-banner {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 10px 0 14px;
+    border-bottom: 1px solid rgba(255,255,255,0.07);
+    margin-bottom: 14px;
+    min-height: 36px;
+  }
+  .auth-info { font-size: 13px; color: var(--tg-theme-hint-color, #6e6e73); flex: 1; min-width: 0; }
+  .auth-name { font-weight: 600; color: var(--tg-theme-text-color, #f0f0f0); }
+  .logout-btn {
+    background: none;
+    border: 1px solid rgba(255,255,255,0.15);
+    color: var(--tg-theme-hint-color, #6e6e73);
+    font-size: 12px;
+    padding: 5px 12px;
+    border-radius: 10px;
+    cursor: pointer;
+    flex-shrink: 0;
+  }
+
   /* ── Loader & empty ── */
   .loader {
     display: flex;
@@ -455,6 +479,11 @@
     </div>
     <div class="comments-section">
       <div class="comments-title">Комментарии</div>
+      <div class="auth-banner" id="auth-banner">
+        <span class="auth-info" id="auth-info-text">…</span>
+        <div id="login-widget-container"></div>
+        <button class="logout-btn" id="logout-btn" onclick="logoutTg()" style="display:none">Выйти</button>
+      </div>
       <div class="comments-list" id="comments-list"></div>
       <div class="comment-form">
         <textarea class="comment-input" id="comment-input" rows="1"
@@ -572,11 +601,92 @@ async function loadGallery() {
 // ── Modal ──
 let modalKey = null;
 
-const tgUser = tg.initDataUnsafe?.user;
-const myName = tgUser
-  ? (tgUser.username ? '@' + tgUser.username : tgUser.first_name)
-  : 'Аноним';
-const myId = tgUser?.id || 0;
+// ── Auth ──
+let myName     = 'Аноним';
+let myId       = 0;
+let myAuthData = null;   // данные Telegram Login Widget (с hash для верификации)
+
+function _showAuthBanner(loggedIn) {
+  const info      = document.getElementById('auth-info-text');
+  const container = document.getElementById('login-widget-container');
+  const logoutBtn = document.getElementById('logout-btn');
+  if (loggedIn) {
+    info.innerHTML = `Вы: <span class="auth-name">${escHtml(myName)}</span>`;
+    container.innerHTML = '';
+    container.style.display = 'none';
+    logoutBtn.style.display = '';
+  } else {
+    info.textContent = 'Войдите чтобы комментировать от своего имени';
+    container.style.display = '';
+    logoutBtn.style.display = 'none';
+  }
+}
+
+async function _loadWidget() {
+  try {
+    const r = await fetch('/api/config');
+    const data = await r.json();
+    if (!data.bot_username) {
+      document.getElementById('auth-info-text').textContent = 'Аноним';
+      return;
+    }
+    const container = document.getElementById('login-widget-container');
+    const s = document.createElement('script');
+    s.src = 'https://telegram.org/js/telegram-widget.js?22';
+    s.setAttribute('data-telegram-login', data.bot_username);
+    s.setAttribute('data-size', 'small');
+    s.setAttribute('data-onauth', 'onTelegramAuth(user)');
+    s.setAttribute('data-request-access', 'write');
+    s.async = true;
+    container.appendChild(s);
+  } catch(e) {
+    document.getElementById('auth-info-text').textContent = 'Аноним';
+  }
+}
+
+function onTelegramAuth(user) {
+  try { localStorage.setItem('tg_auth', JSON.stringify(user)); } catch(e) {}
+  myId       = user.id;
+  myName     = user.username ? '@' + user.username : user.first_name;
+  myAuthData = user;
+  _showAuthBanner(true);
+}
+
+function logoutTg() {
+  try { localStorage.removeItem('tg_auth'); } catch(e) {}
+  myName = 'Аноним'; myId = 0; myAuthData = null;
+  _showAuthBanner(false);
+  _loadWidget();
+}
+
+function initAuth() {
+  // 1. Telegram WebApp (открыто через web_app= кнопку в личке)
+  const tgUser = tg.initDataUnsafe?.user;
+  if (tgUser) {
+    myId   = tgUser.id;
+    myName = tgUser.username ? '@' + tgUser.username : tgUser.first_name;
+    _showAuthBanner(true);
+    return;
+  }
+  // 2. Сохранённая авторизация через виджет
+  try {
+    const saved = localStorage.getItem('tg_auth');
+    if (saved) {
+      const auth = JSON.parse(saved);
+      if (Date.now() / 1000 - auth.auth_date < 7 * 86400) {
+        myId       = auth.id;
+        myName     = auth.username ? '@' + auth.username : auth.first_name;
+        myAuthData = auth;
+        _showAuthBanner(true);
+        return;
+      }
+      localStorage.removeItem('tg_auth');
+    }
+  } catch(e) {}
+  // 3. Показываем виджет
+  _showAuthBanner(false);
+  _loadWidget();
+}
 
 function openModal(index) {
   const p = photosData[index];
@@ -698,7 +808,7 @@ async function submitComment() {
     await fetch(`/api/comments/${modalKey}`, {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({ text, commenter_name: myName, commenter_id: myId }),
+      body: JSON.stringify({ text, commenter_name: myName, commenter_id: myId, tg_auth: myAuthData }),
     });
     input.value = '';
     input.style.height = '';
@@ -719,6 +829,7 @@ function escHtml(s) {
 }
 
 restoreTab();
+initAuth();
 </script>
 </body>
 </html>

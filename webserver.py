@@ -4,9 +4,12 @@
 # ==============================================================================
 
 import asyncio
+import hashlib
+import hmac
 import logging
 import os
 import sys
+import time
 
 import httpx
 from aiohttp import web
@@ -17,6 +20,38 @@ PHOTOS_DIR = os.path.join(os.path.dirname(__file__), "photos")
 
 from config import BOT_TOKEN
 from database import init_db, get_gallery, get_photo_by_key, get_comments, add_comment
+
+_bot_username: str = ""
+
+
+def _verify_telegram_auth(data: dict) -> bool:
+    """Проверяет подпись данных Telegram Login Widget."""
+    hash_ = data.get("hash", "")
+    if not hash_:
+        return False
+    try:
+        if time.time() - int(data.get("auth_date", 0)) > 7 * 86400:
+            return False
+    except (ValueError, TypeError):
+        return False
+    check = {k: v for k, v in data.items() if k != "hash"}
+    check_str = "\n".join(f"{k}={v}" for k, v in sorted(check.items()))
+    secret = hashlib.sha256(BOT_TOKEN.encode()).digest()
+    computed = hmac.new(secret, check_str.encode(), hashlib.sha256).hexdigest()
+    return hmac.compare_digest(computed, hash_)
+
+
+async def _on_startup(app: web.Application) -> None:
+    global _bot_username
+    try:
+        async with httpx.AsyncClient(timeout=5, trust_env=False) as c:
+            r = await c.get(f"https://api.telegram.org/bot{BOT_TOKEN}/getMe")
+            data = r.json()
+            if data.get("ok"):
+                _bot_username = data["result"]["username"]
+                logger.info("Bot username: @%s", _bot_username)
+    except Exception as e:
+        logger.warning("Не удалось получить username бота: %s", e)
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
@@ -69,6 +104,10 @@ async def api_get_comments(request: web.Request) -> web.Response:
     return web.json_response({"comments": result})
 
 
+async def api_config(request: web.Request) -> web.Response:
+    return web.json_response({"bot_username": _bot_username})
+
+
 async def api_post_comment(request: web.Request) -> web.Response:
     key = request.match_info["key"]
     row = get_photo_by_key(key)
@@ -77,12 +116,21 @@ async def api_post_comment(request: web.Request) -> web.Response:
     try:
         body = await request.json()
         text = str(body.get("text", "")).strip()
-        commenter_name = str(body.get("commenter_name", "Аноним")).strip() or "Аноним"
-        commenter_id = int(body.get("commenter_id", 0))
+        tg_auth = body.get("tg_auth")
     except Exception:
         raise web.HTTPBadRequest()
     if not text or len(text) > 500:
         raise web.HTTPBadRequest()
+
+    # Если пришли верифицированные данные Telegram — используем реальное имя
+    if tg_auth and isinstance(tg_auth, dict) and _verify_telegram_auth(tg_auth):
+        uname = tg_auth.get("username", "")
+        commenter_name = f"@{uname}" if uname else tg_auth.get("first_name", "Аноним")
+        commenter_id = int(tg_auth.get("id", 0))
+    else:
+        commenter_name = str(body.get("commenter_name", "Аноним")).strip() or "Аноним"
+        commenter_id = int(body.get("commenter_id", 0))
+
     add_comment(row["photo_id"], commenter_id, commenter_name, text)
     return web.json_response({"ok": True})
 
@@ -169,11 +217,13 @@ async def api_debug_tg(request: web.Request) -> web.Response:
 def create_app() -> web.Application:
     init_db()
     app = web.Application()
+    app.router.add_get("/api/config",             api_config)
     app.router.add_get("/api/gallery",            api_gallery)
     app.router.add_get("/api/photo/{key}",        api_photo)
     app.router.add_get("/api/comments/{key}",     api_get_comments)
     app.router.add_post("/api/comments/{key}",    api_post_comment)
     app.router.add_get("/api/debug/tg",           api_debug_tg)
+    app.on_startup.append(_on_startup)
     return app
 
 
