@@ -37,6 +37,7 @@ from commands.help import help_command
 from commands.weather import weather_command, weather_callback
 from commands.stats import stats_command
 from commands.anon import anon_command, handle_anon_cancel, handle_anon_message
+from commands.clearmedia import clearmedia_command
 
 
 logging.basicConfig(
@@ -504,7 +505,8 @@ def main():
     app.add_handler(CommandHandler("anon",   anon_command,   filters=filters.ChatType.GROUPS))
     app.add_handler(CommandHandler("cancel", handle_anon_cancel, filters=filters.ChatType.PRIVATE))
 
-    app.add_handler(CommandHandler("gallery", gallery_command, filters=filters.ChatType.GROUPS))
+    app.add_handler(CommandHandler("gallery",    gallery_command,    filters=filters.ChatType.GROUPS))
+    app.add_handler(CommandHandler("clearmedia", clearmedia_command))
 
     # Ловим любые другие команды в личке и вежливо отказываем
     app.add_handler(MessageHandler(
