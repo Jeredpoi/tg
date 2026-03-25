@@ -139,9 +139,16 @@ async def roast_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
             target = f"@{reply_user.username}" if reply_user.username else reply_user.first_name
 
     if not target:
-        await update.message.reply_text(
+        msg = await update.message.reply_text(
             "ℹ️ Укажи цель!\nПример: /roast @username или ответь на чьё-нибудь сообщение."
         )
+        async def _delete(ctx):
+            try:
+                await ctx.bot.delete_message(msg.chat_id, msg.message_id)
+                await update.message.delete()
+            except Exception:
+                pass
+        context.job_queue.run_once(_delete, 20)
         return
 
     phrase = random.choice(ROAST_PHRASES).format(user=target)
