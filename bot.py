@@ -424,26 +424,33 @@ _MIDNIGHT_MSGS = [
 _MEDALS = ["🥇", "🥈", "🥉"]
 
 
+_MIDNIGHT_ZERO_MSGS = [
+    "За сегодня никто не матерился. Гордитесь собой, сосунки 🥲",
+    "Чистый день — ни одного мата. Это было неожиданно 😶",
+    "Сегодня культурные. Завтра всё равно сорвётесь 🫡",
+]
+
 async def _midnight_swear_report(context) -> None:
     """Job: в 00:00 МСК отправляет отчёт по матам за прошедший день."""
     yesterday = (datetime.date.today() - datetime.timedelta(days=1)).isoformat()
-    for chat_id in list(_setup_chats):
-        total, rows = get_daily_swear_report(chat_id, yesterday)
-        if total == 0:
-            continue
-
-        header = random.choice(_MIDNIGHT_MSGS).format(total=total)
-        lines = [f"🤬 {header}\n"]
-        for i, (name, count) in enumerate(rows[:5]):
-            medal = _MEDALS[i] if i < 3 else f"{i + 1}."
-            lines.append(f"{medal} {name} — {count} раз(а)")
-
+    # Отправляем во все известные чаты + CHAT_ID если задан
+    import config as cfg
+    target_chats = set(_setup_chats)
+    if cfg.CHAT_ID:
+        target_chats.add(cfg.CHAT_ID)
+    for chat_id in target_chats:
         try:
-            await context.bot.send_message(
-                chat_id=chat_id,
-                text="\n".join(lines),
-                parse_mode="HTML",
-            )
+            total, rows = get_daily_swear_report(chat_id, yesterday)
+            if total == 0:
+                text = random.choice(_MIDNIGHT_ZERO_MSGS)
+            else:
+                header = random.choice(_MIDNIGHT_MSGS).format(total=total)
+                lines = [f"🤬 {header}\n"]
+                for i, (name, count) in enumerate(rows[:5]):
+                    medal = _MEDALS[i] if i < 3 else f"{i + 1}."
+                    lines.append(f"{medal} {name} — {count} раз(а)")
+                text = "\n".join(lines)
+            await context.bot.send_message(chat_id=chat_id, text=text, parse_mode="HTML")
         except Exception as e:
             logger.warning("midnight_swear_report chat=%s: %s", chat_id, e)
 

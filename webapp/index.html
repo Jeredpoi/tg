@@ -699,6 +699,14 @@ function onTelegramAuth(user) {
   myName     = user.username ? '@' + user.username : user.first_name;
   myAuthData = user;
   _showAuthBanner(true);
+  _updateDeleteBtn();
+}
+
+function _updateDeleteBtn() {
+  const btn = document.getElementById('delete-photo-btn');
+  if (!btn || !modalKey) return;
+  const p = photosData[currentPhotoIndex];
+  btn.style.display = (myId && p && p.author_id && myId === p.author_id) ? 'block' : 'none';
 }
 
 function logoutTg() {
@@ -726,6 +734,7 @@ function initAuth() {
     myName = urlUname.startsWith('@') ? urlUname : '@' + urlUname;
     try { localStorage.setItem('tg_url_auth', JSON.stringify({id: myId, name: myName, ts: Date.now()})); } catch(e) {}
     _showAuthBanner(true);
+    _updateDeleteBtn();
     return;
   }
   // 3. Сохранённая идентификация из прошлого перехода по ссылке
@@ -737,6 +746,7 @@ function initAuth() {
         myId   = auth.id;
         myName = auth.name;
         _showAuthBanner(true);
+        _updateDeleteBtn();
         return;
       }
       localStorage.removeItem('tg_url_auth');
@@ -752,6 +762,7 @@ function initAuth() {
         myName     = auth.username ? '@' + auth.username : auth.first_name;
         myAuthData = auth;
         _showAuthBanner(true);
+        _updateDeleteBtn();
         return;
       }
       localStorage.removeItem('tg_auth');
@@ -789,9 +800,7 @@ function openModal(index) {
     wrap.innerHTML = `<img class="modal-media" src="/api/photo/${p.key}" alt="">`;
   }
 
-  // Показываем кнопку удаления только автору (не для анонимных фото)
-  const deleteBtn = document.getElementById('delete-photo-btn');
-  deleteBtn.style.display = (myId && p.author_id && myId === p.author_id) ? 'block' : 'none';
+  _updateDeleteBtn();
 
   document.getElementById('comment-input').value = '';
   document.getElementById('modal-overlay').classList.add('open');
