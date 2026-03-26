@@ -41,6 +41,7 @@ from commands.stats import stats_command
 from commands.anon import anon_command, handle_anon_cancel, handle_anon_message
 from commands.clearmedia import clearmedia_command
 from commands.delmsg import delmsg_command, delmsg_callback
+from commands.resend import resend_command, handle_resend_message, resend_cancel
 
 
 logging.basicConfig(
@@ -631,13 +632,22 @@ def main():
 
     # Анонимные сообщения в группу
     app.add_handler(CommandHandler("anon",   anon_command,   filters=filters.ChatType.GROUPS))
-    app.add_handler(CommandHandler("cancel", handle_anon_cancel, filters=filters.ChatType.PRIVATE))
+    # Единый /cancel — сначала проверяем resend, потом anon
+    async def _cancel_command(update, context):
+        from commands.resend import _RESEND_WAITING
+        if update.effective_user.id in _RESEND_WAITING:
+            await resend_cancel(update, context)
+        else:
+            await handle_anon_cancel(update, context)
+
+    app.add_handler(CommandHandler("cancel", _cancel_command, filters=filters.ChatType.PRIVATE))
 
     app.add_handler(CommandHandler("gallery",    gallery_command,    filters=filters.ChatType.GROUPS))
     app.add_handler(CommandHandler("clearmedia", clearmedia_command))
 
-    # Скрытая команда владельца — только в личке, не в списке команд
-    app.add_handler(CommandHandler("delmsg", delmsg_command, filters=filters.ChatType.PRIVATE))
+    # Скрытые команды владельца — только в личке, не в списке команд
+    app.add_handler(CommandHandler("delmsg",  delmsg_command,  filters=filters.ChatType.PRIVATE))
+    app.add_handler(CommandHandler("resend",  resend_command,  filters=filters.ChatType.PRIVATE))
 
     # Ловим любые другие команды в личке и вежливо отказываем
     app.add_handler(MessageHandler(
@@ -682,10 +692,12 @@ def main():
     app.add_handler(CallbackQueryHandler(rate_callback,    pattern=r"^(anon_|rate_|comment_ask_|comment_skip_)"))
     app.add_handler(CallbackQueryHandler(weather_callback, pattern=r"^w(forecast|refresh):"))
 
-    # Анонимные сообщения / подпись /rate в личке + трекинг в группах
+    # Анонимные сообщения / подпись /rate / resend в личке + трекинг в группах
     async def _maybe_token_reply(update, context):
         if update.effective_chat and update.effective_chat.type == "private":
-            # Сначала проверяем — не ждёт ли бот подпись к /rate
+            # Приоритет: resend → подпись к /rate → анонимное сообщение
+            if await handle_resend_message(update, context):
+                return
             if await handle_rate_comment(update, context):
                 return
             await handle_anon_message(update, context)
