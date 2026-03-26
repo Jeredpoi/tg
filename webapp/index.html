@@ -860,7 +860,8 @@ function renderComments(comments) {
   }
   list.innerHTML = comments.map(c => {
     const name = c.commenter_name || 'Аноним';
-    const initial = name[0].toUpperCase();
+    const displayName = name.startsWith('@') ? name.slice(1) : name;
+    const initial = (displayName[0] || '?').toUpperCase();
     const time = formatTime(c.created_at);
     const avatarContent = c.commenter_id
       ? `<span class="avatar-letter">${escHtml(initial)}</span>` +
