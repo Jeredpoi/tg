@@ -34,7 +34,7 @@ from commands.dice import dice_command
 from commands.mge import mge_command
 from commands.roast import roast_command
 from commands.top import top_command, top_callback
-from commands.rate import rate_command, rate_callback, handle_rate_photo, handle_rate_video
+from commands.rate import rate_command, rate_callback, handle_rate_photo, handle_rate_video, handle_rate_comment
 from commands.help import help_command
 from commands.weather import weather_command, weather_callback
 from commands.stats import stats_command
@@ -173,7 +173,7 @@ _cmd_last_used: dict[tuple[int, str], float] = {}
 
 
 async def _rate_limit_guard(update, context):
-    """Middleware (group=-1): удаляет спам-команды молча."""
+    """Middleware (group=-1): при спаме команд уведомляет пользователя и останавливает обработку."""
     msg = update.message
     if not msg or not msg.text or not msg.text.startswith("/"):
         return
@@ -194,11 +194,43 @@ async def _rate_limit_guard(update, context):
     last = _cmd_last_used.get(key, 0)
 
     if now - last < cooldown:
-        # Спам — удаляем сообщение и останавливаем обработку
-        try:
-            await msg.delete()
-        except Exception:
-            pass
+        remaining = int(cooldown - (now - last)) + 1
+        chat = update.effective_chat
+        chat_id = chat.id
+
+        if chat and chat.type in ("group", "supergroup"):
+            # В группе: удаляем команду и отправляем отдельное сообщение (без цитаты)
+            try:
+                await msg.delete()
+            except Exception:
+                pass
+            try:
+                note = await context.bot.send_message(
+                    chat_id=chat_id,
+                    text=f"⏳ <b>{remaining} сек.</b> до следующего использования",
+                    parse_mode="HTML",
+                    disable_notification=True,
+                )
+                note_id = note.message_id
+
+                async def _del_cd(ctx):
+                    try:
+                        await ctx.bot.delete_message(chat_id, note_id)
+                    except Exception:
+                        pass
+
+                context.job_queue.run_once(_del_cd, 4)
+            except Exception:
+                pass
+        else:
+            # В личке просто отвечаем — удалять сообщения пользователя нельзя
+            try:
+                await msg.reply_text(
+                    f"⏳ <b>{remaining} сек.</b> до следующего использования",
+                    parse_mode="HTML",
+                )
+            except Exception:
+                pass
         raise ApplicationHandlerStop
 
     # Первый / разрешённый вызов — фиксируем время
@@ -467,12 +499,26 @@ async def _private_start(update, context):
         uname = urllib.parse.quote(user.username or user.first_name, safe='')
         url = f"{WEBAPP_URL}?uid={user.id}&uname={uname}&chat_id={chat_id}"
         kb = InlineKeyboardMarkup([[InlineKeyboardButton("🖼 Открыть галерею", url=url)]])
-        await update.message.reply_text(
+        bot_msg = await update.message.reply_text(
             "🖼 <b>Галерея рейтингов</b>\n\n"
             "Твоя персональная ссылка — имя будет отображаться в комментариях:",
             parse_mode="HTML",
             reply_markup=kb,
         )
+
+        # Автоудаление обоих сообщений через 25 секунд
+        pm_chat_id = update.effective_chat.id
+        user_mid = update.message.message_id
+        bot_mid = bot_msg.message_id
+
+        async def _del_gallery(ctx):
+            for mid in [user_mid, bot_mid]:
+                try:
+                    await ctx.bot.delete_message(pm_chat_id, mid)
+                except Exception:
+                    pass
+
+        context.job_queue.run_once(_del_gallery, 25)
         return
     await help_command(update, context)
 
@@ -607,14 +653,26 @@ def main():
         handle_rate_video,
     ))
 
+    # Кнопка «Закрыть» в уведомлении об итогах голосования
+    async def _dismiss_callback(update, context):
+        await update.callback_query.answer()
+        try:
+            await update.callback_query.message.delete()
+        except Exception:
+            pass
+
     # Inline-кнопки
+    app.add_handler(CallbackQueryHandler(_dismiss_callback, pattern=r"^dismiss$"))
     app.add_handler(CallbackQueryHandler(top_callback,     pattern=r"^top_"))
-    app.add_handler(CallbackQueryHandler(rate_callback,    pattern=r"^(anon_|rate_)"))
+    app.add_handler(CallbackQueryHandler(rate_callback,    pattern=r"^(anon_|rate_|comment_ask_|comment_skip_)"))
     app.add_handler(CallbackQueryHandler(weather_callback, pattern=r"^w(forecast|refresh):"))
 
-    # Анонимные сообщения в личке + трекинг в группах
+    # Анонимные сообщения / подпись /rate в личке + трекинг в группах
     async def _maybe_token_reply(update, context):
         if update.effective_chat and update.effective_chat.type == "private":
+            # Сначала проверяем — не ждёт ли бот подпись к /rate
+            if await handle_rate_comment(update, context):
+                return
             await handle_anon_message(update, context)
         else:
             await _track_message(update, context)
