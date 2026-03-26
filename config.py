@@ -8,7 +8,7 @@ BOT_TOKEN = "8456580239:AAE6loIwAaMZZ2i1w5KfwkyPrgc3I4_YmEU"
 # ID чата, в котором работает бот.
 # Чтобы узнать ID: добавьте @userinfobot в чат или отправьте сообщение и
 # посмотрите update через getUpdates.
-CHAT_ID = -1003630988613  # Замените на реальный ID вашего чата
+CHAT_ID = -1002686704764  # Замените на реальный ID вашего чата
 
 # Путь к файлу базы данных SQLite
 DATABASE_PATH = "bot_stats.db"
