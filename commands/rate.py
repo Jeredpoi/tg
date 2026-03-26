@@ -124,8 +124,9 @@ async def _close_rate_voting(context) -> None:
     )
 
     try:
+        bot_username = context.bot.username
         gallery_btn = InlineKeyboardMarkup([[
-            InlineKeyboardButton("🖼 Галерея", url=f"{WEBAPP_URL}?chat_id={chat_id}")
+            InlineKeyboardButton("🖼 Галерея", url=f"https://t.me/{bot_username}?start=gallery_{chat_id}")
         ]])
         await context.bot.edit_message_caption(
             chat_id=chat_id,
@@ -141,15 +142,18 @@ async def _close_rate_voting(context) -> None:
     if author_id and not photo_row["anonymous"]:
         try:
             result_text = f"⭐ {avg} из 10 ({votes} голос(ов))" if votes > 0 else "Голосов не было 😔"
+            bot_username = context.bot.username
+            kb = InlineKeyboardMarkup([[
+                InlineKeyboardButton("🖼 Открыть галерею", url=f"https://t.me/{bot_username}?start=gallery_{chat_id}")
+            ]])
             await context.bot.send_message(
                 chat_id=author_id,
                 text=(
                     f"🏁 <b>Голосование завершено!</b>\n\n"
-                    f"Твоё {mw} набрало: {result_text}\n\n"
-                    f"<a href=\"{WEBAPP_URL}?chat_id={chat_id}\">👀 Открыть галерею</a>"
+                    f"Твоё {mw} набрало: {result_text}"
                 ),
                 parse_mode="HTML",
-                disable_web_page_preview=True,
+                reply_markup=kb,
             )
         except Exception:
             pass  # пользователь не начал диалог с ботом — молча игнорируем
@@ -282,8 +286,9 @@ async def rate_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
                 mw = "видео" if mt == "video" else "фото"
                 caption = f"{me} Анонимное {mw}" if photo_row["anonymous"] else f"{me} {mw.capitalize()} от {photo_row['author_name']}"
                 caption += f"\n\n🏁 Голосование завершено!\n⭐ Средняя оценка: {avg} ({votes} голос(ов))"
+                bot_username = context.bot.username
                 gallery_btn = InlineKeyboardMarkup([[
-                    InlineKeyboardButton("🖼 Галерея", url=f"{WEBAPP_URL}?chat_id={query.message.chat_id}")
+                    InlineKeyboardButton("🖼 Галерея", url=f"https://t.me/{bot_username}?start=gallery_{query.message.chat_id}")
                 ]])
                 await query.edit_message_caption(caption=caption, reply_markup=gallery_btn)
             except Exception:

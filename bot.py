@@ -455,6 +455,28 @@ async def _midnight_swear_report(context) -> None:
             logger.warning("midnight_swear_report chat=%s: %s", chat_id, e)
 
 
+async def _private_start(update, context):
+    """/start в личке — с поддержкой deep link для галереи (gallery_{chat_id})."""
+    if context.args and context.args[0].startswith("gallery_"):
+        try:
+            chat_id = int(context.args[0][8:])
+        except ValueError:
+            await help_command(update, context)
+            return
+        user = update.effective_user
+        uname = urllib.parse.quote(user.username or user.first_name, safe='')
+        url = f"{WEBAPP_URL}?uid={user.id}&uname={uname}&chat_id={chat_id}"
+        kb = InlineKeyboardMarkup([[InlineKeyboardButton("🖼 Открыть галерею", url=url)]])
+        await update.message.reply_text(
+            "🖼 <b>Галерея рейтингов</b>\n\n"
+            "Твоя персональная ссылка — имя будет отображаться в комментариях:",
+            parse_mode="HTML",
+            reply_markup=kb,
+        )
+        return
+    await help_command(update, context)
+
+
 async def _weekly_best_photo(context) -> None:
     """Каждый понедельник в 00:00 МСК постит лучшее фото за неделю."""
     import config as cfg
@@ -532,7 +554,7 @@ def main():
     app.add_handler(CommandHandler("start", _group_start_command, filters=filters.ChatType.GROUPS))
 
     # В личке работают только /start, /help, /rate
-    app.add_handler(CommandHandler("start",    help_command,    filters=filters.ChatType.PRIVATE))
+    app.add_handler(CommandHandler("start",    _private_start,  filters=filters.ChatType.PRIVATE))
     app.add_handler(CommandHandler("help",     help_command))
     app.add_handler(CommandHandler("rate",     rate_command,    filters=filters.ChatType.PRIVATE))
 
