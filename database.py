@@ -128,6 +128,18 @@ def init_db() -> None:
             )
         """)
 
+        # ── bot_messages ─────────────────────────────────────────────────────────
+        c.execute("""
+            CREATE TABLE IF NOT EXISTS bot_messages (
+                id         INTEGER PRIMARY KEY AUTOINCREMENT,
+                chat_id    INTEGER NOT NULL,
+                message_id INTEGER NOT NULL,
+                preview    TEXT,
+                sent_at    REAL NOT NULL DEFAULT (unixepoch())
+            )
+        """)
+        c.execute("CREATE INDEX IF NOT EXISTS idx_bot_messages_chat ON bot_messages(chat_id, sent_at DESC)")
+
         conn.commit()
     finally:
         conn.close()
@@ -516,6 +528,95 @@ def get_best_photo_since(days: int, chat_id: int = None):
             ORDER BY avg_score DESC, pr.vote_count DESC
             LIMIT 1
         """, params).fetchone()
+    finally:
+        conn.close()
+
+
+def track_bot_message(chat_id: int, message_id: int, preview: str = "") -> None:
+    """Сохраняет ID сообщения бота для возможности последующего удаления.
+    Хранит не более 50 последних сообщений на чат.
+    """
+    try:
+        conn = get_connection()
+        try:
+            conn.execute(
+                "INSERT INTO bot_messages (chat_id, message_id, preview) VALUES (?, ?, ?)",
+                (chat_id, message_id, (preview or "")[:120])
+            )
+            # Оставляем только последние 50 сообщений для данного чата
+            conn.execute("""
+                DELETE FROM bot_messages
+                WHERE chat_id = ? AND id NOT IN (
+                    SELECT id FROM bot_messages
+                    WHERE chat_id = ?
+                    ORDER BY sent_at DESC, id DESC
+                    LIMIT 50
+                )
+            """, (chat_id, chat_id))
+            conn.commit()
+        finally:
+            conn.close()
+    except Exception as e:
+        logger.error("track_bot_message FAILED: %s", e)
+
+
+def get_recent_bot_messages(chat_id: int, offset: int = 0, limit: int = 5) -> list:
+    """Возвращает последние сообщения бота в чате (newest first)."""
+    conn = get_connection()
+    try:
+        return conn.execute(
+            "SELECT id, chat_id, message_id, preview, sent_at FROM bot_messages "
+            "WHERE chat_id = ? ORDER BY sent_at DESC, id DESC LIMIT ? OFFSET ?",
+            (chat_id, limit, offset)
+        ).fetchall()
+    finally:
+        conn.close()
+
+
+def get_bot_message_count(chat_id: int) -> int:
+    """Возвращает количество сохранённых сообщений бота в чате."""
+    conn = get_connection()
+    try:
+        row = conn.execute(
+            "SELECT COUNT(*) AS cnt FROM bot_messages WHERE chat_id = ?", (chat_id,)
+        ).fetchone()
+        return row["cnt"] if row else 0
+    finally:
+        conn.close()
+
+
+def get_all_bot_messages_recent(offset: int = 0, limit: int = 5) -> list:
+    """Возвращает последние сообщения бота из всех чатов (newest first)."""
+    conn = get_connection()
+    try:
+        return conn.execute(
+            "SELECT id, chat_id, message_id, preview, sent_at FROM bot_messages "
+            "ORDER BY sent_at DESC, id DESC LIMIT ? OFFSET ?",
+            (limit, offset)
+        ).fetchall()
+    finally:
+        conn.close()
+
+
+def get_all_bot_messages_count() -> int:
+    """Возвращает общее количество сохранённых сообщений бота."""
+    conn = get_connection()
+    try:
+        row = conn.execute("SELECT COUNT(*) AS cnt FROM bot_messages").fetchone()
+        return row["cnt"] if row else 0
+    finally:
+        conn.close()
+
+
+def delete_bot_message_record(chat_id: int, message_id: int) -> None:
+    """Удаляет запись о сообщении из таблицы отслеживания."""
+    conn = get_connection()
+    try:
+        conn.execute(
+            "DELETE FROM bot_messages WHERE chat_id = ? AND message_id = ?",
+            (chat_id, message_id)
+        )
+        conn.commit()
     finally:
         conn.close()
 

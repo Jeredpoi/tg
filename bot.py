@@ -20,14 +20,14 @@ from telegram.ext import (
     filters,
 )
 
-from telegram import BotCommand, WebAppInfo, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.request import HTTPXRequest
 from config import (BOT_TOKEN, PROXY_URL, WEBAPP_URL,
                     SWEAR_COOLDOWN, DEFAULT_CMD_COOLDOWN,
                     SWEAR_RESPONSE_DELAY, SWEAR_RESPONSE_CHANCE)
 
 from database import (init_db, track_message, track_daily_swear, get_daily_swear_report,
-                       get_best_photo_since, get_and_delete_old_photos)
+                       get_best_photo_since, get_and_delete_old_photos, track_bot_message)
 
 from commands.debug import debug_command
 from commands.dice import dice_command
@@ -40,6 +40,7 @@ from commands.weather import weather_command, weather_callback
 from commands.stats import stats_command
 from commands.anon import anon_command, handle_anon_cancel, handle_anon_message
 from commands.clearmedia import clearmedia_command
+from commands.delmsg import delmsg_command, delmsg_callback
 
 
 logging.basicConfig(
@@ -325,11 +326,12 @@ async def _send_swear_response(context) -> None:
     _swear_last_response[chat_id] = time.time()
 
     try:
-        await context.bot.send_message(
+        msg = await context.bot.send_message(
             chat_id=chat_id,
             text=random.choice(SWEAR_RESPONSES).format(name=d["name"]),
             reply_to_message_id=d["message_id"],
         )
+        track_bot_message(chat_id, msg.message_id, msg.text)
     except Exception:
         pass
 
@@ -421,19 +423,26 @@ async def _on_bot_added(update, context):
 
 
 async def gallery_command(update, context):
-    """Отвечает на сообщение с кнопкой открытия галереи в браузере."""
-    user = update.effective_user
+    """Отправляет кнопку галереи через deep link — без личных данных в группе."""
     chat = update.effective_chat
-    uname = urllib.parse.quote(user.username or user.first_name, safe='')
-    url = f"{WEBAPP_URL}?uid={user.id}&uname={uname}&chat_id={chat.id}"
+    bot_username = context.bot.username
+    # Ссылка ведёт в личку бота, где он выдаст персональный URL с uid/uname
+    deep_url = f"https://t.me/{bot_username}?start=gallery_{chat.id}"
     kb = InlineKeyboardMarkup([[
-        InlineKeyboardButton("🖼 Галерея", url=url)
+        InlineKeyboardButton("🖼 Открыть галерею", url=deep_url)
     ]])
     reply_to = update.message.reply_to_message
     if reply_to:
-        await reply_to.reply_text("🖼 Галерея рейтингов:", reply_markup=kb)
+        msg = await reply_to.reply_text(
+            "🖼 Нажми кнопку — бот пришлёт тебе персональную ссылку в личку:",
+            reply_markup=kb,
+        )
     else:
-        await update.message.reply_text("🖼 Галерея рейтингов:", reply_markup=kb)
+        msg = await update.message.reply_text(
+            "🖼 Нажми кнопку — бот пришлёт тебе персональную ссылку в личку:",
+            reply_markup=kb,
+        )
+    track_bot_message(chat.id, msg.message_id, "🖼 Галерея рейтингов")
 
 
 async def _private_command_guard(update, context):
@@ -482,7 +491,8 @@ async def _midnight_swear_report(context) -> None:
                     medal = _MEDALS[i] if i < 3 else f"{i + 1}."
                     lines.append(f"{medal} {name} — {count} раз(а)")
                 text = "\n".join(lines)
-            await context.bot.send_message(chat_id=chat_id, text=text, parse_mode="HTML")
+            msg = await context.bot.send_message(chat_id=chat_id, text=text, parse_mode="HTML")
+            track_bot_message(chat_id, msg.message_id, text[:80])
         except Exception as e:
             logger.warning("midnight_swear_report chat=%s: %s", chat_id, e)
 
@@ -545,9 +555,10 @@ async def _weekly_best_photo(context) -> None:
             )
             kb = InlineKeyboardMarkup([[InlineKeyboardButton("🖼 Галерея", url=gallery_url)]])
             if media_type == "video":
-                await context.bot.send_video(chat_id=chat_id, video=photo_id, caption=caption, parse_mode="HTML", reply_markup=kb)
+                msg = await context.bot.send_video(chat_id=chat_id, video=photo_id, caption=caption, parse_mode="HTML", reply_markup=kb)
             else:
-                await context.bot.send_photo(chat_id=chat_id, photo=photo_id, caption=caption, parse_mode="HTML", reply_markup=kb)
+                msg = await context.bot.send_photo(chat_id=chat_id, photo=photo_id, caption=caption, parse_mode="HTML", reply_markup=kb)
+            track_bot_message(chat_id, msg.message_id, caption[:80])
             logger.info("weekly_best_photo: отправлено в чат %s", chat_id)
         except Exception as e:
             logger.warning("weekly_best_photo chat=%s: %s", chat_id, e)
@@ -625,6 +636,9 @@ def main():
     app.add_handler(CommandHandler("gallery",    gallery_command,    filters=filters.ChatType.GROUPS))
     app.add_handler(CommandHandler("clearmedia", clearmedia_command))
 
+    # Скрытая команда владельца — только в личке, не в списке команд
+    app.add_handler(CommandHandler("delmsg", delmsg_command, filters=filters.ChatType.PRIVATE))
+
     # Ловим любые другие команды в личке и вежливо отказываем
     app.add_handler(MessageHandler(
         filters.COMMAND & filters.ChatType.PRIVATE,
@@ -662,7 +676,8 @@ def main():
             pass
 
     # Inline-кнопки
-    app.add_handler(CallbackQueryHandler(_dismiss_callback, pattern=r"^dismiss$"))
+    app.add_handler(CallbackQueryHandler(_dismiss_callback,  pattern=r"^dismiss$"))
+    app.add_handler(CallbackQueryHandler(delmsg_callback,    pattern=r"^delmsg_"))
     app.add_handler(CallbackQueryHandler(top_callback,     pattern=r"^top_"))
     app.add_handler(CallbackQueryHandler(rate_callback,    pattern=r"^(anon_|rate_|comment_ask_|comment_skip_)"))
     app.add_handler(CallbackQueryHandler(weather_callback, pattern=r"^w(forecast|refresh):"))
@@ -683,31 +698,8 @@ def main():
     async def on_startup(app):
         await app.bot.set_my_description("Скаут на связи 🟢")
         await app.bot.set_my_short_description("Скаут на связи 🟢")
-        from telegram import BotCommandScopeAllGroupChats, BotCommandScopeAllPrivateChats, BotCommandScopeDefault
-
-        group_commands = [
-            BotCommand("help",    "Помощь по командам"),
-            BotCommand("top",     "Статистика чата"),
-            BotCommand("dice",    "Бросить кубик"),
-            BotCommand("roast",   "Подколоть участника"),
-            BotCommand("weather", "Погода"),
-            BotCommand("mge",     "Фраза из МГЕ"),
-            BotCommand("gallery", "Галерея рейтингов"),
-            BotCommand("stats",   "Личная статистика"),
-            BotCommand("anon",    "Анонимное сообщение в группу"),
-        ]
-
-        private_commands = [
-            BotCommand("rate",  "Отправить фото на оценку группы"),
-            BotCommand("help",  "Список команд группы"),
-            BotCommand("debug", "Отладочная информация"),
-        ]
-
-        # Для дефолтного scope — пустой список (не показываем /start нигде)
-        await app.bot.set_my_commands([], scope=BotCommandScopeDefault())
-        await app.bot.set_my_commands(group_commands, scope=BotCommandScopeAllGroupChats())
-        await app.bot.set_my_commands(private_commands, scope=BotCommandScopeAllPrivateChats())
-        logger.info("Команды обновлены для всех scope-ов")
+        # set_my_commands намеренно не вызывается — список команд настраивается
+        # вручную через BotFather и не должен перезаписываться при каждом запуске
 
         msk = datetime.timezone(datetime.timedelta(hours=3))
 

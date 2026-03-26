@@ -6,6 +6,7 @@ import random
 from telegram import Update
 from telegram.ext import ContextTypes
 from config import MGE_PHRASES
+from database import track_bot_message
 
 
 async def mge_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -23,4 +24,5 @@ async def mge_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     else:
         text = f"🎭 <b>{speaker}:</b>\n«{phrase}»"
 
-    await update.message.reply_text(text, parse_mode="HTML")
+    msg = await update.message.reply_text(text, parse_mode="HTML")
+    track_bot_message(update.effective_chat.id, msg.message_id, f"🎭 {speaker}: «{phrase[:40]}»")

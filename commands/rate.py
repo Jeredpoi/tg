@@ -7,7 +7,7 @@ import logging
 import os
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
-from database import save_photo, add_vote, get_photo, get_photo_by_key, close_photo
+from database import save_photo, add_vote, get_photo, get_photo_by_key, close_photo, track_bot_message
 import config
 from config import VOTE_DURATION, WEBAPP_URL
 
@@ -322,6 +322,9 @@ async def rate_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
                 parse_mode="HTML",
             )
             return
+
+        # Отслеживаем сообщение бота в группе для /delmsg
+        track_bot_message(config.CHAT_ID, sent.message_id, group_caption[:80])
 
         # Сохраняем файл на диск — чтобы вебсервер мог отдавать его без Telegram API
         try:

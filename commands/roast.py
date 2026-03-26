@@ -5,6 +5,7 @@
 import random
 from telegram import Update
 from telegram.ext import ContextTypes
+from database import track_bot_message
 
 ROAST_PHRASES = [
     "{user} — человек, которому сложнее всего объяснить очевидное. Потому что он уже уверен.",
@@ -152,4 +153,5 @@ async def roast_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         return
 
     phrase = random.choice(ROAST_PHRASES).format(user=target)
-    await update.message.reply_text(phrase)
+    msg = await update.message.reply_text(phrase)
+    track_bot_message(update.effective_chat.id, msg.message_id, phrase[:80])
