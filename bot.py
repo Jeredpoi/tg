@@ -42,8 +42,7 @@ from commands.clearmedia import clearmedia_command
 from commands.delmsg import delmsg_command, delmsg_callback
 from commands.resend import resend_command, handle_resend_message, resend_cancel
 from commands.settings import settings_command, settings_callback
-from chat_config import (get_main_chat_id, set_main_chat_id, unset_main_chat, is_main_chat,
-                         get_setup_chats, add_setup_chat, is_setup_chat)
+from chat_config import get_main_chat_id, add_setup_chat, is_setup_chat
 
 
 logging.basicConfig(

@@ -70,6 +70,11 @@ async def rate_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     _RATE_PM_MSGS[user_id] = []
     _RATE_WAITING.add(user_id)  # ждём фото/видео
 
+    # Таймаут 5 минут — если не отправит медиа, сбрасываем состояние
+    async def _rate_timeout(ctx):
+        _RATE_WAITING.discard(user_id)
+    context.job_queue.run_once(_rate_timeout, 300, name=f"rate_timeout_{user_id}")
+
     try:
         await update.message.delete()
     except Exception:
@@ -114,12 +119,19 @@ async def _process_media(update: Update, context: ContextTypes.DEFAULT_TYPE, pho
     _RATE_PM_MSGS[user_id].append(msg.message_id)
 
 
+def _cancel_rate_timeout(context, user_id: int) -> None:
+    """Отменяет таймаут ожидания фото/видео."""
+    for job in context.job_queue.get_jobs_by_name(f"rate_timeout_{user_id}"):
+        job.schedule_removal()
+
+
 async def handle_rate_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Принимает фото в личке — только если пользователь инициировал /rate."""
     user_id = update.effective_user.id
     if user_id not in _RATE_WAITING:
         return  # игнорируем фото без /rate
     _RATE_WAITING.discard(user_id)
+    _cancel_rate_timeout(context, user_id)
     photo = update.message.photo[-1]
     await _process_media(update, context, photo.file_id, "photo")
 
@@ -130,6 +142,7 @@ async def handle_rate_video(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     if user_id not in _RATE_WAITING:
         return  # игнорируем видео без /rate
     _RATE_WAITING.discard(user_id)
+    _cancel_rate_timeout(context, user_id)
     video = update.message.video
     await _process_media(update, context, video.file_id, "video")
 
@@ -145,12 +158,13 @@ async def handle_rate_comment(update: Update, context: ContextTypes.DEFAULT_TYPE
     if user_id not in _COMMENT_WAITING:
         return False
 
-    key = _COMMENT_WAITING.pop(user_id)
     text = (update.message.text or "").strip()
 
     if not text:
-        await update.message.reply_text("❌ Пустая подпись. Напиши что-нибудь или используй /rate заново.")
+        await update.message.reply_text("❌ Пустая подпись. Напиши что-нибудь:")
         return True
+
+    key = _COMMENT_WAITING.pop(user_id)
 
     _PHOTO_CAPTIONS[key] = text
 
@@ -191,6 +205,7 @@ async def _close_rate_voting(context) -> None:
 
     photo_row = get_photo(photo_id)
     if not photo_row:
+        _PHOTO_CAPTIONS.pop(key, None)
         return
 
     total = photo_row["total_score"]
@@ -392,7 +407,7 @@ async def rate_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         try:
             score = int(parts[1])
         except (IndexError, ValueError):
-            await query.answer("❌ Некорректные данные.", show_alert=True)
+            await query.answer("❌ Некорректные данные.")
             return
         key = parts[0][5:]  # убираем "rate_"
 
@@ -421,7 +436,7 @@ async def rate_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
             return
 
         voter_id = query.from_user.id
-        if voter_id == photo_row["author_id"] and not photo_row["anonymous"]:
+        if voter_id == photo_row["author_id"]:
             mt = photo_row["media_type"] if photo_row["media_type"] else "photo"
             mw = "видео" if mt == "video" else "фото"
             await query.answer(f"🚫 Нельзя голосовать за своё {mw}!")
