@@ -64,9 +64,10 @@ async def anon_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         # Бот не может написать пользователю — он не начал диалог
         del _pending[user.id]
         try:
+            display = f"@{user.username}" if user.username else html.escape(user.first_name or "")
             msg = await context.bot.send_message(
                 chat.id,
-                f"@{user.username or user.first_name}, сначала напиши мне в личку — "
+                f"{display}, сначала напиши мне в личку — "
                 f"<a href=\"https://t.me/{bot_username}\">@{bot_username}</a>, "
                 f"нажми Start, потом снова используй /anon.",
                 parse_mode="HTML",

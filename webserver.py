@@ -109,10 +109,18 @@ async def api_get_comments(request: web.Request) -> web.Response:
 
 async def api_delete_photo(request: web.Request) -> web.Response:
     key = request.match_info["key"]
+    # Требуем Telegram auth в теле запроса
     try:
-        uid = int(request.rel_url.query.get("uid", "0"))
-    except ValueError:
+        body = await request.json()
+        tg_auth = body.get("tg_auth") if isinstance(body, dict) else None
+    except Exception:
         raise web.HTTPBadRequest()
+    if not tg_auth or not isinstance(tg_auth, dict) or not _verify_telegram_auth(tg_auth):
+        raise web.HTTPForbidden()
+    try:
+        uid = int(tg_auth.get("id", 0))
+    except (ValueError, TypeError):
+        raise web.HTTPForbidden()
     if not uid:
         raise web.HTTPForbidden()
 
@@ -158,6 +166,7 @@ async def api_post_comment(request: web.Request) -> web.Response:
     else:
         commenter_name = str(body.get("commenter_name", "Аноним")).strip() or "Аноним"
         commenter_id = int(body.get("commenter_id", 0))
+    commenter_name = commenter_name[:100]
 
     add_comment(row["photo_id"], commenter_id, commenter_name, text)
     return web.json_response({"ok": True})
