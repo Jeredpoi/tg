@@ -7,6 +7,7 @@ import logging
 from telegram import Update
 from telegram.ext import ContextTypes
 from telegram.error import Forbidden
+from chat_config import is_main_chat
 
 logger = logging.getLogger(__name__)
 
@@ -26,6 +27,24 @@ async def anon_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         await update.message.delete()
     except Exception:
         pass
+
+    # Блокируем в тестовой группе
+    if not is_main_chat(chat.id):
+        try:
+            msg = await context.bot.send_message(
+                chat.id,
+                "❌ /anon работает только в основной группе.",
+                disable_notification=True,
+            )
+            async def _del(ctx):
+                try:
+                    await ctx.bot.delete_message(chat.id, msg.message_id)
+                except Exception:
+                    pass
+            context.job_queue.run_once(_del, 5)
+        except Exception:
+            pass
+        return
 
     # Сохраняем ожидание
     _pending[user.id] = (chat.id, time.time())

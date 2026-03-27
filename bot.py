@@ -42,6 +42,7 @@ from commands.anon import anon_command, handle_anon_cancel, handle_anon_message
 from commands.clearmedia import clearmedia_command
 from commands.delmsg import delmsg_command, delmsg_callback
 from commands.resend import resend_command, handle_resend_message, resend_cancel
+from chat_config import get_main_chat_id, set_main_chat_id, unset_main_chat, is_main_chat
 
 
 logging.basicConfig(
@@ -475,11 +476,12 @@ _MIDNIGHT_ZERO_MSGS = [
 async def _midnight_swear_report(context) -> None:
     """Job: в 00:00 МСК отправляет отчёт по матам за прошедший день."""
     yesterday = (datetime.date.today() - datetime.timedelta(days=1)).isoformat()
-    # Отправляем во все известные чаты + CHAT_ID если задан
-    import config as cfg
-    target_chats = set(_setup_chats)
-    if cfg.CHAT_ID:
-        target_chats.add(cfg.CHAT_ID)
+    # Отправляем только в основную группу
+    main_id = get_main_chat_id()
+    if not main_id:
+        logger.warning("midnight_swear_report: основная группа не назначена (/setchat main)")
+        return
+    target_chats = {main_id}
     for chat_id in target_chats:
         try:
             total, rows = get_daily_swear_report(chat_id, yesterday)
@@ -536,8 +538,11 @@ async def _private_start(update, context):
 
 async def _weekly_best_photo(context) -> None:
     """Каждый понедельник в 00:00 МСК постит лучшее фото за неделю."""
-    import config as cfg
-    for chat_id in list(_setup_chats):
+    main_id = get_main_chat_id()
+    if not main_id:
+        logger.warning("weekly_best_photo: основная группа не назначена (/setchat main)")
+        return
+    for chat_id in [main_id]:
         try:
             row = get_best_photo_since(days=7, chat_id=chat_id)
             if not row:
@@ -581,6 +586,67 @@ async def _cleanup_old_photos(context) -> None:
             logger.info("cleanup_old_photos: удалено %d файлов", deleted_count)
     except Exception as e:
         logger.error("cleanup_old_photos: %s", e)
+
+
+async def setchat_command(update, context):
+    """/setchat [main|test] — владелец назначает роль группы."""
+    from config import OWNER_ID
+    user = update.effective_user
+    chat = update.effective_chat
+
+    if user.id != OWNER_ID:
+        await update.message.reply_text("❌ Только владелец может менять роль группы.")
+        return
+
+    args = context.args
+    main_id = get_main_chat_id()
+
+    if not args:
+        # Показать текущую роль
+        if main_id == chat.id:
+            role = "🟢 <b>Основная</b> (main)"
+        else:
+            role = "🔵 Тестовая / не задана"
+        configured = f"\n\nОсновная группа сейчас: <code>{main_id}</code>" if main_id else "\n\nОсновная группа ещё не назначена."
+        await update.message.reply_text(
+            f"Роль этой группы: {role}{configured}\n\n"
+            "Команды:\n"
+            "  /setchat main — сделать эту группу основной\n"
+            "  /setchat test — снять метку main с этой группы",
+            parse_mode="HTML",
+        )
+        return
+
+    action = args[0].lower()
+    if action == "main":
+        set_main_chat_id(chat.id)
+        await update.message.reply_text(
+            f"✅ Эта группа назначена <b>основной</b>.\n\n"
+            f"Сюда будут приходить:\n"
+            f"• Ночной отчёт по матам\n"
+            f"• Фото недели\n"
+            f"• Анонимные сообщения (/anon)\n"
+            f"• Фото на оценку (/rate)",
+            parse_mode="HTML",
+        )
+        logger.info("setchat: группа %s (%s) назначена основной", chat.title, chat.id)
+
+    elif action == "test":
+        removed = unset_main_chat(chat.id)
+        if removed:
+            await update.message.reply_text(
+                "✅ Метка <b>main</b> снята с этой группы.\n"
+                "Рассылки и /anon сюда больше не придут.",
+                parse_mode="HTML",
+            )
+        else:
+            await update.message.reply_text(
+                "ℹ️ Эта группа и так не является основной.",
+            )
+        logger.info("setchat: метка main снята с группы %s (%s)", chat.title, chat.id)
+
+    else:
+        await update.message.reply_text("❌ Неверный аргумент. Используй: /setchat main или /setchat test")
 
 
 def main():
@@ -648,6 +714,9 @@ def main():
     # Скрытые команды владельца — только в личке, не в списке команд
     app.add_handler(CommandHandler("delmsg",  delmsg_command,  filters=filters.ChatType.PRIVATE))
     app.add_handler(CommandHandler("resend",  resend_command,  filters=filters.ChatType.PRIVATE))
+
+    # Настройка ролей групп (только владелец, только в группах)
+    app.add_handler(CommandHandler("setchat", setchat_command, filters=filters.ChatType.GROUPS))
 
     # Ловим любые другие команды в личке и вежливо отказываем
     app.add_handler(MessageHandler(

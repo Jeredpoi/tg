@@ -10,6 +10,7 @@ from telegram.ext import ContextTypes
 from database import save_photo, add_vote, get_photo, get_photo_by_key, close_photo, track_bot_message
 import config
 from config import VOTE_DURATION, WEBAPP_URL
+from chat_config import get_main_chat_id
 
 logger = logging.getLogger(__name__)
 PHOTOS_DIR = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "photos"))
@@ -276,10 +277,12 @@ async def rate_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
         photo_id = photo_row["photo_id"]
 
-        if not config.CHAT_ID:
+        # Используем основную группу; если не задана — fallback на config.CHAT_ID
+        target_chat_id = get_main_chat_id() or config.CHAT_ID
+        if not target_chat_id:
             await query.edit_message_text(
-                "❌ CHAT_ID не настроен.\n"
-                "Добавь бота в группу — он автоматически запомнит ID чата."
+                "❌ Основная группа не настроена.\n"
+                "Владелец должен написать /setchat main в основной группе."
             )
             return
 
@@ -300,23 +303,23 @@ async def rate_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         try:
             if is_video:
                 sent = await context.bot.send_video(
-                    chat_id=config.CHAT_ID,
+                    chat_id=target_chat_id,
                     video=photo_id,
                     caption=group_caption,
                     reply_markup=_rating_keyboard(key),
                 )
             else:
                 sent = await context.bot.send_photo(
-                    chat_id=config.CHAT_ID,
+                    chat_id=target_chat_id,
                     photo=photo_id,
                     caption=group_caption,
                     reply_markup=_rating_keyboard(key),
                 )
         except Exception as e:
-            logger.error("send_%s failed: chat_id=%s error=%s", media_type, config.CHAT_ID, e)
+            logger.error("send_%s failed: chat_id=%s error=%s", media_type, target_chat_id, e)
             await query.edit_message_text(
                 f"❌ Не удалось отправить {media_word} в группу.\n"
-                f"CHAT_ID: <code>{config.CHAT_ID}</code>\n"
+                f"CHAT_ID: <code>{target_chat_id}</code>\n"
                 f"Ошибка: <code>{e}</code>\n\n"
                 f"Проверь: бот добавлен в группу? Напиши /debug в группе.",
                 parse_mode="HTML",
@@ -324,7 +327,7 @@ async def rate_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
             return
 
         # Отслеживаем сообщение бота в группе для /delmsg
-        track_bot_message(config.CHAT_ID, sent.message_id, group_caption[:80])
+        track_bot_message(target_chat_id, sent.message_id, group_caption[:80])
 
         # Сохраняем файл на диск — чтобы вебсервер мог отдавать его без Telegram API
         try:
@@ -347,7 +350,7 @@ async def rate_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         save_photo(
             photo_id=photo_id,
             message_id=sent.message_id,
-            chat_id=config.CHAT_ID,
+            chat_id=target_chat_id,
             author_id=photo_row["author_id"],
             author_name=photo_row["author_name"],
             anonymous=anonymous,
@@ -358,7 +361,7 @@ async def rate_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         context.job_queue.run_once(
             _close_rate_voting,
             VOTE_DURATION,
-            data={"photo_id": photo_id, "chat_id": config.CHAT_ID, "message_id": sent.message_id, "key": key},
+            data={"photo_id": photo_id, "chat_id": target_chat_id, "message_id": sent.message_id, "key": key},
         )
 
         # Планируем удаление всех PM-сообщений через 5 секунд
