@@ -8,6 +8,8 @@ from telegram.ext import ContextTypes
 from chat_config import (
     get_main_chat_id, set_main_chat_id, unset_main_chat, is_main_chat,
     get_setup_chats, get_settings, get_setting, set_setting,
+    MANAGEABLE_COMMANDS, get_disabled_commands, disable_command, enable_command,
+    is_command_enabled,
 )
 from config import OWNER_ID
 
@@ -17,12 +19,15 @@ logger = logging.getLogger(__name__)
 # ── Клавиатуры ────────────────────────────────────────────────────────────────
 
 def _main_menu_kb() -> InlineKeyboardMarkup:
+    disabled = get_disabled_commands()
+    cmd_icon = "🔴" if disabled else "🟢"
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton("💬 Управление чатами", callback_data="stg:chats")],
-        [InlineKeyboardButton("🤬 Мат-детекция", callback_data="stg:swear")],
-        [InlineKeyboardButton("📊 Отчёты и рассылки", callback_data="stg:reports")],
-        [InlineKeyboardButton("🗳 Голосование /rate", callback_data="stg:vote")],
-        [InlineKeyboardButton("⏱ Кулдаун команд", callback_data="stg:cooldown")],
+        [InlineKeyboardButton("💬 Управление чатами",     callback_data="stg:chats")],
+        [InlineKeyboardButton(f"{cmd_icon} Команды бота", callback_data="stg:cmds")],
+        [InlineKeyboardButton("🤬 Мат-детекция",          callback_data="stg:swear")],
+        [InlineKeyboardButton("📊 Отчёты и рассылки",     callback_data="stg:reports")],
+        [InlineKeyboardButton("🗳 Голосование /rate",      callback_data="stg:vote")],
+        [InlineKeyboardButton("⏱ Кулдаун команд",         callback_data="stg:cooldown")],
     ])
 
 
@@ -169,6 +174,20 @@ async def settings_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         set_setting("cmd_cooldown", value)
         await query.answer(f"Кулдаун: {value} сек.")
         await _show_cooldown_settings(query)
+
+    # ── Управление командами ──
+    elif data == "stg:cmds":
+        await _show_commands_settings(query)
+
+    elif data.startswith("stg:cmd_toggle:"):
+        cmd = data[15:]  # напр. "/mge"
+        if is_command_enabled(cmd):
+            disable_command(cmd)
+            await query.answer(f"🔴 {cmd} выключена")
+        else:
+            enable_command(cmd)
+            await query.answer(f"🟢 {cmd} включена")
+        await _show_commands_settings(query)
 
 
 # ── Экраны чатов ──────────────────────────────────────────────────────────────
@@ -403,5 +422,37 @@ async def _show_cooldown_settings(query) -> None:
         f"одним пользователем. Защищает от спама.</i>",
         parse_mode="HTML",
         reply_markup=kb,
+    )
+    await query.answer()
+
+
+# ── Экран управления командами ────────────────────────────────────────────────
+
+async def _show_commands_settings(query) -> None:
+    """Список команд с кнопками вкл/выкл."""
+    rows = []
+    for cmd, desc in MANAGEABLE_COMMANDS.items():
+        enabled = is_command_enabled(cmd)
+        icon = "🟢" if enabled else "🔴"
+        rows.append([InlineKeyboardButton(
+            f"{icon} {cmd} — {desc}",
+            callback_data=f"stg:cmd_toggle:{cmd}",
+        )])
+
+    disabled_count = len(get_disabled_commands())
+    status_line = (
+        "Все команды включены" if disabled_count == 0
+        else f"Отключено: {disabled_count}"
+    )
+
+    rows.append([_back_to_menu_btn()])
+
+    await query.edit_message_text(
+        f"🎮 <b>Управление командами</b>\n\n"
+        f"Статус: {status_line}\n\n"
+        f"Нажми на команду чтобы включить или выключить её.\n"
+        f"🟢 — включена  🔴 — выключена",
+        parse_mode="HTML",
+        reply_markup=InlineKeyboardMarkup(rows),
     )
     await query.answer()

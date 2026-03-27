@@ -149,3 +149,50 @@ def set_setting(key: str, value) -> None:
 def get_default_settings() -> dict:
     """Возвращает словарь дефолтных значений."""
     return dict(_DEFAULT_SETTINGS)
+
+
+# ── Управление командами ──────────────────────────────────────────────────────
+
+# Команды, которые можно включать/выключать через /settings
+MANAGEABLE_COMMANDS = {
+    "/mge":     "Фраза из МГЕ",
+    "/dice":    "Бросить кубик",
+    "/roast":   "Подколоть участника",
+    "/top":     "Топ участников",
+    "/stats":   "Статистика участника",
+    "/weather": "Погода",
+    "/anon":    "Анонимное голосование",
+    "/rate":    "Оценить фото/видео",
+    "/gallery": "Галерея фото",
+    "/help":    "Помощь по командам",
+}
+
+
+def get_disabled_commands() -> set[str]:
+    """Возвращает множество отключённых команд (напр. {'/mge', '/dice'})."""
+    raw = get_settings().get("disabled_commands", [])
+    return set(raw)
+
+
+def disable_command(cmd: str) -> None:
+    """Отключает команду."""
+    disabled = get_disabled_commands()
+    disabled.add(cmd)
+    settings = get_settings()
+    settings["disabled_commands"] = list(disabled)
+    _save_settings(settings)
+
+
+def enable_command(cmd: str) -> None:
+    """Включает команду."""
+    disabled = get_disabled_commands()
+    disabled.discard(cmd)
+    settings = get_settings()
+    settings["disabled_commands"] = list(disabled)
+    _save_settings(settings)
+
+
+def is_command_enabled(cmd: str) -> bool:
+    """True если команда не отключена."""
+    return cmd not in get_disabled_commands()
+

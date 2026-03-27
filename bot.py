@@ -42,7 +42,7 @@ from commands.clearmedia import clearmedia_command
 from commands.delmsg import delmsg_command, delmsg_callback
 from commands.resend import resend_command, handle_resend_message, resend_cancel
 from commands.settings import settings_command, settings_callback
-from chat_config import get_main_chat_id, add_setup_chat, is_setup_chat, get_setting
+from chat_config import get_main_chat_id, add_setup_chat, is_setup_chat, get_setting, is_command_enabled
 
 
 logging.basicConfig(
@@ -204,6 +204,16 @@ async def _rate_limit_guard(update, context):
 
     # Нормализуем "/mge@botname" → "/mge"
     command = msg.text.split()[0].split("@")[0].lower()
+
+    # Команда отключена владельцем — тихо удаляем
+    if not is_command_enabled(command):
+        if update.effective_chat and update.effective_chat.type in ("group", "supergroup"):
+            try:
+                await msg.delete()
+            except Exception:
+                pass
+        raise ApplicationHandlerStop
+
     cooldown = _CMD_COOLDOWNS.get(command, get_setting("cmd_cooldown"))
 
     if cooldown == 0:
@@ -308,6 +318,29 @@ async def _send_swear_response(context) -> None:
         pass
 
 
+_avatar_cache_set: set[int] = set()   # user_id уже закэшированных за эту сессию
+_AVATARS_DIR = os.path.join(os.path.dirname(__file__), "photos", "avatars")
+_AVATAR_TTL = 24 * 3600
+
+
+async def _cache_avatar(context, user_id: int) -> None:
+    """Фоновая задача: скачивает и сохраняет аватар пользователя на диск."""
+    os.makedirs(_AVATARS_DIR, exist_ok=True)
+    cache_path = os.path.join(_AVATARS_DIR, f"{user_id}.jpg")
+    # Не обновляем если файл свежий
+    if os.path.exists(cache_path):
+        if (time.time() - os.path.getmtime(cache_path)) < _AVATAR_TTL:
+            return
+    try:
+        photos = await context.bot.get_user_profile_photos(user_id=user_id, limit=1)
+        if not photos.total_count:
+            return
+        file_obj = await context.bot.get_file(photos.photos[0][-1].file_id)
+        await file_obj.download_to_drive(cache_path)
+    except Exception:
+        pass
+
+
 async def _track_message(update, context):
     """Считает сообщения и маты всех участников (раздельно по чатам)."""
     if not update.message:
@@ -315,6 +348,20 @@ async def _track_message(update, context):
     user = update.effective_user
     if not user or user.is_bot:
         return
+
+    # Кэшируем аватар один раз за сессию (в фоне, не блокируем)
+    if user.id not in _avatar_cache_set:
+        _avatar_cache_set.add(user.id)
+        uid = user.id
+
+        async def _do_cache_avatar(ctx):
+            await _cache_avatar(ctx, uid)
+
+        context.job_queue.run_once(
+            _do_cache_avatar,
+            0,
+            name=f"avatar_{uid}",
+        )
 
     chat_id = update.effective_chat.id
 
