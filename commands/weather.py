@@ -204,9 +204,10 @@ async def weather_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     except Exception as e:
         logger.exception("weather_callback failed city=%r action=%r: %s", city_name, action, e)
         try:
+            import html as _html
             await query.edit_message_text(
-                f"❌ Не удалось получить погоду для «{city_name}».\n"
-                f"Ошибка: <code>{e}</code>",
+                f"❌ Не удалось получить погоду для «{_html.escape(city_name)}».\n"
+                f"Ошибка: <code>{_html.escape(str(e))}</code>",
                 parse_mode="HTML",
                 reply_markup=_keyboard(lat, lon, city_name),
             )

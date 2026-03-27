@@ -2,6 +2,7 @@
 # bot.py — Главный файл бота
 # ==============================================================================
 
+import html as _html_mod
 import logging
 import os
 import re
@@ -513,7 +514,7 @@ async def _midnight_swear_report(context) -> None:
                 lines = [f"🤬 {header}\n"]
                 for i, (name, count) in enumerate(rows[:5]):
                     medal = _MEDALS[i] if i < 3 else f"{i + 1}."
-                    lines.append(f"{medal} {name} — {count} раз(а)")
+                    lines.append(f"{medal} {_html_mod.escape(name or 'Аноним')} — {count} раз(а)")
                 text = "\n".join(lines)
             msg = await context.bot.send_message(chat_id=chat_id, text=text, parse_mode="HTML")
             track_bot_message(chat_id, msg.message_id, text[:80])
@@ -574,7 +575,7 @@ async def _weekly_best_photo(context) -> None:
                 continue
             votes = row["vote_count"]
             avg   = round(row["avg_score"], 1)
-            author = "Аноним" if row["anonymous"] else (row["author_name"] or "Аноним")
+            author = "Аноним" if row["anonymous"] else _html_mod.escape(row["author_name"] or "Аноним")
             photo_id  = row["photo_id"]
             media_type = row["media_type"] or "photo"
             uname_q   = urllib.parse.quote("Скаут", safe="")

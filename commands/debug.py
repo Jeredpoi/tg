@@ -131,6 +131,7 @@ async def debug_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         bot_commands = await context.bot.get_my_commands(scope=BotCommandScopeAllGroupChats())
     cmds_text = "\n".join(f"  /{cmd.command} — {cmd.description}" for cmd in bot_commands)
 
+    import html as _html
     username_display = f"@{user.username}" if user.username else "—"
 
     text = (
@@ -139,12 +140,12 @@ async def debug_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         "👤 <b>Пользователь</b>\n"
         f"  ID: <code>{user.id}</code>\n"
         f"  Username: {username_display}\n"
-        f"  Имя: {user.first_name}\n\n"
+        f"  Имя: {_html.escape(user.first_name or '')}\n\n"
 
         "💬 <b>Текущий чат</b>\n"
         f"  ID: <code>{chat.id}</code>\n"
         f"  Тип: {chat.type}\n"
-        f"  Название: {chat.title or '—'}\n"
+        f"  Название: {_html.escape(chat.title or '—')}\n"
         f"  Бот: {bot_perms}\n"
         f"  /rate сюда: {rate_target}\n\n"
 

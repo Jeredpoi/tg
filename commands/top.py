@@ -2,6 +2,7 @@
 # commands/top.py — Команда /top со статистикой чата
 # ==============================================================================
 
+import html
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.error import BadRequest
 from telegram.ext import ContextTypes
@@ -19,7 +20,7 @@ def _build_messages_text(rows: list) -> str:
         return "Пока нет данных 😴"
     lines = ["📊 <b>Статистика чата</b>\n", "<b>Топ по сообщениям:</b>\n"]
     for i, row in enumerate(rows):
-        name = row["first_name"] or row["username"] or "Аноним"
+        name = html.escape(row["first_name"] or row["username"] or "Аноним")
         lines.append(f"{_medal(i)} {name} — {row['msg_count']} сообщений")
     return "\n".join(lines)
 
@@ -29,7 +30,7 @@ def _build_swears_text(rows: list) -> str:
         return "Пока нет данных 😴"
     lines = ["🤬 <b>Статистика чата</b>\n", "<b>Кто больше матерится:</b>\n"]
     for i, row in enumerate(rows):
-        name = row["first_name"] or row["username"] or "Аноним"
+        name = html.escape(row["first_name"] or row["username"] or "Аноним")
         lines.append(f"{_medal(i)} {name} — {row['swear_count']} раз(а)")
     return "\n".join(lines)
 
@@ -40,7 +41,7 @@ def _build_rating_text(rows: list) -> str:
     lines = ["🏆 <b>Рейтинг /rate</b>\n", "<b>Топ по средней оценке:</b>\n"]
     for i, row in enumerate(rows):
         avg = round(row["total_score"] / row["vote_count"], 1) if row["vote_count"] > 0 else 0
-        author = "Аноним" if row["anonymous"] else (row["author_name"] or "Аноним")
+        author = "Аноним" if row["anonymous"] else html.escape(row["author_name"] or "Аноним")
         lines.append(f"{_medal(i)} {author} — ⭐ {avg} ({row['vote_count']} голос(ов))")
     return "\n".join(lines)
 

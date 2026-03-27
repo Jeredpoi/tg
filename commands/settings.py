@@ -429,7 +429,7 @@ async def _show_chat_list(query, context) -> None:
             main_name = mc.title or str(main_id)
         except Exception:
             main_name = str(main_id)
-        main_hint = f"\n\n🟢 Основная: <b>{main_name}</b>"
+        main_hint = f"\n\n🟢 Основная: <b>{html.escape(main_name)}</b>"
     else:
         main_hint = "\n\n⚠️ Основная группа не выбрана"
 
@@ -482,7 +482,7 @@ async def _show_chat_detail(query, context, chat_id: int) -> None:
     ])
 
     await query.edit_message_text(
-        f"💬 <b>{name}</b>\n\n"
+        f"💬 <b>{html.escape(name)}</b>\n\n"
         f"🆔 ID: <code>{chat_id}</code>{members_line}\n"
         f"Роль: {role_text}\n"
         f"<i>{role_desc}</i>",

@@ -351,11 +351,12 @@ async def rate_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
                     reply_markup=_rating_keyboard(key),
                 )
         except Exception as e:
+            import html as _html
             logger.error("send_%s failed: chat_id=%s error=%s", media_type, target_chat_id, e)
             await query.edit_message_text(
                 f"❌ Не удалось отправить {media_word} в группу.\n"
                 f"CHAT_ID: <code>{target_chat_id}</code>\n"
-                f"Ошибка: <code>{e}</code>\n\n"
+                f"Ошибка: <code>{_html.escape(str(e))}</code>\n\n"
                 f"Проверь: бот добавлен в группу? Напиши /debug в группе.",
                 parse_mode="HTML",
             )
