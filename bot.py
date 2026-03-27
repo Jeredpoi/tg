@@ -2,7 +2,6 @@
 # bot.py — Главный файл бота
 # ==============================================================================
 
-import json
 import logging
 import os
 import re
@@ -42,7 +41,9 @@ from commands.anon import anon_command, handle_anon_cancel, handle_anon_message
 from commands.clearmedia import clearmedia_command
 from commands.delmsg import delmsg_command, delmsg_callback
 from commands.resend import resend_command, handle_resend_message, resend_cancel
-from chat_config import get_main_chat_id, set_main_chat_id, unset_main_chat, is_main_chat
+from commands.settings import settings_command, settings_callback
+from chat_config import (get_main_chat_id, set_main_chat_id, unset_main_chat, is_main_chat,
+                         get_setup_chats, add_setup_chat, is_setup_chat)
 
 
 logging.basicConfig(
@@ -199,34 +200,24 @@ async def _rate_limit_guard(update, context):
     if now - last < cooldown:
         remaining = int(cooldown - (now - last)) + 1
         chat = update.effective_chat
-        chat_id = chat.id
 
         if chat and chat.type in ("group", "supergroup"):
-            # В группе: удаляем команду и отправляем отдельное сообщение (без цитаты)
+            # В группе: тихо удаляем команду, уведомляем только пользователя в ЛС
             try:
                 await msg.delete()
             except Exception:
                 pass
             try:
-                note = await context.bot.send_message(
-                    chat_id=chat_id,
-                    text=f"⏳ <b>{remaining} сек.</b> до следующего использования",
+                # Отправляем только в личку — в чат ничего не идёт
+                await context.bot.send_message(
+                    chat_id=user.id,
+                    text=f"⏳ <b>{remaining} сек.</b> до следующего использования <code>{command}</code>",
                     parse_mode="HTML",
-                    disable_notification=True,
                 )
-                note_id = note.message_id
-
-                async def _del_cd(ctx):
-                    try:
-                        await ctx.bot.delete_message(chat_id, note_id)
-                    except Exception:
-                        pass
-
-                context.job_queue.run_once(_del_cd, 4)
             except Exception:
-                pass
+                pass  # Если пользователь не начал диалог с ботом — молча игнорируем
         else:
-            # В личке просто отвечаем — удалять сообщения пользователя нельзя
+            # В личке просто отвечаем
             try:
                 await msg.reply_text(
                     f"⏳ <b>{remaining} сек.</b> до следующего использования",
@@ -249,22 +240,6 @@ async def _rate_limit_guard(update, context):
 # Setup guard — бот требует /start и права на удаление сообщений
 # ==============================================================================
 
-_SETUP_FILE = os.path.join(os.path.dirname(__file__), "setup_chats.json")
-
-def _load_setup_chats() -> set[int]:
-    try:
-        with open(_SETUP_FILE, "r", encoding="utf-8") as f:
-            return set(json.load(f))
-    except (FileNotFoundError, json.JSONDecodeError):
-        return set()
-
-def _save_setup_chats() -> None:
-    with open(_SETUP_FILE, "w", encoding="utf-8") as f:
-        json.dump(list(_setup_chats), f)
-
-_setup_chats: set[int] = _load_setup_chats()
-
-
 async def _setup_guard(update, context):
     """Middleware (group=-1): блокирует команды в не-инициализированных группах."""
     msg = update.message
@@ -280,7 +255,7 @@ async def _setup_guard(update, context):
     if command == "/start":
         return
 
-    if chat.id not in _setup_chats:
+    if not is_setup_chat(chat.id):
         await msg.reply_text("Сосунок, папочка пока не работает! Пропишите /start")
         raise ApplicationHandlerStop
 
@@ -290,7 +265,7 @@ async def _group_start_command(update, context):
     chat = update.effective_chat
 
     # Уже инициализирован — тихо удаляем команду
-    if chat.id in _setup_chats:
+    if is_setup_chat(chat.id):
         try:
             await update.message.delete()
         except Exception:
@@ -308,8 +283,7 @@ async def _group_start_command(update, context):
         )
         return
 
-    _setup_chats.add(chat.id)
-    _save_setup_chats()
+    add_setup_chat(chat.id)
     await update.message.reply_text(
         "Молодец сынок, папочка начинает работать"
     )
@@ -588,65 +562,18 @@ async def _cleanup_old_photos(context) -> None:
         logger.error("cleanup_old_photos: %s", e)
 
 
-async def setchat_command(update, context):
-    """/setchat [main|test] — владелец назначает роль группы."""
-    from config import OWNER_ID
-    user = update.effective_user
-    chat = update.effective_chat
-
-    if user.id != OWNER_ID:
-        await update.message.reply_text("❌ Только владелец может менять роль группы.")
+async def _handle_edited_message(update, context):
+    """При редактировании сообщения — отменяем pending swear job если маты убраны."""
+    msg = update.edited_message
+    if not msg:
         return
-
-    args = context.args
-    main_id = get_main_chat_id()
-
-    if not args:
-        # Показать текущую роль
-        if main_id == chat.id:
-            role = "🟢 <b>Основная</b> (main)"
-        else:
-            role = "🔵 Тестовая / не задана"
-        configured = f"\n\nОсновная группа сейчас: <code>{main_id}</code>" if main_id else "\n\nОсновная группа ещё не назначена."
-        await update.message.reply_text(
-            f"Роль этой группы: {role}{configured}\n\n"
-            "Команды:\n"
-            "  /setchat main — сделать эту группу основной\n"
-            "  /setchat test — снять метку main с этой группы",
-            parse_mode="HTML",
-        )
-        return
-
-    action = args[0].lower()
-    if action == "main":
-        set_main_chat_id(chat.id)
-        await update.message.reply_text(
-            f"✅ Эта группа назначена <b>основной</b>.\n\n"
-            f"Сюда будут приходить:\n"
-            f"• Ночной отчёт по матам\n"
-            f"• Фото недели\n"
-            f"• Анонимные сообщения (/anon)\n"
-            f"• Фото на оценку (/rate)",
-            parse_mode="HTML",
-        )
-        logger.info("setchat: группа %s (%s) назначена основной", chat.title, chat.id)
-
-    elif action == "test":
-        removed = unset_main_chat(chat.id)
-        if removed:
-            await update.message.reply_text(
-                "✅ Метка <b>main</b> снята с этой группы.\n"
-                "Рассылки и /anon сюда больше не придут.",
-                parse_mode="HTML",
-            )
-        else:
-            await update.message.reply_text(
-                "ℹ️ Эта группа и так не является основной.",
-            )
-        logger.info("setchat: метка main снята с группы %s (%s)", chat.title, chat.id)
-
-    else:
-        await update.message.reply_text("❌ Неверный аргумент. Используй: /setchat main или /setchat test")
+    text = msg.text or ""
+    # Если в отредактированном тексте больше нет матов — отменяем запланированный ответ
+    if _count_swears(text) == 0:
+        chat_id = msg.chat_id
+        for job in context.job_queue.get_jobs_by_name(f"swear_{chat_id}"):
+            if job.data.get("message_id") == msg.message_id:
+                job.schedule_removal()
 
 
 def main():
@@ -712,11 +639,9 @@ def main():
     app.add_handler(CommandHandler("clearmedia", clearmedia_command))
 
     # Скрытые команды владельца — только в личке, не в списке команд
-    app.add_handler(CommandHandler("delmsg",  delmsg_command,  filters=filters.ChatType.PRIVATE))
-    app.add_handler(CommandHandler("resend",  resend_command,  filters=filters.ChatType.PRIVATE))
-
-    # Настройка ролей групп (только владелец, только в группах)
-    app.add_handler(CommandHandler("setchat", setchat_command, filters=filters.ChatType.GROUPS))
+    app.add_handler(CommandHandler("delmsg",    delmsg_command,    filters=filters.ChatType.PRIVATE))
+    app.add_handler(CommandHandler("resend",    resend_command,    filters=filters.ChatType.PRIVATE))
+    app.add_handler(CommandHandler("settings",  settings_command,  filters=filters.ChatType.PRIVATE))
 
     # Ловим любые другие команды в личке и вежливо отказываем
     app.add_handler(MessageHandler(
@@ -757,6 +682,7 @@ def main():
     # Inline-кнопки
     app.add_handler(CallbackQueryHandler(_dismiss_callback,  pattern=r"^dismiss$"))
     app.add_handler(CallbackQueryHandler(delmsg_callback,    pattern=r"^delmsg_"))
+    app.add_handler(CallbackQueryHandler(settings_callback,  pattern=r"^stg:"))
     app.add_handler(CallbackQueryHandler(top_callback,     pattern=r"^top_"))
     app.add_handler(CallbackQueryHandler(rate_callback,    pattern=r"^(anon_|rate_|comment_ask_|comment_skip_)"))
     app.add_handler(CallbackQueryHandler(weather_callback, pattern=r"^w(forecast|refresh):"))
@@ -775,6 +701,9 @@ def main():
 
     # Трекинг текстовых сообщений (без команд)
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, _maybe_token_reply))
+
+    # Отмена swear-job при редактировании сообщений (убрали мат → не отвечаем)
+    app.add_handler(MessageHandler(filters.UpdateType.EDITED_MESSAGE, _handle_edited_message))
 
     async def on_startup(app):
         await app.bot.set_my_description("Скаут на связи 🟢")
