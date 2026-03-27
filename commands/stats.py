@@ -2,6 +2,7 @@
 # commands/stats.py — Команда /stats: личная статистика пользователя
 # ==============================================================================
 
+import html
 from telegram import Update
 from telegram.ext import ContextTypes
 from database import get_user_stats
@@ -21,7 +22,7 @@ async def stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     chat_id = update.effective_chat.id
     s = get_user_stats(target.id, chat_id)
 
-    name = target.first_name
+    name = html.escape(target.first_name or "User")
     lines = [f"📊 <b>Статистика {name}</b>\n"]
 
     # Активность
