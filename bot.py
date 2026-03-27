@@ -530,7 +530,7 @@ async def _private_start(update, context):
             await help_command(update, context)
             return
         user = update.effective_user
-        uname = urllib.parse.quote(user.username or user.first_name, safe='')
+        uname = urllib.parse.quote(user.username or user.first_name or str(user.id), safe='')
         url = f"{WEBAPP_URL}?uid={user.id}&uname={uname}&chat_id={chat_id}"
         kb = InlineKeyboardMarkup([[InlineKeyboardButton("🖼 Открыть галерею", url=url)]])
         bot_msg = await update.message.reply_text(

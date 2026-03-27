@@ -524,7 +524,7 @@ def get_best_photo_since(days: int, chat_id: int = None):
         if chat_id is not None:
             params.append(chat_id)
         return conn.execute(f"""
-            SELECT pr.*, CAST(pr.total_score AS FLOAT) / pr.vote_count AS avg_score
+            SELECT pr.*, CAST(pr.total_score AS FLOAT) / NULLIF(pr.vote_count, 0) AS avg_score
             FROM photo_ratings pr
             WHERE pr.key IS NOT NULL
               AND pr.vote_count >= 1

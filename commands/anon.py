@@ -2,6 +2,7 @@
 # commands/anon.py — Команда /anon: анонимное сообщение в группу
 # ==============================================================================
 
+import html
 import time
 import logging
 from telegram import Update
@@ -126,7 +127,7 @@ async def handle_anon_message(update: Update, context: ContextTypes.DEFAULT_TYPE
     try:
         await context.bot.send_message(
             chat_id,
-            f"🎭 <b>Анонимное сообщение:</b>\n\n{text}",
+            f"🎭 <b>Анонимное сообщение:</b>\n\n{html.escape(text)}",
             parse_mode="HTML",
         )
         await update.message.reply_text("✅ Сообщение отправлено анонимно!")
