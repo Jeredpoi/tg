@@ -1,9 +1,10 @@
 # ==============================================================================
-# commands/help.py — Команда /help
+# commands/help.py — Команда /help + /ownerhelp
 # ==============================================================================
 
 from telegram import Update
 from telegram.ext import ContextTypes
+from config import OWNER_ID
 
 HELP_TEXT = """
 🤖 <b>Команды бота</b>
@@ -15,9 +16,11 @@ HELP_TEXT = """
 
 📊 <b>Статистика</b>
 /top — топ активности, матов и рейтинга /rate
+/stats — личная статистика (или ответом — чужая)
 
 📸 <b>Медиа</b>
 /rate — отправить фото или видео на оценку группы (в личке боту)
+/gallery — открыть галерею фото и видео
 
 🌤 <b>Погода</b>
 /weather <i>город</i> — погода + прогноз на 4 дня (без города — повторяет последний)
@@ -29,7 +32,37 @@ HELP_TEXT = """
 /help — это сообщение
 """.strip()
 
+OWNER_HELP_TEXT = """
+👑 <b>Команды владельца</b>
+
+⚙️ <b>Управление ботом</b>
+/settings — панель настроек бота (только в личке)
+/delmsg — удалить сообщения бота из истории (только в личке)
+/resend — отправить сообщение от имени бота в группу (только в личке)
+/clearmedia — очистить все фото/видео из галереи
+
+🛠 <b>Диагностика</b>
+/debug — статус систем, чат-ID, права бота
+
+━━━━━━━━━━━━━━━━━━━━━━━
+👥 <b>Публичные команды</b>
+
+🎲 /dice · /roast · /mge
+📊 /top · /stats
+📸 /rate · /gallery
+🌤 /weather
+🎭 /anon
+❓ /help
+""".strip()
+
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Обработчик команд /help и /start."""
     await update.message.reply_text(HELP_TEXT, parse_mode="HTML")
+
+
+async def ownerhelp_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """/ownerhelp — список всех команд для владельца."""
+    if update.effective_user.id != OWNER_ID:
+        return
+    await update.message.reply_text(OWNER_HELP_TEXT, parse_mode="HTML")

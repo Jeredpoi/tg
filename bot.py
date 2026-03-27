@@ -34,7 +34,7 @@ from commands.mge import mge_command
 from commands.roast import roast_command
 from commands.top import top_command, top_callback
 from commands.rate import rate_command, rate_callback, handle_rate_photo, handle_rate_video, handle_rate_comment
-from commands.help import help_command
+from commands.help import help_command, ownerhelp_command
 from commands.weather import weather_command, weather_callback
 from commands.stats import stats_command
 from commands.anon import anon_command, handle_anon_cancel, handle_anon_message
@@ -688,9 +688,10 @@ def main():
     app.add_handler(CommandHandler("clearmedia", clearmedia_command))
 
     # Скрытые команды владельца — только в личке, не в списке команд
-    app.add_handler(CommandHandler("delmsg",    delmsg_command,    filters=filters.ChatType.PRIVATE))
-    app.add_handler(CommandHandler("resend",    resend_command,    filters=filters.ChatType.PRIVATE))
-    app.add_handler(CommandHandler("settings",  settings_command,  filters=filters.ChatType.PRIVATE))
+    app.add_handler(CommandHandler("delmsg",     delmsg_command,     filters=filters.ChatType.PRIVATE))
+    app.add_handler(CommandHandler("resend",     resend_command,     filters=filters.ChatType.PRIVATE))
+    app.add_handler(CommandHandler("settings",   settings_command,   filters=filters.ChatType.PRIVATE))
+    app.add_handler(CommandHandler("ownerhelp",  ownerhelp_command))
 
     # Ловим любые другие команды в личке и вежливо отказываем
     app.add_handler(MessageHandler(
