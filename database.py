@@ -493,9 +493,11 @@ def delete_photo_by_key(key: str, requester_id: int) -> tuple[bool, str, str]:
     conn = get_connection()
     try:
         row = conn.execute(
-            "SELECT photo_id, author_id, media_type FROM photo_ratings WHERE key = ?", (key,)
+            "SELECT photo_id, author_id, media_type, anonymous FROM photo_ratings WHERE key = ?", (key,)
         ).fetchone()
         if not row:
+            return False, "", ""
+        if row["anonymous"]:
             return False, "", ""
         if row["author_id"] != requester_id:
             return False, "", ""

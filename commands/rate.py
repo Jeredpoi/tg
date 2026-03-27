@@ -20,6 +20,7 @@ _COMMENT_WAITING: dict[int, str] = {}        # user_id → key (ждём тек�
 _PHOTO_CAPTIONS: dict[str, str] = {}         # key → текст подписи (для активных голосований)
 _RATE_PM_MSGS: dict[int, list[int]] = {}     # user_id → [message_ids] для удаления
 _RATE_WAITING: set[int] = set()              # user_id → ожидает отправки фото/видео после /rate
+_PENDING_PHOTOS: dict[str, dict] = {}       # key → данные фото (до подтверждения публикации)
 
 
 def _short_key(photo_id: str) -> str:
@@ -96,16 +97,19 @@ async def _process_media(update: Update, context: ContextTypes.DEFAULT_TYPE, pho
     author = update.effective_user
     author_name = f"@{author.username}" if author.username else author.first_name
 
-    save_photo(
-        photo_id=photo_id,
-        message_id=update.message.message_id,
-        chat_id=config.CHAT_ID,
-        author_id=author.id,
-        author_name=author_name,
-        anonymous=False,
-        key=key,
-        media_type=media_type,
-    )
+    # Сохраняем в память, НЕ в БД — в БД попадёт только после подтверждения публикации
+    _PENDING_PHOTOS[key] = {
+        "photo_id": photo_id,
+        "author_id": author.id,
+        "author_name": author_name,
+        "media_type": media_type,
+    }
+
+    # Таймаут 10 минут — если не подтвердит, чистим из памяти
+    async def _pending_timeout(ctx):
+        _PENDING_PHOTOS.pop(key, None)
+        _PHOTO_CAPTIONS.pop(key, None)
+    context.job_queue.run_once(_pending_timeout, 600, name=f"pending_photo_{key}")
 
     user_id = author.id
     if user_id not in _RATE_PM_MSGS:
@@ -295,7 +299,7 @@ async def rate_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
             key = data[5:-3]
             anonymous = False
 
-        photo_row = get_photo_by_key(key)
+        photo_row = _PENDING_PHOTOS.pop(key, None)
         if not photo_row:
             await query.edit_message_text("❌ Фото не найдено. Отправь фото заново.")
             return
