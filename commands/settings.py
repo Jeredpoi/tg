@@ -63,6 +63,73 @@ _MAIN_TEXT = (
 
 # ── Команда /settings ─────────────────────────────────────────────────────────
 
+async def _build_main_text(context) -> str:
+    """Генерирует текст главного экрана со сводкой текущего состояния."""
+    import datetime
+
+    # Основная группа
+    main_id = get_main_chat_id()
+    if main_id:
+        try:
+            chat = await context.bot.get_chat(main_id)
+            main_line = f"✅ {chat.title}"
+        except Exception:
+            main_line = f"✅ <code>{main_id}</code>"
+    else:
+        main_line = "⚠️ не назначена"
+
+    # Команды
+    disabled = get_disabled_commands()
+    total_cmds = len(MANAGEABLE_COMMANDS)
+    if disabled:
+        cmds_line = f"🔴 Отключено {len(disabled)} из {total_cmds}"
+    else:
+        cmds_line = f"🟢 Все {total_cmds} включены"
+
+    # Мат-детекция
+    swear_on = get_setting("swear_detect")
+    chance = int(get_setting("swear_response_chance") * 100)
+    swear_line = f"🟢 вкл, шанс {chance}%" if swear_on else "🔴 выкл"
+
+    # Отчёты
+    midnight = get_setting("midnight_report")
+    weekly = get_setting("weekly_best_photo")
+    reports_parts = []
+    if midnight:
+        reports_parts.append("ночной")
+    if weekly:
+        reports_parts.append("фото недели")
+    reports_line = ("🟢 " + ", ".join(reports_parts)) if reports_parts else "🔴 все выкл"
+
+    # Голосование
+    vote_dur = get_setting("vote_duration")
+
+    # Кулдаун
+    cd = get_setting("cmd_cooldown")
+
+    # Кастомный контент
+    custom_mge = len(get_custom_mge_phrases())
+    custom_swear = len(get_custom_swear_responses())
+
+    # Время
+    now = datetime.datetime.now(datetime.timezone(datetime.timedelta(hours=3)))
+    ts = now.strftime("%d.%m %H:%M МСК")
+
+    return (
+        f"⚙️ <b>Настройки бота</b>\n"
+        f"<i>Обновлено: {ts}</i>\n\n"
+        f"<b>Основная группа:</b> {main_line}\n"
+        f"<b>Команды:</b> {cmds_line}\n"
+        f"<b>Мат-детекция:</b> {swear_line}\n"
+        f"<b>Отчёты:</b> {reports_line}\n"
+        f"<b>Голосование:</b> {vote_dur} мин.\n"
+        f"<b>Кулдаун:</b> {cd} сек.\n"
+        f"<b>Свои фразы /mge:</b> {custom_mge} шт.\n"
+        f"<b>Свои ответы на маты:</b> {custom_swear} шт.\n\n"
+        f"Выбери раздел:"
+    )
+
+
 async def settings_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """/settings — открывает панель настроек (только личка, только владелец)."""
     if update.effective_user.id != OWNER_ID:
@@ -75,8 +142,9 @@ async def settings_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -
             pass
         return
 
+    text = await _build_main_text(context)
     await update.message.reply_text(
-        _MAIN_TEXT,
+        text,
         parse_mode="HTML",
         reply_markup=_main_menu_kb(),
     )
@@ -96,8 +164,9 @@ async def settings_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) 
 
     # ── Главное меню ──
     if data == "stg:menu":
+        text = await _build_main_text(context)
         await query.edit_message_text(
-            _MAIN_TEXT,
+            text,
             parse_mode="HTML",
             reply_markup=_main_menu_kb(),
         )
