@@ -254,11 +254,14 @@ async def api_avatar(request: web.Request) -> web.Response:
     os.makedirs(AVATARS_DIR, exist_ok=True)
     cache_path = os.path.join(AVATARS_DIR, f"{user_id}.jpg")
 
-    # Отдаём кэш если свежий
-    if os.path.exists(cache_path):
-        mtime = os.path.getmtime(cache_path)
-        if (time.time() - mtime) < AVATAR_TTL:
-            return web.FileResponse(cache_path, headers={"Cache-Control": "public, max-age=3600"})
+    # Отдаём кэш если свежий (race condition guard: файл мог удалиться между exists и getmtime)
+    try:
+        if os.path.exists(cache_path):
+            mtime = os.path.getmtime(cache_path)
+            if (time.time() - mtime) < AVATAR_TTL:
+                return web.FileResponse(cache_path, headers={"Cache-Control": "public, max-age=3600"})
+    except OSError:
+        pass  # файл исчез между exists() и getmtime() — идём дальше к перезагрузке
 
     # Запрашиваем у Telegram
     try:

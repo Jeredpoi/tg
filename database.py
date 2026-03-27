@@ -138,7 +138,10 @@ def init_db() -> None:
                 sent_at    REAL NOT NULL DEFAULT (unixepoch())
             )
         """)
-        c.execute("CREATE INDEX IF NOT EXISTS idx_bot_messages_chat ON bot_messages(chat_id, sent_at DESC)")
+        c.execute("CREATE INDEX IF NOT EXISTS idx_bot_messages_chat   ON bot_messages(chat_id, sent_at DESC)")
+        c.execute("CREATE INDEX IF NOT EXISTS idx_photo_ratings_key   ON photo_ratings(key)")
+        c.execute("CREATE INDEX IF NOT EXISTS idx_photo_ratings_chat  ON photo_ratings(chat_id)")
+        c.execute("CREATE INDEX IF NOT EXISTS idx_photo_votes_photo   ON photo_votes(photo_id)")
 
         conn.commit()
     finally:

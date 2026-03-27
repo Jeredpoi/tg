@@ -316,8 +316,8 @@ async def _send_swear_response(context) -> None:
             reply_to_message_id=d["message_id"],
         )
         track_bot_message(chat_id, msg.message_id, msg.text)
-    except Exception:
-        pass
+    except Exception as e:
+        logger.warning("_send_swear_response: chat=%s err=%s", chat_id, e)
 
 
 _avatar_cache_set: set[int] = set()   # user_id уже закэшированных за эту сессию
@@ -785,6 +785,17 @@ def main():
         three_am = datetime.time(3, 0, 0, tzinfo=msk)
         app.job_queue.run_daily(_cleanup_old_photos, time=three_am, name="cleanup_old_photos")
         logger.info("Авточистка старых фото запланирована на 03:00 МСК")
+
+        # Авточистка _cmd_last_used — каждый час убираем записи старше 2 часов
+        async def _cleanup_cmd_cooldown(ctx):
+            cutoff = time.time() - 7200
+            stale = [k for k, v in _cmd_last_used.items() if v < cutoff]
+            for k in stale:
+                _cmd_last_used.pop(k, None)
+            if stale:
+                logger.debug("_cmd_last_used: удалено %d устаревших записей", len(stale))
+
+        app.job_queue.run_repeating(_cleanup_cmd_cooldown, interval=3600, first=3600, name="cleanup_cmd_cooldown")
 
     async def on_shutdown(app):
         try:

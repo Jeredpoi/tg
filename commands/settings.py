@@ -177,6 +177,10 @@ async def settings_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) 
 
     # ── Главное меню ──
     if data == "stg:menu":
+        # Сбрасываем любой незавершённый диалог ввода
+        context.user_data.pop("stg_state", None)
+        context.user_data.pop("stg_mge_char", None)
+        context.user_data.pop("stg_msg_id", None)
         text = await _build_main_text(context)
         await query.edit_message_text(
             text,
@@ -852,6 +856,9 @@ async def handle_settings_input(update: Update, context) -> bool:
         if not text:
             await update.message.reply_text("❌ Пустая фраза. Попробуй снова через /settings.")
             return True
+        if len(text) > 500:
+            await update.message.reply_text("❌ Слишком длинная фраза (макс. 500 символов). Попробуй короче.")
+            return True
 
         add_custom_mge_phrase(char, text)
         user_mid = update.message.message_id
@@ -879,6 +886,9 @@ async def handle_settings_input(update: Update, context) -> bool:
 
         if not text:
             await update.message.reply_text("❌ Пустой ответ. Попробуй снова через /settings.")
+            return True
+        if len(text) > 300:
+            await update.message.reply_text("❌ Слишком длинный ответ (макс. 300 символов). Попробуй короче.")
             return True
 
         add_custom_swear_response(text)

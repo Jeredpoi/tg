@@ -107,9 +107,13 @@ async def _process_media(update: Update, context: ContextTypes.DEFAULT_TYPE, pho
     }
 
     # Таймаут 10 минут — если не подтвердит, чистим из памяти
+    uid_for_cleanup = author.id
     async def _pending_timeout(ctx):
         _PENDING_PHOTOS.pop(key, None)
         _PHOTO_CAPTIONS.pop(key, None)
+        # Если пользователь нажал «добавить подпись» но так и не написал
+        if _COMMENT_WAITING.get(uid_for_cleanup) == key:
+            _COMMENT_WAITING.pop(uid_for_cleanup, None)
     context.job_queue.run_once(_pending_timeout, 600, name=f"pending_photo_{key}")
 
     user_id = author.id
