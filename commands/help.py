@@ -5,6 +5,7 @@
 from telegram import Update
 from telegram.ext import ContextTypes
 from config import OWNER_ID
+from chat_config import get_setting
 
 HELP_TEXT = """
 🤖 <b>Команды бота</b>
@@ -57,26 +58,44 @@ OWNER_HELP_TEXT = """
 
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Обработчик команд /help и /start."""
-    await update.message.reply_text(HELP_TEXT, parse_mode="HTML")
+    """Обработчик команд /help и /start. Автоудаляется если autodel_help > 0."""
+    user_msg = update.message
+    bot_msg  = await user_msg.reply_text(HELP_TEXT, parse_mode="HTML")
+
+    delay = get_setting("autodel_help")
+    if delay:
+        chat_id  = user_msg.chat_id
+        user_mid = user_msg.message_id
+        bot_mid  = bot_msg.message_id
+
+        async def _delete(ctx):
+            for mid in [user_mid, bot_mid]:
+                try:
+                    await ctx.bot.delete_message(chat_id, mid)
+                except Exception:
+                    pass
+
+        context.job_queue.run_once(_delete, delay)
 
 
 async def ownerhelp_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """/ownerhelp — список всех команд для владельца. Удаляется через 20 сек."""
+    """/ownerhelp — список всех команд для владельца."""
     if update.effective_user.id != OWNER_ID:
         return
     user_msg = update.message
-    bot_msg = await user_msg.reply_text(OWNER_HELP_TEXT, parse_mode="HTML")
+    bot_msg  = await user_msg.reply_text(OWNER_HELP_TEXT, parse_mode="HTML")
 
-    chat_id  = user_msg.chat_id
-    user_mid = user_msg.message_id
-    bot_mid  = bot_msg.message_id
+    delay = get_setting("autodel_ownerhelp")
+    if delay:
+        chat_id  = user_msg.chat_id
+        user_mid = user_msg.message_id
+        bot_mid  = bot_msg.message_id
 
-    async def _delete(ctx):
-        for mid in [user_mid, bot_mid]:
-            try:
-                await ctx.bot.delete_message(chat_id, mid)
-            except Exception:
-                pass
+        async def _delete(ctx):
+            for mid in [user_mid, bot_mid]:
+                try:
+                    await ctx.bot.delete_message(chat_id, mid)
+                except Exception:
+                    pass
 
-    context.job_queue.run_once(_delete, 20)
+        context.job_queue.run_once(_delete, delay)

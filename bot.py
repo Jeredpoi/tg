@@ -540,19 +540,21 @@ async def _private_start(update, context):
             reply_markup=kb,
         )
 
-        # Автоудаление обоих сообщений через 25 секунд
-        pm_chat_id = update.effective_chat.id
-        user_mid = update.message.message_id
-        bot_mid = bot_msg.message_id
+        # Автоудаление обоих сообщений (задержка из настроек)
+        delay = get_setting("autodel_gallery")
+        if delay:
+            pm_chat_id = update.effective_chat.id
+            user_mid = update.message.message_id
+            bot_mid = bot_msg.message_id
 
-        async def _del_gallery(ctx):
-            for mid in [user_mid, bot_mid]:
-                try:
-                    await ctx.bot.delete_message(pm_chat_id, mid)
-                except Exception:
-                    pass
+            async def _del_gallery(ctx):
+                for mid in [user_mid, bot_mid]:
+                    try:
+                        await ctx.bot.delete_message(pm_chat_id, mid)
+                    except Exception:
+                        pass
 
-        context.job_queue.run_once(_del_gallery, 25)
+            context.job_queue.run_once(_del_gallery, delay)
         return
     await help_command(update, context)
 

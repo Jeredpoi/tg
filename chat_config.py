@@ -104,6 +104,9 @@ _DEFAULT_SETTINGS = {
     "weekly_best_photo": True,     # Еженедельное лучшее фото
     "vote_duration": 30,           # Длительность голосования (минуты)
     "cmd_cooldown": 10,            # Кулдаун команд (секунды)
+    "autodel_help": 25,            # Автоудаление ответа /help (сек, 0 = выкл)
+    "autodel_gallery": 25,         # Автоудаление ссылки галереи (сек, 0 = выкл)
+    "autodel_ownerhelp": 20,       # Автоудаление ответа /ownerhelp (сек, 0 = выкл)
 }
 
 _settings_cache: dict | None = None

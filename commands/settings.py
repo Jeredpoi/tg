@@ -42,6 +42,7 @@ def _main_menu_kb() -> InlineKeyboardMarkup:
         [InlineKeyboardButton("📊 Отчёты и рассылки",              callback_data="stg:reports")],
         [InlineKeyboardButton("🗳 Голосование /rate",               callback_data="stg:vote")],
         [InlineKeyboardButton("⏱ Кулдаун команд",                  callback_data="stg:cooldown")],
+        [InlineKeyboardButton("🗑 Автоудаление сообщений",          callback_data="stg:autodel")],
         [InlineKeyboardButton("❌ Закрыть",                         callback_data="stg:close")],
     ])
 
@@ -108,6 +109,16 @@ async def _build_main_text(context) -> str:
     # Кулдаун
     cd = get_setting("cmd_cooldown")
 
+    # Автоудаление
+    def _fmt_del(key):
+        v = get_setting(key)
+        return f"{v} сек." if v else "выкл"
+    autodel_line = (
+        f"/help {_fmt_del('autodel_help')} · "
+        f"галерея {_fmt_del('autodel_gallery')} · "
+        f"/ownerhelp {_fmt_del('autodel_ownerhelp')}"
+    )
+
     # Кастомный контент
     custom_mge = len(get_custom_mge_phrases())
     custom_swear = len(get_custom_swear_responses())
@@ -126,7 +137,8 @@ async def _build_main_text(context) -> str:
         f"<b>Голосование:</b> {vote_dur} мин.\n"
         f"<b>Кулдаун:</b> {cd} сек.\n"
         f"<b>Свои фразы /mge:</b> {custom_mge} шт.\n"
-        f"<b>Свои ответы на маты:</b> {custom_swear} шт.\n\n"
+        f"<b>Свои ответы на маты:</b> {custom_swear} шт.\n"
+        f"<b>Автоудаление:</b> {autodel_line}\n\n"
         f"Выбери раздел:"
     )
 
@@ -266,6 +278,28 @@ async def settings_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         set_setting("cmd_cooldown", value)
         await query.answer(f"Кулдаун: {value} сек.")
         await _show_cooldown_settings(query)
+
+    # ── Автоудаление ──
+    elif data == "stg:autodel":
+        await _show_autodel_settings(query)
+
+    elif data.startswith("stg:adh:"):
+        value = int(data[8:])
+        set_setting("autodel_help", value)
+        await query.answer("выкл" if value == 0 else f"/help: {value} сек.")
+        await _show_autodel_settings(query)
+
+    elif data.startswith("stg:adg:"):
+        value = int(data[8:])
+        set_setting("autodel_gallery", value)
+        await query.answer("выкл" if value == 0 else f"Галерея: {value} сек.")
+        await _show_autodel_settings(query)
+
+    elif data.startswith("stg:adow:"):
+        value = int(data[9:])
+        set_setting("autodel_ownerhelp", value)
+        await query.answer("выкл" if value == 0 else f"/ownerhelp: {value} сек.")
+        await _show_autodel_settings(query)
 
     # ── Управление командами ──
     elif data == "stg:cmds":
@@ -745,6 +779,51 @@ async def _show_swear_resp_list(query) -> None:
         f"Нажми на ответ чтобы удалить его:",
         parse_mode="HTML",
         reply_markup=InlineKeyboardMarkup(rows),
+    )
+    await query.answer()
+
+
+# ── Экран автоудаления ────────────────────────────────────────────────────────
+
+_AUTODEL_OPTIONS = [0, 10, 15, 20, 25, 30, 60]  # 0 = выкл
+
+def _autodel_row(setting_key: str, cb_prefix: str, label: str) -> list:
+    """Строка кнопок для одной настройки автоудаления."""
+    current = get_setting(setting_key)
+    btns = []
+    for val in _AUTODEL_OPTIONS:
+        tick = "✅ " if current == val else ""
+        txt  = "выкл" if val == 0 else f"{val}с"
+        btns.append(InlineKeyboardButton(f"{tick}{txt}", callback_data=f"{cb_prefix}{val}"))
+    return btns
+
+
+async def _show_autodel_settings(query) -> None:
+    h  = get_setting("autodel_help")
+    g  = get_setting("autodel_gallery")
+    ow = get_setting("autodel_ownerhelp")
+
+    def fmt(v): return "выкл" if v == 0 else f"{v} сек."
+
+    kb = InlineKeyboardMarkup([
+        [InlineKeyboardButton("📖 /help", callback_data="dismiss")],
+        _autodel_row("autodel_help",      "stg:adh:",  "/help"),
+        [InlineKeyboardButton("🖼 Галерея (личка)", callback_data="dismiss")],
+        _autodel_row("autodel_gallery",   "stg:adg:",  "галерея"),
+        [InlineKeyboardButton("👑 /ownerhelp", callback_data="dismiss")],
+        _autodel_row("autodel_ownerhelp", "stg:adow:", "/ownerhelp"),
+        [_back_to_menu_btn()],
+    ])
+
+    await query.edit_message_text(
+        "🗑 <b>Автоудаление сообщений</b>\n\n"
+        f"📖 /help: <b>{fmt(h)}</b>\n"
+        f"🖼 Галерея (личка): <b>{fmt(g)}</b>\n"
+        f"👑 /ownerhelp: <b>{fmt(ow)}</b>\n\n"
+        "<i>Сколько секунд показывается сообщение перед удалением.\n"
+        "«выкл» — сообщение не удаляется.</i>",
+        parse_mode="HTML",
+        reply_markup=kb,
     )
     await query.answer()
 
