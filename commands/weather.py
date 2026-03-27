@@ -2,6 +2,7 @@
 # commands/weather.py — Команда /weather (Яндекс.Погода API)
 # ==============================================================================
 
+import html as _html
 import logging
 
 import httpx
@@ -88,8 +89,9 @@ def _build_current_text(city_name: str, data: dict) -> str:
     humidity = fact.get("humidity", "?")
     pressure = fact.get("pressure_mm", "?")
 
+    safe_city = _html.escape(city_name)
     lines = [
-        f"{icon} <b>Погода в {city_name}</b>",
+        f"{icon} <b>Погода в {safe_city}</b>",
         "─" * 22,
         f"🌡 <b>Температура:</b> {_sign(temp)}°C  (ощущается {_sign(feels)}°C)",
         f"{icon} <b>Состояние:</b> {cond_name}",
@@ -102,7 +104,8 @@ def _build_current_text(city_name: str, data: dict) -> str:
 
 def _build_forecast_text(city_name: str, data: dict) -> str:
     forecasts = data.get("forecasts", [])[:4]
-    lines = [f"📅 <b>Прогноз для {city_name}</b>", "─" * 22]
+    safe_city = _html.escape(city_name)
+    lines = [f"📅 <b>Прогноз для {safe_city}</b>", "─" * 22]
     for day in forecasts:
         date = day.get("date", "")
         parts = day.get("parts", {})

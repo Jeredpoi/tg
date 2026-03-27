@@ -643,13 +643,14 @@ def main():
         builder = builder.request(HTTPXRequest(read_timeout=15, write_timeout=15, connect_timeout=10))
     app = builder.build()
 
-    # Middleware (group=-1): сначала rate limiter, потом setup guard
-    app.add_handler(
-        MessageHandler(filters.COMMAND, _rate_limit_guard),
-        group=-1,
-    )
+    # Middleware: setup guard fires first (group=-2), then rate limiter (group=-1)
+    # PTB processes exactly one handler per group — so they must be in separate groups
     app.add_handler(
         MessageHandler(filters.COMMAND & filters.ChatType.GROUPS, _setup_guard),
+        group=-2,
+    )
+    app.add_handler(
+        MessageHandler(filters.COMMAND, _rate_limit_guard),
         group=-1,
     )
 
