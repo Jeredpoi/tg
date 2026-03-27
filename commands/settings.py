@@ -42,6 +42,7 @@ def _main_menu_kb() -> InlineKeyboardMarkup:
         [InlineKeyboardButton("📊 Отчёты и рассылки",              callback_data="stg:reports")],
         [InlineKeyboardButton("🗳 Голосование /rate",               callback_data="stg:vote")],
         [InlineKeyboardButton("⏱ Кулдаун команд",                  callback_data="stg:cooldown")],
+        [InlineKeyboardButton("❌ Закрыть",                         callback_data="stg:close")],
     ])
 
 
@@ -171,6 +172,14 @@ async def settings_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) 
             reply_markup=_main_menu_kb(),
         )
         await query.answer()
+
+    # ── Закрыть панель ──
+    elif data == "stg:close":
+        await query.answer()
+        try:
+            await query.message.delete()
+        except Exception:
+            pass
 
     # ── Управление чатами ──
     elif data == "stg:chats":
@@ -766,11 +775,23 @@ async def handle_settings_input(update: Update, context) -> bool:
             return True
 
         add_custom_mge_phrase(char, text)
-        await update.message.reply_text(
+        user_mid = update.message.message_id
+        bot_msg = await update.message.reply_text(
             f"✅ Фраза добавлена!\n\n"
             f"🎭 <b>{char}:</b>\n«{text}»",
             parse_mode="HTML",
         )
+        bot_mid  = bot_msg.message_id
+        chat_id  = update.message.chat_id
+
+        async def _cleanup_mge(ctx):
+            for mid in [user_mid, bot_mid]:
+                try:
+                    await ctx.bot.delete_message(chat_id, mid)
+                except Exception:
+                    pass
+
+        context.job_queue.run_once(_cleanup_mge, 4)
         return True
 
     # ── Ввод ответа на мат ──
@@ -782,12 +803,24 @@ async def handle_settings_input(update: Update, context) -> bool:
             return True
 
         add_custom_swear_response(text)
-        preview = text.format(name="Вася") if "{name}" in text else text
-        await update.message.reply_text(
+        preview  = text.format(name="Вася") if "{name}" in text else text
+        user_mid = update.message.message_id
+        bot_msg  = await update.message.reply_text(
             f"✅ Ответ добавлен!\n\n"
             f"Пример: <i>{preview}</i>",
             parse_mode="HTML",
         )
+        bot_mid  = bot_msg.message_id
+        chat_id  = update.message.chat_id
+
+        async def _cleanup_swear(ctx):
+            for mid in [user_mid, bot_mid]:
+                try:
+                    await ctx.bot.delete_message(chat_id, mid)
+                except Exception:
+                    pass
+
+        context.job_queue.run_once(_cleanup_swear, 4)
         return True
 
     return False

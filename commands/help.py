@@ -62,7 +62,21 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 
 
 async def ownerhelp_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """/ownerhelp — список всех команд для владельца."""
+    """/ownerhelp — список всех команд для владельца. Удаляется через 20 сек."""
     if update.effective_user.id != OWNER_ID:
         return
-    await update.message.reply_text(OWNER_HELP_TEXT, parse_mode="HTML")
+    user_msg = update.message
+    bot_msg = await user_msg.reply_text(OWNER_HELP_TEXT, parse_mode="HTML")
+
+    chat_id  = user_msg.chat_id
+    user_mid = user_msg.message_id
+    bot_mid  = bot_msg.message_id
+
+    async def _delete(ctx):
+        for mid in [user_mid, bot_mid]:
+            try:
+                await ctx.bot.delete_message(chat_id, mid)
+            except Exception:
+                pass
+
+    context.job_queue.run_once(_delete, 20)
