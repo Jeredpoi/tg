@@ -41,8 +41,9 @@ from commands.anon import anon_command, handle_anon_cancel, handle_anon_message
 from commands.clearmedia import clearmedia_command
 from commands.delmsg import delmsg_command, delmsg_callback
 from commands.resend import resend_command, handle_resend_message, resend_cancel
-from commands.settings import settings_command, settings_callback
-from chat_config import get_main_chat_id, add_setup_chat, is_setup_chat, get_setting, is_command_enabled
+from commands.settings import settings_command, settings_callback, handle_settings_input
+from chat_config import (get_main_chat_id, add_setup_chat, is_setup_chat, get_setting,
+                          is_command_enabled, get_custom_swear_responses)
 
 
 logging.basicConfig(
@@ -308,9 +309,10 @@ async def _send_swear_response(context) -> None:
     _swear_last_response[chat_id] = time.time()
 
     try:
+        all_responses = SWEAR_RESPONSES + get_custom_swear_responses()
         msg = await context.bot.send_message(
             chat_id=chat_id,
-            text=random.choice(SWEAR_RESPONSES).format(name=d["name"]),
+            text=random.choice(all_responses).format(name=d["name"]),
             reply_to_message_id=d["message_id"],
         )
         track_bot_message(chat_id, msg.message_id, msg.text)
@@ -738,7 +740,9 @@ def main():
     # Анонимные сообщения / подпись /rate / resend в личке + трекинг в группах
     async def _maybe_token_reply(update, context):
         if update.effective_chat and update.effective_chat.type == "private":
-            # Приоритет: resend → подпись к /rate → анонимное сообщение
+            # Приоритет: настройки → resend → подпись к /rate → анонимное сообщение
+            if await handle_settings_input(update, context):
+                return
             if await handle_resend_message(update, context):
                 return
             if await handle_rate_comment(update, context):

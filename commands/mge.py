@@ -7,6 +7,7 @@ import random
 from telegram import Update
 from telegram.ext import ContextTypes
 from config import MGE_PHRASES
+from chat_config import get_custom_mge_phrases
 from database import track_bot_message
 
 
@@ -15,7 +16,10 @@ async def mge_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     /mge [или ответом на сообщение] — отправляет случайную фразу из МГЕ.
     Если команда является ответом на чьё-то сообщение, упоминает этого пользователя.
     """
-    speaker, phrase = random.choice(MGE_PHRASES)
+    # Объединяем стандартные и кастомные фразы
+    custom = [(p["char"], p["phrase"]) for p in get_custom_mge_phrases()]
+    all_phrases = MGE_PHRASES + custom
+    speaker, phrase = random.choice(all_phrases)
 
     reply = update.message.reply_to_message
     if reply and reply.from_user and not reply.from_user.is_bot:

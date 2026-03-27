@@ -196,3 +196,72 @@ def is_command_enabled(cmd: str) -> bool:
     """True если команда не отключена."""
     return cmd not in get_disabled_commands()
 
+
+# ── Кастомные MGE-фразы ───────────────────────────────────────────────────────
+
+_CUSTOM_PHRASES_FILE = os.path.join(os.path.dirname(__file__), "custom_mge.json")
+
+# Персонажи доступные для выбора
+MGE_CHARACTERS = ["Скаут", "Солдат", "Снайпер", "Медик", "Пулемётчик", "Шпион", "Игрок"]
+
+
+def get_custom_mge_phrases() -> list[dict]:
+    """Возвращает список кастомных фраз: [{'char': '...', 'phrase': '...'}]."""
+    try:
+        with open(_CUSTOM_PHRASES_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError):
+        return []
+
+
+def add_custom_mge_phrase(char: str, phrase: str) -> None:
+    """Добавляет кастомную фразу."""
+    phrases = get_custom_mge_phrases()
+    phrases.append({"char": char, "phrase": phrase})
+    with open(_CUSTOM_PHRASES_FILE, "w", encoding="utf-8") as f:
+        json.dump(phrases, f, ensure_ascii=False, indent=2)
+
+
+def delete_custom_mge_phrase(idx: int) -> bool:
+    """Удаляет фразу по индексу. Возвращает True если успешно."""
+    phrases = get_custom_mge_phrases()
+    if 0 <= idx < len(phrases):
+        phrases.pop(idx)
+        with open(_CUSTOM_PHRASES_FILE, "w", encoding="utf-8") as f:
+            json.dump(phrases, f, ensure_ascii=False, indent=2)
+        return True
+    return False
+
+
+# ── Кастомные ответы на маты ─────────────────────────────────────────────────
+
+_CUSTOM_SWEAR_FILE = os.path.join(os.path.dirname(__file__), "custom_swear.json")
+
+
+def get_custom_swear_responses() -> list[str]:
+    """Возвращает список кастомных ответов на маты."""
+    try:
+        with open(_CUSTOM_SWEAR_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError):
+        return []
+
+
+def add_custom_swear_response(text: str) -> None:
+    """Добавляет кастомный ответ на мат."""
+    responses = get_custom_swear_responses()
+    responses.append(text)
+    with open(_CUSTOM_SWEAR_FILE, "w", encoding="utf-8") as f:
+        json.dump(responses, f, ensure_ascii=False, indent=2)
+
+
+def delete_custom_swear_response(idx: int) -> bool:
+    """Удаляет ответ по индексу. Возвращает True если успешно."""
+    responses = get_custom_swear_responses()
+    if 0 <= idx < len(responses):
+        responses.pop(idx)
+        with open(_CUSTOM_SWEAR_FILE, "w", encoding="utf-8") as f:
+            json.dump(responses, f, ensure_ascii=False, indent=2)
+        return True
+    return False
+

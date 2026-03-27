@@ -10,8 +10,16 @@ from chat_config import (
     get_setup_chats, get_settings, get_setting, set_setting,
     MANAGEABLE_COMMANDS, get_disabled_commands, disable_command, enable_command,
     is_command_enabled,
+    MGE_CHARACTERS,
+    get_custom_mge_phrases, add_custom_mge_phrase, delete_custom_mge_phrase,
+    get_custom_swear_responses, add_custom_swear_response, delete_custom_swear_response,
 )
 from config import OWNER_ID
+
+# ── Состояния диалога ввода ───────────────────────────────────────────────────
+# Хранятся в context.user_data["stg_state"]
+STATE_AWAIT_MGE_PHRASE   = "await_mge_phrase"    # ждём текст фразы
+STATE_AWAIT_SWEAR_RESP   = "await_swear_resp"    # ждём текст ответа на мат
 
 logger = logging.getLogger(__name__)
 
@@ -21,13 +29,19 @@ logger = logging.getLogger(__name__)
 def _main_menu_kb() -> InlineKeyboardMarkup:
     disabled = get_disabled_commands()
     cmd_icon = "🔴" if disabled else "🟢"
+    custom_mge   = len(get_custom_mge_phrases())
+    custom_swear = len(get_custom_swear_responses())
+    mge_badge   = f" ({custom_mge})"   if custom_mge   else ""
+    swear_badge = f" ({custom_swear})" if custom_swear else ""
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton("💬 Управление чатами",     callback_data="stg:chats")],
-        [InlineKeyboardButton(f"{cmd_icon} Команды бота", callback_data="stg:cmds")],
-        [InlineKeyboardButton("🤬 Мат-детекция",          callback_data="stg:swear")],
-        [InlineKeyboardButton("📊 Отчёты и рассылки",     callback_data="stg:reports")],
-        [InlineKeyboardButton("🗳 Голосование /rate",      callback_data="stg:vote")],
-        [InlineKeyboardButton("⏱ Кулдаун команд",         callback_data="stg:cooldown")],
+        [InlineKeyboardButton("💬 Управление чатами",              callback_data="stg:chats")],
+        [InlineKeyboardButton(f"{cmd_icon} Команды бота",          callback_data="stg:cmds")],
+        [InlineKeyboardButton("🤬 Мат-детекция",                   callback_data="stg:swear")],
+        [InlineKeyboardButton(f"✏️ Фразы /mge{mge_badge}",         callback_data="stg:mge")],
+        [InlineKeyboardButton(f"💬 Ответы на маты{swear_badge}",   callback_data="stg:swear_resp")],
+        [InlineKeyboardButton("📊 Отчёты и рассылки",              callback_data="stg:reports")],
+        [InlineKeyboardButton("🗳 Голосование /rate",               callback_data="stg:vote")],
+        [InlineKeyboardButton("⏱ Кулдаун команд",                  callback_data="stg:cooldown")],
     ])
 
 
@@ -188,6 +202,74 @@ async def settings_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) 
             enable_command(cmd)
             await query.answer(f"🟢 {cmd} включена")
         await _show_commands_settings(query)
+
+    # ── Кастомные MGE-фразы ──
+    elif data == "stg:mge":
+        await _show_mge_menu(query)
+
+    elif data == "stg:mge_add":
+        await _show_mge_char_picker(query)
+
+    elif data.startswith("stg:mge_char:"):
+        char = data[13:]
+        context.user_data["stg_state"] = STATE_AWAIT_MGE_PHRASE
+        context.user_data["stg_mge_char"] = char
+        context.user_data["stg_msg_id"] = query.message.message_id
+        await query.edit_message_text(
+            f"✏️ <b>Фразы /mge</b> — добавление\n\n"
+            f"Персонаж: <b>{char}</b>\n\n"
+            f"Напиши фразу для этого персонажа:",
+            parse_mode="HTML",
+            reply_markup=InlineKeyboardMarkup([[
+                InlineKeyboardButton("❌ Отмена", callback_data="stg:mge_cancel"),
+            ]]),
+        )
+        await query.answer()
+
+    elif data == "stg:mge_cancel":
+        context.user_data.pop("stg_state", None)
+        context.user_data.pop("stg_mge_char", None)
+        await _show_mge_menu(query)
+
+    elif data == "stg:mge_list":
+        await _show_mge_list(query)
+
+    elif data.startswith("stg:mge_del:"):
+        idx = int(data[12:])
+        delete_custom_mge_phrase(idx)
+        await query.answer("🗑 Фраза удалена")
+        await _show_mge_list(query)
+
+    # ── Кастомные ответы на маты ──
+    elif data == "stg:swear_resp":
+        await _show_swear_resp_menu(query)
+
+    elif data == "stg:swear_resp_add":
+        context.user_data["stg_state"] = STATE_AWAIT_SWEAR_RESP
+        context.user_data["stg_msg_id"] = query.message.message_id
+        await query.edit_message_text(
+            "💬 <b>Ответы на маты</b> — добавление\n\n"
+            "Напиши свой ответ. Используй <code>{name}</code> там где нужно вставить имя.\n\n"
+            "Пример: <i>Полегче, {name}!</i>",
+            parse_mode="HTML",
+            reply_markup=InlineKeyboardMarkup([[
+                InlineKeyboardButton("❌ Отмена", callback_data="stg:swear_resp_cancel"),
+            ]]),
+        )
+        await query.answer()
+
+    elif data == "stg:swear_resp_cancel":
+        context.user_data.pop("stg_state", None)
+        await _show_swear_resp_menu(query)
+
+    elif data == "stg:swear_resp_list":
+        await _show_swear_resp_list(query)
+
+    elif data.startswith("stg:swear_resp_del:"):
+        idx = int(data[19:])
+        delete_custom_swear_response(idx)
+        await query.answer("🗑 Ответ удалён")
+        await _show_swear_resp_list(query)
 
 
 # ── Экраны чатов ──────────────────────────────────────────────────────────────
@@ -456,3 +538,187 @@ async def _show_commands_settings(query) -> None:
         reply_markup=InlineKeyboardMarkup(rows),
     )
     await query.answer()
+
+
+# ── Экраны MGE-фраз ───────────────────────────────────────────────────────────
+
+async def _show_mge_menu(query) -> None:
+    phrases = get_custom_mge_phrases()
+    count = len(phrases)
+    kb = InlineKeyboardMarkup([
+        [InlineKeyboardButton("➕ Добавить фразу", callback_data="stg:mge_add")],
+        [InlineKeyboardButton(
+            f"📋 Мои фразы ({count})" if count else "📋 Фраз пока нет",
+            callback_data="stg:mge_list",
+        )],
+        [_back_to_menu_btn()],
+    ])
+    await query.edit_message_text(
+        f"✏️ <b>Фразы /mge</b>\n\n"
+        f"Добавлено своих фраз: <b>{count}</b>\n\n"
+        f"<i>Кастомные фразы добавляются к стандартным и выпадают случайно так же.</i>",
+        parse_mode="HTML",
+        reply_markup=kb,
+    )
+    await query.answer()
+
+
+async def _show_mge_char_picker(query) -> None:
+    """Экран выбора персонажа перед вводом фразы."""
+    rows = []
+    for i in range(0, len(MGE_CHARACTERS), 2):
+        row = [
+            InlineKeyboardButton(MGE_CHARACTERS[i], callback_data=f"stg:mge_char:{MGE_CHARACTERS[i]}"),
+        ]
+        if i + 1 < len(MGE_CHARACTERS):
+            row.append(InlineKeyboardButton(MGE_CHARACTERS[i+1], callback_data=f"stg:mge_char:{MGE_CHARACTERS[i+1]}"))
+        rows.append(row)
+    rows.append([InlineKeyboardButton("❌ Отмена", callback_data="stg:mge")])
+
+    await query.edit_message_text(
+        "✏️ <b>Фразы /mge</b> — выбери персонажа\n\n"
+        "От чьего имени будет звучать фраза?",
+        parse_mode="HTML",
+        reply_markup=InlineKeyboardMarkup(rows),
+    )
+    await query.answer()
+
+
+async def _show_mge_list(query) -> None:
+    """Список кастомных фраз с кнопками удаления."""
+    phrases = get_custom_mge_phrases()
+    if not phrases:
+        await query.edit_message_text(
+            "✏️ <b>Фразы /mge</b>\n\nСвоих фраз пока нет.",
+            parse_mode="HTML",
+            reply_markup=InlineKeyboardMarkup([[
+                InlineKeyboardButton("⬅️ Назад", callback_data="stg:mge"),
+            ]]),
+        )
+        await query.answer()
+        return
+
+    rows = []
+    for i, p in enumerate(phrases):
+        short = p["phrase"][:35] + ("…" if len(p["phrase"]) > 35 else "")
+        rows.append([InlineKeyboardButton(
+            f"🗑 [{p['char']}] {short}",
+            callback_data=f"stg:mge_del:{i}",
+        )])
+    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="stg:mge")])
+
+    await query.edit_message_text(
+        f"✏️ <b>Свои фразы /mge</b> ({len(phrases)} шт.)\n\n"
+        f"Нажми на фразу чтобы удалить её:",
+        parse_mode="HTML",
+        reply_markup=InlineKeyboardMarkup(rows),
+    )
+    await query.answer()
+
+
+# ── Экраны кастомных ответов на маты ─────────────────────────────────────────
+
+async def _show_swear_resp_menu(query) -> None:
+    responses = get_custom_swear_responses()
+    count = len(responses)
+    kb = InlineKeyboardMarkup([
+        [InlineKeyboardButton("➕ Добавить ответ", callback_data="stg:swear_resp_add")],
+        [InlineKeyboardButton(
+            f"📋 Мои ответы ({count})" if count else "📋 Ответов пока нет",
+            callback_data="stg:swear_resp_list",
+        )],
+        [_back_to_menu_btn()],
+    ])
+    await query.edit_message_text(
+        f"💬 <b>Ответы на маты</b>\n\n"
+        f"Добавлено своих ответов: <b>{count}</b>\n\n"
+        f"<i>Используй <code>{{name}}</code> чтобы вставить имя матерщинника.\n"
+        f"Кастомные ответы добавляются к стандартным и выпадают случайно.</i>",
+        parse_mode="HTML",
+        reply_markup=kb,
+    )
+    await query.answer()
+
+
+async def _show_swear_resp_list(query) -> None:
+    responses = get_custom_swear_responses()
+    if not responses:
+        await query.edit_message_text(
+            "💬 <b>Ответы на маты</b>\n\nСвоих ответов пока нет.",
+            parse_mode="HTML",
+            reply_markup=InlineKeyboardMarkup([[
+                InlineKeyboardButton("⬅️ Назад", callback_data="stg:swear_resp"),
+            ]]),
+        )
+        await query.answer()
+        return
+
+    rows = []
+    for i, r in enumerate(responses):
+        short = r[:40] + ("…" if len(r) > 40 else "")
+        rows.append([InlineKeyboardButton(
+            f"🗑 {short}",
+            callback_data=f"stg:swear_resp_del:{i}",
+        )])
+    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="stg:swear_resp")])
+
+    await query.edit_message_text(
+        f"💬 <b>Свои ответы на маты</b> ({len(responses)} шт.)\n\n"
+        f"Нажми на ответ чтобы удалить его:",
+        parse_mode="HTML",
+        reply_markup=InlineKeyboardMarkup(rows),
+    )
+    await query.answer()
+
+
+# ── Обработчик текстового ввода из настроек ───────────────────────────────────
+
+async def handle_settings_input(update: Update, context) -> bool:
+    """
+    Вызывается из _maybe_token_reply когда пользователь — владелец в личке.
+    Возвращает True если сообщение было обработано как ввод настроек.
+    """
+    if update.effective_user.id != OWNER_ID:
+        return False
+
+    state = context.user_data.get("stg_state")
+    if not state:
+        return False
+
+    text = (update.message.text or "").strip()
+
+    # ── Ввод MGE-фразы ──
+    if state == STATE_AWAIT_MGE_PHRASE:
+        char = context.user_data.pop("stg_mge_char", "Игрок")
+        context.user_data.pop("stg_state", None)
+
+        if not text:
+            await update.message.reply_text("❌ Пустая фраза. Попробуй снова через /settings.")
+            return True
+
+        add_custom_mge_phrase(char, text)
+        await update.message.reply_text(
+            f"✅ Фраза добавлена!\n\n"
+            f"🎭 <b>{char}:</b>\n«{text}»",
+            parse_mode="HTML",
+        )
+        return True
+
+    # ── Ввод ответа на мат ──
+    if state == STATE_AWAIT_SWEAR_RESP:
+        context.user_data.pop("stg_state", None)
+
+        if not text:
+            await update.message.reply_text("❌ Пустой ответ. Попробуй снова через /settings.")
+            return True
+
+        add_custom_swear_response(text)
+        preview = text.format(name="Вася") if "{name}" in text else text
+        await update.message.reply_text(
+            f"✅ Ответ добавлен!\n\n"
+            f"Пример: <i>{preview}</i>",
+            parse_mode="HTML",
+        )
+        return True
+
+    return False
