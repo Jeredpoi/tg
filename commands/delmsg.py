@@ -5,6 +5,7 @@
 
 import logging
 import datetime
+import html as html_mod
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
 from database import (
