@@ -50,7 +50,7 @@ async def anon_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     # Сохраняем ожидание
     _pending[user.id] = (chat.id, time.time())
 
-    bot_username = (await context.bot.get_me()).username
+    bot_username = context.bot.username
 
     try:
         await context.bot.send_message(

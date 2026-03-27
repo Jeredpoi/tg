@@ -75,7 +75,7 @@ async def _build_main_text(context) -> str:
     if main_id:
         try:
             chat = await context.bot.get_chat(main_id)
-            main_line = f"✅ {chat.title}"
+            main_line = f"✅ {html.escape(chat.title or str(main_id))}"
         except Exception:
             main_line = f"✅ <code>{main_id}</code>"
     else:
@@ -195,6 +195,10 @@ async def settings_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) 
             parse_mode="HTML",
             reply_markup=_main_menu_kb(),
         )
+        await query.answer()
+
+    # ── Заглушка для нажимаемых заголовков ──
+    elif data == "stg:noop":
         await query.answer()
 
     # ── Закрыть панель ──
@@ -818,11 +822,11 @@ async def _show_autodel_settings(query) -> None:
     def fmt(v): return "выкл" if v == 0 else f"{v} сек."
 
     kb = InlineKeyboardMarkup([
-        [InlineKeyboardButton("📖 /help", callback_data="dismiss")],
+        [InlineKeyboardButton("📖 /help", callback_data="stg:noop")],
         _autodel_row("autodel_help",      "stg:adh:",  "/help"),
-        [InlineKeyboardButton("🖼 Галерея (личка)", callback_data="dismiss")],
+        [InlineKeyboardButton("🖼 Галерея (личка)", callback_data="stg:noop")],
         _autodel_row("autodel_gallery",   "stg:adg:",  "галерея"),
-        [InlineKeyboardButton("👑 /ownerhelp", callback_data="dismiss")],
+        [InlineKeyboardButton("👑 /ownerhelp", callback_data="stg:noop")],
         _autodel_row("autodel_ownerhelp", "stg:adow:", "/ownerhelp"),
         [_back_to_menu_btn()],
     ])
