@@ -3,6 +3,7 @@
 # Работает ТОЛЬКО в личке. В списке команд не отображается.
 # ==============================================================================
 
+import html
 import logging
 from telegram import Update
 from telegram.ext import ContextTypes
@@ -120,7 +121,7 @@ async def handle_resend_message(update: Update, context: ContextTypes.DEFAULT_TY
         logger.error("resend: ошибка отправки в %s: %s", target_chat_id, e)
         await context.bot.send_message(
             chat_id=pm_chat_id,
-            text=f"❌ Не удалось отправить: <code>{e}</code>",
+            text=f"❌ Не удалось отправить: <code>{html.escape(str(e))}</code>",
             parse_mode="HTML",
         )
 

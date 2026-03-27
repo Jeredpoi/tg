@@ -2,6 +2,7 @@
 # commands/settings.py — /settings: панель настроек бота (только в личке, только владелец)
 # ==============================================================================
 
+import html
 import logging
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
@@ -864,7 +865,7 @@ async def handle_settings_input(update: Update, context) -> bool:
         user_mid = update.message.message_id
         bot_msg = await update.message.reply_text(
             f"✅ Фраза добавлена!\n\n"
-            f"🎭 <b>{char}:</b>\n«{text}»",
+            f"🎭 <b>{html.escape(char)}:</b>\n«{html.escape(text)}»",
             parse_mode="HTML",
         )
         bot_mid  = bot_msg.message_id
@@ -896,7 +897,7 @@ async def handle_settings_input(update: Update, context) -> bool:
         user_mid = update.message.message_id
         bot_msg  = await update.message.reply_text(
             f"✅ Ответ добавлен!\n\n"
-            f"Пример: <i>{preview}</i>",
+            f"Пример: <i>{html.escape(preview)}</i>",
             parse_mode="HTML",
         )
         bot_mid  = bot_msg.message_id

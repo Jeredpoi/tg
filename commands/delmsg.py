@@ -69,7 +69,7 @@ def _build_text(rows: list, page: int, total: int) -> str:
             dt = datetime.datetime.fromtimestamp(row["sent_at"]).strftime("%d.%m %H:%M")
         except Exception:
             dt = "?"
-        preview = _fmt_preview(row["preview"], row["chat_id"])
+        preview = html_mod.escape(_fmt_preview(row["preview"], row["chat_id"]))
         lines.append(f"<b>{num}.</b> <i>{dt}</i> — {preview}")
     return "\n".join(lines)
 
