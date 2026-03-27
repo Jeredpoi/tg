@@ -19,6 +19,7 @@ PHOTOS_DIR = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "pho
 _COMMENT_WAITING: dict[int, str] = {}        # user_id → key (ждём текст подписи)
 _PHOTO_CAPTIONS: dict[str, str] = {}         # key → текст подписи (для активных голосований)
 _RATE_PM_MSGS: dict[int, list[int]] = {}     # user_id → [message_ids] для удаления
+_RATE_WAITING: set[int] = set()              # user_id → ожидает отправки фото/видео после /rate
 
 
 def _short_key(photo_id: str) -> str:
@@ -67,6 +68,7 @@ async def rate_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 
     user_id = update.effective_user.id
     _RATE_PM_MSGS[user_id] = []
+    _RATE_WAITING.add(user_id)  # ждём фото/видео
 
     try:
         await update.message.delete()
@@ -113,13 +115,21 @@ async def _process_media(update: Update, context: ContextTypes.DEFAULT_TYPE, pho
 
 
 async def handle_rate_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Принимает фото в личке и предлагает выставить на оценку группы."""
+    """Принимает фото в личке — только если пользователь инициировал /rate."""
+    user_id = update.effective_user.id
+    if user_id not in _RATE_WAITING:
+        return  # игнорируем фото без /rate
+    _RATE_WAITING.discard(user_id)
     photo = update.message.photo[-1]
     await _process_media(update, context, photo.file_id, "photo")
 
 
 async def handle_rate_video(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Принимает видео в личке и предлагает выставить на оценку группы."""
+    """Принимает видео в личке — только если пользователь инициировал /rate."""
+    user_id = update.effective_user.id
+    if user_id not in _RATE_WAITING:
+        return  # игнорируем видео без /rate
+    _RATE_WAITING.discard(user_id)
     video = update.message.video
     await _process_media(update, context, video.file_id, "video")
 
@@ -388,13 +398,13 @@ async def rate_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
         photo_row = get_photo_by_key(key)
         if not photo_row:
-            await query.answer("❌ Фото не найдено.", show_alert=True)
+            await query.answer("❌ Фото не найдено.")
             return
 
         photo_id = photo_row["photo_id"]
 
         if photo_row["closed"]:
-            await query.answer("⏰ Голосование уже завершено!", show_alert=True)
+            await query.answer("⏰ Голосование уже завершено!")
             try:
                 total = photo_row["total_score"]
                 votes = photo_row["vote_count"]
@@ -414,7 +424,7 @@ async def rate_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         if voter_id == photo_row["author_id"] and not photo_row["anonymous"]:
             mt = photo_row["media_type"] if photo_row["media_type"] else "photo"
             mw = "видео" if mt == "video" else "фото"
-            await query.answer(f"🚫 Нельзя голосовать за своё {mw}!", show_alert=True)
+            await query.answer(f"🚫 Нельзя голосовать за своё {mw}!")
             return
 
         avg, votes = add_vote(photo_id, voter_id, score)

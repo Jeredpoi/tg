@@ -202,20 +202,29 @@ async def _rate_limit_guard(update, context):
         chat = update.effective_chat
 
         if chat and chat.type in ("group", "supergroup"):
-            # В группе: тихо удаляем команду, уведомляем только пользователя в ЛС
+            # В группе: удаляем команду, показываем короткое уведомление (исчезает через 3 сек)
             try:
                 await msg.delete()
             except Exception:
                 pass
             try:
-                # Отправляем только в личку — в чат ничего не идёт
-                await context.bot.send_message(
-                    chat_id=user.id,
-                    text=f"⏳ <b>{remaining} сек.</b> до следующего использования <code>{command}</code>",
+                note = await context.bot.send_message(
+                    chat_id=chat.id,
+                    text=f"⏳ <b>{remaining} сек.</b> до следующего {command}",
                     parse_mode="HTML",
+                    disable_notification=True,
                 )
+                note_id = note.message_id
+
+                async def _del_cd(ctx):
+                    try:
+                        await ctx.bot.delete_message(chat.id, note_id)
+                    except Exception:
+                        pass
+
+                context.job_queue.run_once(_del_cd, 3)
             except Exception:
-                pass  # Если пользователь не начал диалог с ботом — молча игнорируем
+                pass
         else:
             # В личке просто отвечаем
             try:
