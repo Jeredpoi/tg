@@ -156,9 +156,16 @@ async def settings_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -
             pass
         return
 
+    # Удаляем команду пользователя для чистоты
+    try:
+        await update.message.delete()
+    except Exception:
+        pass
+
     text = await _build_main_text(context)
-    await update.message.reply_text(
-        text,
+    await context.bot.send_message(
+        chat_id=update.effective_chat.id,
+        text=text,
         parse_mode="HTML",
         reply_markup=_main_menu_kb(),
     )
