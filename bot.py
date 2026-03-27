@@ -501,7 +501,7 @@ async def _midnight_swear_report(context) -> None:
     # Отправляем только в основную группу
     main_id = get_main_chat_id()
     if not main_id:
-        logger.warning("midnight_swear_report: основная группа не назначена (/setchat main)")
+        logger.warning("midnight_swear_report: основная группа не назначена (/settings → Чаты бота)")
         return
     target_chats = {main_id}
     for chat_id in target_chats:
@@ -566,7 +566,7 @@ async def _weekly_best_photo(context) -> None:
         return
     main_id = get_main_chat_id()
     if not main_id:
-        logger.warning("weekly_best_photo: основная группа не назначена (/setchat main)")
+        logger.warning("weekly_best_photo: основная группа не назначена (/settings → Чаты бота)")
         return
     for chat_id in [main_id]:
         try:

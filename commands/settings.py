@@ -862,7 +862,8 @@ async def handle_settings_input(update: Update, context) -> bool:
             return True
 
         add_custom_mge_phrase(char, text)
-        user_mid = update.message.message_id
+        user_mid   = update.message.message_id
+        prompt_mid = context.user_data.pop("stg_msg_id", None)
         bot_msg = await update.message.reply_text(
             f"✅ Фраза добавлена!\n\n"
             f"🎭 <b>{html.escape(char)}:</b>\n«{html.escape(text)}»",
@@ -872,7 +873,7 @@ async def handle_settings_input(update: Update, context) -> bool:
         chat_id  = update.message.chat_id
 
         async def _cleanup_mge(ctx):
-            for mid in [user_mid, bot_mid]:
+            for mid in filter(None, [user_mid, prompt_mid, bot_mid]):
                 try:
                     await ctx.bot.delete_message(chat_id, mid)
                 except Exception:
@@ -893,8 +894,12 @@ async def handle_settings_input(update: Update, context) -> bool:
             return True
 
         add_custom_swear_response(text)
-        preview  = text.format(name="Вася") if "{name}" in text else text
-        user_mid = update.message.message_id
+        try:
+            preview = text.format(name="Вася") if "{name}" in text else text
+        except (KeyError, IndexError):
+            preview = text
+        user_mid  = update.message.message_id
+        prompt_mid = context.user_data.pop("stg_msg_id", None)
         bot_msg  = await update.message.reply_text(
             f"✅ Ответ добавлен!\n\n"
             f"Пример: <i>{html.escape(preview)}</i>",
@@ -904,7 +909,7 @@ async def handle_settings_input(update: Update, context) -> bool:
         chat_id  = update.message.chat_id
 
         async def _cleanup_swear(ctx):
-            for mid in [user_mid, bot_mid]:
+            for mid in filter(None, [user_mid, prompt_mid, bot_mid]):
                 try:
                     await ctx.bot.delete_message(chat_id, mid)
                 except Exception:

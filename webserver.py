@@ -165,7 +165,10 @@ async def api_post_comment(request: web.Request) -> web.Response:
         commenter_id = int(tg_auth.get("id", 0))
     else:
         commenter_name = str(body.get("commenter_name", "Аноним")).strip() or "Аноним"
-        commenter_id = int(body.get("commenter_id", 0))
+        try:
+            commenter_id = int(body.get("commenter_id", 0))
+        except (ValueError, TypeError):
+            commenter_id = 0
     commenter_name = commenter_name[:100]
 
     add_comment(row["photo_id"], commenter_id, commenter_name, text)

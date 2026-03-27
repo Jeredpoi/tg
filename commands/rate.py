@@ -316,7 +316,7 @@ async def rate_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         if not target_chat_id:
             await query.edit_message_text(
                 "❌ Основная группа не настроена.\n"
-                "Владелец должен написать /setchat main в основной группе."
+                "Владелец должен назначить её через /settings → Чаты бота."
             )
             return
 
