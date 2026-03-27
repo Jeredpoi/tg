@@ -10,6 +10,7 @@ from telegram.ext import ContextTypes
 from database import save_photo, add_vote, get_photo, get_photo_by_key, close_photo, track_bot_message
 import config
 from config import VOTE_DURATION, WEBAPP_URL
+from chat_config import get_setting
 from chat_config import get_main_chat_id
 
 logger = logging.getLogger(__name__)
@@ -85,7 +86,7 @@ async def rate_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         chat_id=update.effective_chat.id,
         text=(
             "📸🎥 Отправь мне фото или видео, которое хочешь выставить на оценку группы.\n"
-            "Голосование будет идти 30 минут, затем покажу итоговый счёт."
+            f"Голосование будет идти {get_setting('vote_duration')} минут, затем покажу итоговый счёт."
         ),
     )
     _RATE_PM_MSGS[user_id].append(msg.message_id)
@@ -327,7 +328,8 @@ async def rate_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         group_caption = author_line
         if user_caption:
             group_caption += f"\n{user_caption}"
-        group_caption += "\n\n⭐ Голосуй от 1 до 10! Голосование идёт 30 минут.\n📊 Сейчас: нет голосов"
+        vote_min = get_setting("vote_duration")
+        group_caption += f"\n\n⭐ Голосуй от 1 до 10! Голосование идёт {vote_min} минут.\n📊 Сейчас: нет голосов"
 
         try:
             if is_video:
@@ -373,7 +375,7 @@ async def rate_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         # Сообщаем пользователю
         await query.edit_message_text(
             f"✅ {media_word.capitalize()} отправлено в группу!\n"
-            "Голосование закроется через 30 минут — итог появится там."
+            f"Голосование закроется через {get_setting('vote_duration')} минут — итог появится там."
         )
 
         save_photo(
@@ -387,9 +389,10 @@ async def rate_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
             media_type=media_type,
         )
 
+        vote_duration = get_setting("vote_duration") * 60  # минуты → секунды
         context.job_queue.run_once(
             _close_rate_voting,
-            VOTE_DURATION,
+            vote_duration,
             data={"photo_id": photo_id, "chat_id": target_chat_id, "message_id": sent.message_id, "key": key},
         )
 
@@ -450,7 +453,7 @@ async def rate_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
         caption = _build_active_caption(photo_row, key)
         caption += (
-            f"\n\n⭐ Голосуй от 1 до 10! Голосование идёт 30 минут.\n"
+            f"\n\n⭐ Голосуй от 1 до 10! Голосование идёт {get_setting('vote_duration')} минут.\n"
             f"📊 Сейчас: средняя {avg} ({votes} голос(ов))"
         )
 

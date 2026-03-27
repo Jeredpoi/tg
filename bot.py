@@ -42,7 +42,7 @@ from commands.clearmedia import clearmedia_command
 from commands.delmsg import delmsg_command, delmsg_callback
 from commands.resend import resend_command, handle_resend_message, resend_cancel
 from commands.settings import settings_command, settings_callback
-from chat_config import get_main_chat_id, add_setup_chat, is_setup_chat
+from chat_config import get_main_chat_id, add_setup_chat, is_setup_chat, get_setting
 
 
 logging.basicConfig(
@@ -95,8 +95,8 @@ SWEAR_WORDS = {
 }
 _SWEAR_NORMALIZED = {w.replace("ё", "е") for w in SWEAR_WORDS}
 
-# Корни — если корень встречается внутри любого слова, считается матом
-_SWEAR_ROOTS = [
+# Корни — совпадение только в начале слова или после приставки
+_SWEAR_ROOTS_RAW = [
     "еба", "еби", "ебё", "ебу", "ебл",   # ебать и все формы
     "ёба", "ёби", "ёбл",
     "пизд",                                 # пизда, пиздец, пиздить...
@@ -105,12 +105,29 @@ _SWEAR_ROOTS = [
     "залуп",                                # залупа...
     "пидар", "пидор",                       # все формы
     "мудак", "мудил",                       # мудак, мудила...
-    "дрочи",                                # дрочить...
+    "дрочи", "дроч",                        # дрочить...
     "говн",                                 # говно, говнюк...
     "жоп",                                  # жопа и формы
     "сран", "срат",                         # срань, срать...
 ]
-_SWEAR_ROOTS = [r.replace("ё", "е") for r in _SWEAR_ROOTS]
+_SWEAR_ROOTS_NORM = [r.replace("ё", "е") for r in _SWEAR_ROOTS_RAW]
+
+# Русские глагольные приставки — мат часто идёт после них
+_PREFIXES = (
+    "за", "на", "по", "от", "вы", "у", "пере", "раз", "рас",
+    "с", "об", "пре", "под", "до", "из", "без", "не", "ни",
+    "при", "про", "пред", "въ", "отъ", "объ", "предъ",
+)
+
+def _has_swear_root(word: str) -> bool:
+    """Проверяет содержит ли слово матерный корень (с учётом приставок)."""
+    for root in _SWEAR_ROOTS_NORM:
+        if word.startswith(root):
+            return True
+        for prefix in _PREFIXES:
+            if word.startswith(prefix + root):
+                return True
+    return False
 
 
 def _count_swears(text: str) -> int:
@@ -121,7 +138,7 @@ def _count_swears(text: str) -> int:
     for word in words:
         if word in _SWEAR_NORMALIZED:
             count += 1
-        elif any(root in word for root in _SWEAR_ROOTS):
+        elif _has_swear_root(word):
             count += 1
     return count
 
@@ -187,7 +204,7 @@ async def _rate_limit_guard(update, context):
 
     # Нормализуем "/mge@botname" → "/mge"
     command = msg.text.split()[0].split("@")[0].lower()
-    cooldown = _CMD_COOLDOWNS.get(command, _DEFAULT_CMD_COOLDOWN)
+    cooldown = _CMD_COOLDOWNS.get(command, get_setting("cmd_cooldown"))
 
     if cooldown == 0:
         return  # без лимита — пропускаем
@@ -309,15 +326,15 @@ async def _track_message(update, context):
     if swear_count and update.effective_chat.type in ("group", "supergroup"):
         track_daily_swear(chat_id, user.id, user.first_name or user.username or "Аноним", swear_count)
 
-    if swear_count and update.effective_chat.type != "private":
+    if swear_count and update.effective_chat.type != "private" and get_setting("swear_detect"):
         name = user.first_name or user.username or "дружок"
 
         # Дебаунсинг: отменяем предыдущий отложенный ответ для этого чата
         for job in context.job_queue.get_jobs_by_name(f"swear_{chat_id}"):
             job.schedule_removal()
 
-        # Случайно решаем отвечать ли (50%) — но с учётом cooldown в _send_swear_response
-        if random.random() < SWEAR_RESPONSE_CHANCE:
+        # Случайно решаем отвечать ли — но с учётом cooldown в _send_swear_response
+        if random.random() < get_setting("swear_response_chance"):
             context.job_queue.run_once(
                 _send_swear_response,
                 SWEAR_RESPONSE_DELAY,
@@ -429,6 +446,8 @@ _MIDNIGHT_ZERO_MSGS = [
 
 async def _midnight_swear_report(context) -> None:
     """Job: в 00:00 МСК отправляет отчёт по матам за прошедший день."""
+    if not get_setting("midnight_report"):
+        return
     yesterday = (datetime.date.today() - datetime.timedelta(days=1)).isoformat()
     # Отправляем только в основную группу
     main_id = get_main_chat_id()
@@ -492,6 +511,8 @@ async def _private_start(update, context):
 
 async def _weekly_best_photo(context) -> None:
     """Каждый понедельник в 00:00 МСК постит лучшее фото за неделю."""
+    if not get_setting("weekly_best_photo"):
+        return
     main_id = get_main_chat_id()
     if not main_id:
         logger.warning("weekly_best_photo: основная группа не назначена (/setchat main)")

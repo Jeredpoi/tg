@@ -90,3 +90,62 @@ def add_setup_chat(chat_id: int) -> None:
 def is_setup_chat(chat_id: int) -> bool:
     """True если чат уже инициализирован."""
     return chat_id in get_setup_chats()
+
+
+# ── Настройки бота (bot_settings.json) ───────────────────────────────────────
+
+_SETTINGS_FILE = os.path.join(os.path.dirname(__file__), "bot_settings.json")
+
+# Дефолтные значения
+_DEFAULT_SETTINGS = {
+    "swear_detect": True,          # Реагировать на маты
+    "swear_response_chance": 0.45, # Шанс ответа на мат (0.0–1.0)
+    "midnight_report": True,       # Ночной отчёт по матам
+    "weekly_best_photo": True,     # Еженедельное лучшее фото
+    "vote_duration": 30,           # Длительность голосования (минуты)
+    "cmd_cooldown": 10,            # Кулдаун команд (секунды)
+}
+
+_settings_cache: dict | None = None
+
+
+def _load_settings() -> dict:
+    try:
+        with open(_SETTINGS_FILE, "r", encoding="utf-8") as f:
+            stored = json.load(f)
+        # Мержим с дефолтами — на случай новых ключей
+        merged = dict(_DEFAULT_SETTINGS)
+        merged.update(stored)
+        return merged
+    except (FileNotFoundError, json.JSONDecodeError):
+        return dict(_DEFAULT_SETTINGS)
+
+
+def _save_settings(data: dict) -> None:
+    with open(_SETTINGS_FILE, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+
+
+def get_settings() -> dict:
+    """Возвращает все настройки бота."""
+    global _settings_cache
+    if _settings_cache is None:
+        _settings_cache = _load_settings()
+    return _settings_cache
+
+
+def get_setting(key: str):
+    """Возвращает значение настройки по ключу."""
+    return get_settings().get(key, _DEFAULT_SETTINGS.get(key))
+
+
+def set_setting(key: str, value) -> None:
+    """Устанавливает значение настройки."""
+    settings = get_settings()
+    settings[key] = value
+    _save_settings(settings)
+
+
+def get_default_settings() -> dict:
+    """Возвращает словарь дефолтных значений."""
+    return dict(_DEFAULT_SETTINGS)
