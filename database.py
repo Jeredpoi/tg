@@ -500,8 +500,6 @@ def delete_photo_by_key(key: str, requester_id: int) -> tuple[bool, str, str]:
         ).fetchone()
         if not row:
             return False, "", ""
-        if row["anonymous"]:
-            return False, "", ""
         if row["author_id"] != requester_id:
             return False, "", ""
         photo_id = row["photo_id"]
