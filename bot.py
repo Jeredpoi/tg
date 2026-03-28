@@ -305,7 +305,7 @@ async def _rate_limit_guard(update, context):
 # ==============================================================================
 
 async def _setup_guard(update, context):
-    """Middleware (group=-1): блокирует команды в не-инициализированных группах."""
+    """Middleware (group=-2): блокирует команды в не-инициализированных группах."""
     msg = update.message
     if not msg or not msg.text:
         return
@@ -367,9 +367,15 @@ async def _send_swear_response(context) -> None:
 
     try:
         all_responses = SWEAR_RESPONSES + get_custom_swear_responses()
+        template = random.choice(all_responses)
+        try:
+            text = template.format(name=d["name"])
+        except (KeyError, IndexError):
+            # Кастомный ответ с лишними {плейсхолдерами} — подставляем имя вручную
+            text = template.replace("{name}", d["name"])
         msg = await context.bot.send_message(
             chat_id=chat_id,
-            text=random.choice(all_responses).format(name=d["name"]),
+            text=text,
             reply_to_message_id=d["message_id"],
         )
         track_bot_message(chat_id, msg.message_id, msg.text)

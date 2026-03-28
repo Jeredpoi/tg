@@ -63,7 +63,10 @@ async def _on_startup(app: web.Application) -> None:
 async def api_gallery(request: web.Request) -> web.Response:
     try:
         chat_id_raw = request.rel_url.query.get("chat_id")
-        chat_id = int(chat_id_raw) if chat_id_raw else None
+        try:
+            chat_id = int(chat_id_raw) if chat_id_raw else None
+        except (ValueError, TypeError):
+            chat_id = None
         sort = request.rel_url.query.get("sort", "score")
         rows = get_gallery(100, chat_id=chat_id, sort=sort)
         result = [
