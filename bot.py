@@ -43,6 +43,7 @@ from commands.clearmedia import clearmedia_command
 from commands.delmsg import delmsg_command, delmsg_callback
 from commands.resend import resend_command, handle_resend_message, resend_cancel
 from commands.settings import settings_command, settings_callback, handle_settings_input
+from commands.exportstats import exportstats_command
 from chat_config import (get_main_chat_id, add_setup_chat, is_setup_chat, get_setting,
                           is_command_enabled, get_custom_swear_responses)
 
@@ -754,10 +755,11 @@ def main():
     app.add_handler(CommandHandler("clearmedia", clearmedia_command))
 
     # Скрытые команды владельца — только в личке, не в списке команд
-    app.add_handler(CommandHandler("delmsg",     delmsg_command,     filters=filters.ChatType.PRIVATE))
-    app.add_handler(CommandHandler("resend",     resend_command,     filters=filters.ChatType.PRIVATE))
-    app.add_handler(CommandHandler("settings",   settings_command,   filters=filters.ChatType.PRIVATE))
-    app.add_handler(CommandHandler("ownerhelp",  ownerhelp_command))
+    app.add_handler(CommandHandler("delmsg",       delmsg_command,       filters=filters.ChatType.PRIVATE))
+    app.add_handler(CommandHandler("resend",       resend_command,       filters=filters.ChatType.PRIVATE))
+    app.add_handler(CommandHandler("settings",     settings_command,     filters=filters.ChatType.PRIVATE))
+    app.add_handler(CommandHandler("exportstats",  exportstats_command,  filters=filters.ChatType.PRIVATE))
+    app.add_handler(CommandHandler("ownerhelp",    ownerhelp_command))
 
     # Ловим любые другие команды в личке и вежливо отказываем
     app.add_handler(MessageHandler(
