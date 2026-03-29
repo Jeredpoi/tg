@@ -308,6 +308,7 @@ async def rate_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
         photo_row = _PENDING_PHOTOS.pop(key, None)
         if not photo_row:
+            await query.answer()
             await query.edit_message_text("❌ Фото не найдено. Отправь фото заново.")
             return
 
@@ -316,6 +317,7 @@ async def rate_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         # Используем основную группу; если не задана — fallback на config.CHAT_ID
         target_chat_id = get_main_chat_id() or config.CHAT_ID
         if not target_chat_id:
+            await query.answer()
             await query.edit_message_text(
                 "❌ Основная группа не настроена.\n"
                 "Владелец должен назначить её через /settings → Чаты бота."
@@ -355,6 +357,7 @@ async def rate_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         except Exception as e:
             import html as _html
             logger.error("send_%s failed: chat_id=%s error=%s", media_type, target_chat_id, e)
+            await query.answer()
             await query.edit_message_text(
                 f"❌ Не удалось отправить {media_word} в группу.\n"
                 f"CHAT_ID: <code>{target_chat_id}</code>\n"
@@ -380,6 +383,7 @@ async def rate_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
             logger.warning("Не удалось сохранить файл на диск: %s", _e)
 
         # Сообщаем пользователю
+        await query.answer()
         await query.edit_message_text(
             f"✅ {media_word.capitalize()} отправлено в группу!\n"
             f"Голосование закроется через {get_setting('vote_duration')} минут — итог появится там."

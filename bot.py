@@ -596,7 +596,8 @@ async def _midnight_swear_report(context) -> None:
     """Job: в 00:00 МСК отправляет отчёт по матам за прошедший день."""
     if not get_setting("midnight_report"):
         return
-    yesterday = (datetime.date.today() - datetime.timedelta(days=1)).isoformat()
+    msk = datetime.timezone(datetime.timedelta(hours=3))
+    yesterday = (datetime.datetime.now(msk).date() - datetime.timedelta(days=1)).isoformat()
     # Отправляем только в основную группу
     main_id = get_main_chat_id()
     if not main_id:

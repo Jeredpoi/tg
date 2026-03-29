@@ -196,14 +196,14 @@ async def delmsg_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             await query.answer()
             return
 
-        await query.answer()
-
         rows = get_all_bot_messages_recent(offset=page * PAGE_SIZE, limit=PAGE_SIZE)
         total = get_all_bot_messages_count()
 
         if not rows:
             await query.answer("Больше нет сообщений.", show_alert=True)
             return
+
+        await query.answer()
 
         try:
             await query.edit_message_text(
