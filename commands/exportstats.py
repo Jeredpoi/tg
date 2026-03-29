@@ -120,11 +120,12 @@ async def exportstats_command(update: Update, context: ContextTypes.DEFAULT_TYPE
             zf.writestr("daily_swears.csv", swears_csv.encode("utf-8-sig"))
         zip_buf.seek(0)
 
-        today    = datetime.date.today().isoformat()
+        _msk = datetime.timezone(datetime.timedelta(hours=3))
+        today    = datetime.datetime.now(_msk).date().isoformat()
         filename = f"bot_stats_{today}.zip"
 
         caption = (
-            f"📊 <b>Статистика бота</b> на {today}\n\n"
+            f"📊 <b>Статистика бота</b> на {today} МСК\n\n"
             f"📁 Три файла внутри:\n"
             f"• <code>users.csv</code> — {total_users} записей участников\n"
             f"• <code>photos.csv</code> — {total_photos} фото/видео\n"
