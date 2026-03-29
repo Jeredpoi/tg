@@ -2,10 +2,12 @@
 # database.py — Работа с SQLite базой данных
 # ==============================================================================
 
+import datetime
 import logging
 import sqlite3
-from datetime import date as _date
 from config import DATABASE_PATH
+
+_MSK = datetime.timezone(datetime.timedelta(hours=3))
 
 logger = logging.getLogger(__name__)
 
@@ -203,7 +205,7 @@ def get_top_swears(chat_id: int = 0, limit: int = 10) -> list:
 
 def track_daily_swear(chat_id: int, user_id: int, first_name: str, count: int) -> None:
     """Добавляет маты пользователя в дневную статистику."""
-    today = str(_date.today())
+    today = datetime.datetime.now(_MSK).date().isoformat()  # дата в МСК, не UTC
     try:
         conn = get_connection()
         try:
@@ -255,7 +257,7 @@ def get_king_today(chat_id: int):
     try:
         return conn.execute(
             "SELECT * FROM king_of_day WHERE chat_id = ? AND date = ?",
-            (chat_id, str(_date.today()))
+            (chat_id, datetime.datetime.now(_MSK).date().isoformat())
         ).fetchone()
     finally:
         conn.close()
@@ -268,7 +270,7 @@ def set_king_today(chat_id: int, user_id: int, username: str, first_name: str) -
         conn.execute("""
             INSERT OR REPLACE INTO king_of_day (chat_id, date, user_id, username, first_name)
             VALUES (?, ?, ?, ?, ?)
-        """, (chat_id, str(_date.today()), user_id, username, first_name))
+        """, (chat_id, datetime.datetime.now(_MSK).date().isoformat(), user_id, username, first_name))
         conn.commit()
     finally:
         conn.close()
