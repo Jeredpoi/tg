@@ -500,6 +500,7 @@ async def _show_chat_detail(query, context, chat_id: int) -> None:
         parse_mode="HTML",
         reply_markup=kb,
     )
+    await query.answer()
 
 
 # ── Экран мат-детекции ────────────────────────────────────────────────────────
