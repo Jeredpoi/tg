@@ -48,7 +48,13 @@ async def anon_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         return
 
     # Сохраняем ожидание
-    _pending[user.id] = (chat.id, time.time())
+    uid = user.id
+    _pending[uid] = (chat.id, time.time())
+
+    # Автоочистка через 5 минут если пользователь так и не ответил
+    async def _expire_pending(ctx):
+        _pending.pop(uid, None)
+    context.job_queue.run_once(_expire_pending, ANON_TIMEOUT, name=f"anon_expire_{uid}")
 
     bot_username = context.bot.username
 
@@ -92,6 +98,8 @@ async def handle_anon_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE)
         return
     if user.id in _pending:
         del _pending[user.id]
+        for job in context.job_queue.get_jobs_by_name(f"anon_expire_{user.id}"):
+            job.schedule_removal()
         await update.message.reply_text("❌ Отменено.")
     else:
         await update.message.reply_text("Нечего отменять.")
@@ -124,6 +132,9 @@ async def handle_anon_message(update: Update, context: ContextTypes.DEFAULT_TYPE
         return True
 
     del _pending[user.id]
+    # Отменяем expire-job если он ещё ждёт
+    for job in context.job_queue.get_jobs_by_name(f"anon_expire_{user.id}"):
+        job.schedule_removal()
 
     try:
         await context.bot.send_message(

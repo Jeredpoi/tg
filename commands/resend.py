@@ -49,6 +49,12 @@ async def resend_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     user_id = update.effective_user.id
     _RESEND_WAITING[user_id] = target_chat_id
 
+    # Автоочистка через 10 минут если владелец так и не ввёл текст
+    async def _expire_resend(ctx):
+        if _RESEND_WAITING.pop(user_id, None) is not None:
+            _RESEND_PROMPT_MSG.pop(user_id, None)
+    context.job_queue.run_once(_expire_resend, 600, name=f"resend_expire_{user_id}")
+
     msg = await context.bot.send_message(
         chat_id=update.effective_chat.id,
         text=(
@@ -83,6 +89,8 @@ async def handle_resend_message(update: Update, context: ContextTypes.DEFAULT_TY
 
     target_chat_id = _RESEND_WAITING.pop(user_id)
     prompt_mid = _RESEND_PROMPT_MSG.pop(user_id, None)
+    for job in context.job_queue.get_jobs_by_name(f"resend_expire_{user_id}"):
+        job.schedule_removal()
 
     pm_chat_id = update.effective_chat.id
 
@@ -136,6 +144,8 @@ async def resend_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
     _RESEND_WAITING.pop(user_id)
     prompt_mid = _RESEND_PROMPT_MSG.pop(user_id, None)
+    for job in context.job_queue.get_jobs_by_name(f"resend_expire_{user_id}"):
+        job.schedule_removal()
 
     # Удаляем промпт и саму команду /cancel
     pm_chat_id = update.effective_chat.id
