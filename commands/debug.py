@@ -10,7 +10,6 @@ from telegram import Update, BotCommandScopeAllGroupChats
 from telegram.ext import ContextTypes
 from config import YANDEX_WEATHER_KEY, DATABASE_PATH, CHAT_ID, WEBAPP_URL
 from database import get_connection
-from chat_config import get_setting
 
 
 async def _check_db() -> tuple[bool, str]:
@@ -170,19 +169,4 @@ async def debug_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         f"<b>Команды:</b>\n{cmds_text}"
     )
 
-    bot_msg = await message.reply_text(text, parse_mode="HTML")
-
-    delay = get_setting("autodel_debug")
-    if delay:
-        chat_id  = message.chat_id
-        user_mid = message.message_id
-        bot_mid  = bot_msg.message_id
-
-        async def _delete(ctx):
-            for mid in [user_mid, bot_mid]:
-                try:
-                    await ctx.bot.delete_message(chat_id, mid)
-                except Exception:
-                    pass
-
-        context.job_queue.run_once(_delete, delay)
+    await message.reply_text(text, parse_mode="HTML")

@@ -111,14 +111,14 @@ async def _build_main_text(context) -> str:
     cd = get_setting("cmd_cooldown")
 
     # Автоудаление
-    _autodel_keys = [
-        "autodel_help", "autodel_gallery", "autodel_ownerhelp",
-        "autodel_debug", "autodel_top", "autodel_stats",
-        "autodel_mge", "autodel_roast", "autodel_dice",
-        "autodel_weather", "autodel_anon",
-    ]
-    _active_autodel = sum(1 for k in _autodel_keys if get_setting(k))
-    autodel_line = f"{_active_autodel} из {len(_autodel_keys)} команд настроены"
+    def _fmt_del(key):
+        v = get_setting(key)
+        return f"{v} сек." if v else "выкл"
+    autodel_line = (
+        f"/help {_fmt_del('autodel_help')} · "
+        f"галерея {_fmt_del('autodel_gallery')} · "
+        f"/ownerhelp {_fmt_del('autodel_ownerhelp')}"
+    )
 
     # Кастомный контент
     custom_mge = len(get_custom_mge_phrases())
@@ -315,54 +315,6 @@ async def settings_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         value = int(data[9:])
         set_setting("autodel_ownerhelp", value)
         await query.answer("выкл" if value == 0 else f"/ownerhelp: {value} сек.")
-        await _show_autodel_settings(query)
-
-    elif data.startswith("stg:ad_dbg:"):
-        value = int(data[11:])
-        set_setting("autodel_debug", value)
-        await query.answer("выкл" if value == 0 else f"/debug: {value} сек.")
-        await _show_autodel_settings(query)
-
-    elif data.startswith("stg:ad_top:"):
-        value = int(data[11:])
-        set_setting("autodel_top", value)
-        await query.answer("выкл" if value == 0 else f"/top: {value} сек.")
-        await _show_autodel_settings(query)
-
-    elif data.startswith("stg:ad_st:"):
-        value = int(data[10:])
-        set_setting("autodel_stats", value)
-        await query.answer("выкл" if value == 0 else f"/stats: {value} сек.")
-        await _show_autodel_settings(query)
-
-    elif data.startswith("stg:ad_mg:"):
-        value = int(data[10:])
-        set_setting("autodel_mge", value)
-        await query.answer("выкл" if value == 0 else f"/mge: {value} сек.")
-        await _show_autodel_settings(query)
-
-    elif data.startswith("stg:ad_rs:"):
-        value = int(data[10:])
-        set_setting("autodel_roast", value)
-        await query.answer("выкл" if value == 0 else f"/roast: {value} сек.")
-        await _show_autodel_settings(query)
-
-    elif data.startswith("stg:ad_dc:"):
-        value = int(data[10:])
-        set_setting("autodel_dice", value)
-        await query.answer("выкл" if value == 0 else f"/dice: {value} сек.")
-        await _show_autodel_settings(query)
-
-    elif data.startswith("stg:ad_wt:"):
-        value = int(data[10:])
-        set_setting("autodel_weather", value)
-        await query.answer("выкл" if value == 0 else f"/weather: {value} сек.")
-        await _show_autodel_settings(query)
-
-    elif data.startswith("stg:ad_an:"):
-        value = int(data[10:])
-        set_setting("autodel_anon", value)
-        await query.answer("выкл" if value == 0 else f"/anon: {value} сек.")
         await _show_autodel_settings(query)
 
     # ── Управление командами ──
@@ -863,61 +815,29 @@ def _autodel_row(setting_key: str, cb_prefix: str, label: str) -> list:
 
 
 async def _show_autodel_settings(query) -> None:
+    h  = get_setting("autodel_help")
+    g  = get_setting("autodel_gallery")
+    ow = get_setting("autodel_ownerhelp")
+
     def fmt(v): return "выкл" if v == 0 else f"{v} сек."
 
-    vals = {k: get_setting(k) for k in (
-        "autodel_help", "autodel_gallery", "autodel_ownerhelp",
-        "autodel_debug", "autodel_top", "autodel_stats",
-        "autodel_mge", "autodel_roast", "autodel_dice",
-        "autodel_weather", "autodel_anon",
-    )}
-
     kb = InlineKeyboardMarkup([
-        [InlineKeyboardButton("📖 /help",            callback_data="stg:noop")],
-        _autodel_row("autodel_help",       "stg:adh:",   "/help"),
-        [InlineKeyboardButton("👑 /ownerhelp",        callback_data="stg:noop")],
-        _autodel_row("autodel_ownerhelp",  "stg:adow:",  "/ownerhelp"),
-        [InlineKeyboardButton("🖼 Галерея (личка)",   callback_data="stg:noop")],
-        _autodel_row("autodel_gallery",    "stg:adg:",   "галерея"),
-        [InlineKeyboardButton("🔧 /debug",            callback_data="stg:noop")],
-        _autodel_row("autodel_debug",      "stg:ad_dbg:", "/debug"),
-        [InlineKeyboardButton("🏆 /top",              callback_data="stg:noop")],
-        _autodel_row("autodel_top",        "stg:ad_top:", "/top"),
-        [InlineKeyboardButton("📊 /stats",            callback_data="stg:noop")],
-        _autodel_row("autodel_stats",      "stg:ad_st:",  "/stats"),
-        [InlineKeyboardButton("🎭 /mge",              callback_data="stg:noop")],
-        _autodel_row("autodel_mge",        "stg:ad_mg:",  "/mge"),
-        [InlineKeyboardButton("🔥 /roast",            callback_data="stg:noop")],
-        _autodel_row("autodel_roast",      "stg:ad_rs:",  "/roast"),
-        [InlineKeyboardButton("🎲 /dice",             callback_data="stg:noop")],
-        _autodel_row("autodel_dice",       "stg:ad_dc:",  "/dice"),
-        [InlineKeyboardButton("🌤 /weather",          callback_data="stg:noop")],
-        _autodel_row("autodel_weather",    "stg:ad_wt:",  "/weather"),
-        [InlineKeyboardButton("🎭 /anon",             callback_data="stg:noop")],
-        _autodel_row("autodel_anon",       "stg:ad_an:",  "/anon"),
+        [InlineKeyboardButton("📖 /help", callback_data="stg:noop")],
+        _autodel_row("autodel_help",      "stg:adh:",  "/help"),
+        [InlineKeyboardButton("🖼 Галерея (личка)", callback_data="stg:noop")],
+        _autodel_row("autodel_gallery",   "stg:adg:",  "галерея"),
+        [InlineKeyboardButton("👑 /ownerhelp", callback_data="stg:noop")],
+        _autodel_row("autodel_ownerhelp", "stg:adow:", "/ownerhelp"),
         [_back_to_menu_btn()],
     ])
 
-    lines = [f"🗑 <b>Автоудаление сообщений</b>\n"]
-    for key, label in [
-        ("autodel_help",      "📖 /help"),
-        ("autodel_ownerhelp", "👑 /ownerhelp"),
-        ("autodel_gallery",   "🖼 Галерея"),
-        ("autodel_debug",     "🔧 /debug"),
-        ("autodel_top",       "🏆 /top"),
-        ("autodel_stats",     "📊 /stats"),
-        ("autodel_mge",       "🎭 /mge"),
-        ("autodel_roast",     "🔥 /roast"),
-        ("autodel_dice",      "🎲 /dice"),
-        ("autodel_weather",   "🌤 /weather"),
-        ("autodel_anon",      "🎭 /anon"),
-    ]:
-        lines.append(f"{label}: <b>{fmt(vals[key])}</b>")
-
-    lines.append("\n<i>Сколько секунд показывается сообщение перед удалением.\n«выкл» — сообщение не удаляется.</i>")
-
     await query.edit_message_text(
-        "\n".join(lines),
+        "🗑 <b>Автоудаление сообщений</b>\n\n"
+        f"📖 /help: <b>{fmt(h)}</b>\n"
+        f"🖼 Галерея (личка): <b>{fmt(g)}</b>\n"
+        f"👑 /ownerhelp: <b>{fmt(ow)}</b>\n\n"
+        "<i>Сколько секунд показывается сообщение перед удалением.\n"
+        "«выкл» — сообщение не удаляется.</i>",
         parse_mode="HTML",
         reply_markup=kb,
     )

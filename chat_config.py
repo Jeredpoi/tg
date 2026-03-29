@@ -107,14 +107,6 @@ _DEFAULT_SETTINGS = {
     "autodel_help": 25,            # Автоудаление ответа /help (сек, 0 = выкл)
     "autodel_gallery": 25,         # Автоудаление ссылки галереи (сек, 0 = выкл)
     "autodel_ownerhelp": 20,       # Автоудаление ответа /ownerhelp (сек, 0 = выкл)
-    "autodel_debug":   10,  # Автоудаление /debug   (сек, 0 = выкл)
-    "autodel_top":      0,  # Автоудаление /top      (сек, 0 = выкл)
-    "autodel_stats":    0,  # Автоудаление /stats    (сек, 0 = выкл)
-    "autodel_mge":      0,  # Автоудаление /mge      (сек, 0 = выкл)
-    "autodel_roast":    0,  # Автоудаление /roast    (сек, 0 = выкл)
-    "autodel_dice":     0,  # Автоудаление /dice     (сек, 0 = выкл)
-    "autodel_weather":  0,  # Автоудаление /weather  (сек, 0 = выкл)
-    "autodel_anon":     0,  # Автоудаление /anon     (сек, 0 = выкл)
 }
 
 _settings_cache: dict | None = None

@@ -9,7 +9,6 @@ from telegram import Update
 from telegram.ext import ContextTypes
 from telegram.error import Forbidden
 from chat_config import is_main_chat
-from commands.utils import autodel
 
 logger = logging.getLogger(__name__)
 
@@ -132,9 +131,7 @@ async def handle_anon_message(update: Update, context: ContextTypes.DEFAULT_TYPE
             f"🎭 <b>Анонимное сообщение:</b>\n\n{html.escape(text)}",
             parse_mode="HTML",
         )
-        confirm = await update.message.reply_text("✅ Сообщение отправлено анонимно!")
-        await autodel(context, "autodel_anon", update.effective_chat.id,
-                      update.message.message_id, confirm.message_id)
+        await update.message.reply_text("✅ Сообщение отправлено анонимно!")
     except Exception as e:
         logger.exception("anon send failed: %s", e)
         await update.message.reply_text("❌ Не удалось отправить сообщение. Попробуй снова.")

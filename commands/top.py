@@ -7,7 +7,6 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.error import BadRequest
 from telegram.ext import ContextTypes
 from database import get_top_messages, get_top_swears, get_gallery
-from commands.utils import autodel
 
 MEDALS = ["🥇", "🥈", "🥉"]
 
@@ -65,8 +64,7 @@ async def top_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     rows = get_top_messages(chat_id)
     text = _build_messages_text(rows)
     keyboard = _get_keyboard("messages")
-    bot_msg = await update.message.reply_text(text, parse_mode="HTML", reply_markup=keyboard)
-    await autodel(context, "autodel_top", chat_id, update.message.message_id, bot_msg.message_id)
+    await update.message.reply_text(text, parse_mode="HTML", reply_markup=keyboard)
 
 
 async def top_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
