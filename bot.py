@@ -720,11 +720,15 @@ async def _cleanup_old_photos(context) -> None:
     try:
         old = get_and_delete_old_photos(days=30)
         for key, media_type in old:
-            ext = "mp4" if media_type == "video" else "jpg"
-            fpath = os.path.join(photos_dir, f"{key}.{ext}")
-            if os.path.exists(fpath):
-                os.remove(fpath)
-                deleted_count += 1
+            primary_ext = "mp4" if media_type == "video" else "jpg"
+            for ext in (primary_ext, "mp4" if primary_ext == "jpg" else "jpg"):
+                fpath = os.path.join(photos_dir, f"{key}.{ext}")
+                if os.path.exists(fpath):
+                    try:
+                        os.remove(fpath)
+                        deleted_count += 1
+                    except OSError as e:
+                        logger.warning("cleanup_old_photos: не удалось удалить %s: %s", fpath, e)
         if deleted_count:
             logger.info("cleanup_old_photos: удалено %d файлов", deleted_count)
     except Exception as e:
