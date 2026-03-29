@@ -58,16 +58,19 @@ async def _check_webapp() -> tuple[bool, str]:
 
 
 def _get_chat_stats(chat_id: int) -> dict:
+    conn = None
     try:
         conn = get_connection()
         users     = conn.execute("SELECT COUNT(*) FROM user_stats WHERE chat_id=?", (chat_id,)).fetchone()[0]
         messages  = conn.execute("SELECT COALESCE(SUM(msg_count),0) FROM user_stats WHERE chat_id=?", (chat_id,)).fetchone()[0]
         swears    = conn.execute("SELECT COALESCE(SUM(swear_count),0) FROM user_stats WHERE chat_id=?", (chat_id,)).fetchone()[0]
         photos    = conn.execute("SELECT COUNT(*) FROM photo_ratings WHERE chat_id=?", (chat_id,)).fetchone()[0]
-        conn.close()
         return {"users": users, "messages": messages, "swears": swears, "photos": photos}
     except Exception:
         return {"users": 0, "messages": 0, "swears": 0, "photos": 0}
+    finally:
+        if conn:
+            conn.close()
 
 
 def _get_all_setup_chats() -> list[int]:
