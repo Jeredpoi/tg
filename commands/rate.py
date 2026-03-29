@@ -357,6 +357,17 @@ async def rate_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         except Exception as e:
             import html as _html
             logger.error("send_%s failed: chat_id=%s error=%s", media_type, target_chat_id, e)
+            # Удаляем PM-сообщения даже при ошибке отправки
+            pm_chat_id = query.message.chat_id
+            current_msg_id = query.message.message_id
+            tracked = list(_RATE_PM_MSGS.pop(user_id, []))
+            if current_msg_id not in tracked:
+                tracked.append(current_msg_id)
+            context.job_queue.run_once(
+                _delete_rate_pm,
+                5,
+                data={"chat_id": pm_chat_id, "msg_ids": tracked},
+            )
             await query.answer()
             await query.edit_message_text(
                 f"❌ Не удалось отправить {media_word} в группу.\n"

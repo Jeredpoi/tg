@@ -467,7 +467,7 @@ async def _track_message(update, context):
 
     chat_id = update.effective_chat.id
 
-    text = update.message.text or ""
+    text = update.message.text or update.message.caption or ""
     swear_count = _count_swears(text)
 
     track_message(user.id, user.username, user.first_name, swear_count, chat_id)
