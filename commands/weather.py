@@ -11,6 +11,7 @@ from telegram.error import BadRequest
 from telegram.ext import ContextTypes
 
 from config import YANDEX_WEATHER_KEY
+from database import track_bot_message
 
 logger = logging.getLogger(__name__)
 
@@ -161,6 +162,8 @@ async def weather_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         text = _build_current_text(city_name, data)
         kb = _keyboard(lat, lon, city_name)
         await msg.edit_text(text, parse_mode="HTML", reply_markup=kb)
+        if update.effective_chat and update.effective_chat.type != "private":
+            track_bot_message(update.effective_chat.id, msg.message_id, f"🌤 Погода: {city_name}")
 
     except Exception as e:
         logger.exception("weather_command failed for city=%r: %s", city, e)

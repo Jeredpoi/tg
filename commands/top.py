@@ -6,7 +6,7 @@ import html
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.error import BadRequest
 from telegram.ext import ContextTypes
-from database import get_top_messages, get_top_swears, get_gallery
+from database import get_top_messages, get_top_swears, get_gallery, track_bot_message
 
 MEDALS = ["🥇", "🥈", "🥉"]
 
@@ -64,7 +64,8 @@ async def top_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     rows = get_top_messages(chat_id)
     text = _build_messages_text(rows)
     keyboard = _get_keyboard("messages")
-    await update.message.reply_text(text, parse_mode="HTML", reply_markup=keyboard)
+    msg = await update.message.reply_text(text, parse_mode="HTML", reply_markup=keyboard)
+    track_bot_message(chat_id, msg.message_id, "📊 Топ участников")
 
 
 async def top_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
