@@ -6,6 +6,7 @@ import random
 from telegram import Update
 from telegram.ext import ContextTypes
 from database import track_bot_message
+from commands.utils import autodel
 
 ROAST_PHRASES = [
     # ── Лёгкие подколы ──
@@ -124,3 +125,5 @@ async def roast_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     phrase = random.choice(ROAST_PHRASES).format(user=target)
     msg = await update.message.reply_text(phrase)
     track_bot_message(update.effective_chat.id, msg.message_id, phrase[:80])
+    await autodel(context, "autodel_roast", update.effective_chat.id,
+                  update.message.message_id, msg.message_id)

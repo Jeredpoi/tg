@@ -158,6 +158,9 @@ async def weather_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         text = _build_current_text(city_name, data)
         kb = _keyboard(lat, lon, city_name)
         await msg.edit_text(text, parse_mode="HTML", reply_markup=kb)
+        from commands.utils import autodel
+        await autodel(context, "autodel_weather", update.effective_chat.id,
+                      update.message.message_id, msg.message_id)
 
     except Exception as e:
         logger.exception("weather_command failed for city=%r: %s", city, e)

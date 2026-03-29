@@ -9,6 +9,7 @@ from telegram.ext import ContextTypes
 from config import MGE_PHRASES
 from chat_config import get_custom_mge_phrases
 from database import track_bot_message
+from commands.utils import autodel
 
 
 async def mge_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -34,3 +35,5 @@ async def mge_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
 
     msg = await update.message.reply_text(text, parse_mode="HTML")
     track_bot_message(update.effective_chat.id, msg.message_id, f"🎭 {speaker}: «{phrase[:40]}»")
+    await autodel(context, "autodel_mge", update.effective_chat.id,
+                  update.message.message_id, msg.message_id)
