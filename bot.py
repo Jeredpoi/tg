@@ -335,7 +335,7 @@ async def _rate_limit_guard(update, context):
                         await ctx.bot.delete_message(chat.id, note.message_id)
                     except Exception:
                         pass
-                context.job_queue.run_once(_del_cd, 4)
+                context.job_queue.run_once(_del_cd, 2)
             except Exception:
                 pass
         elif chat and chat.type == "private":
