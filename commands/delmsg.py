@@ -66,7 +66,8 @@ def _build_text(rows: list, page: int, total: int) -> str:
         num = page * PAGE_SIZE + i + 1
         # Форматируем время отправки
         try:
-            dt = datetime.datetime.fromtimestamp(row["sent_at"]).strftime("%d.%m %H:%M")
+            _msk = datetime.timezone(datetime.timedelta(hours=3))
+            dt = datetime.datetime.fromtimestamp(row["sent_at"], tz=_msk).strftime("%d.%m %H:%M")
         except Exception:
             dt = "?"
         preview = html_mod.escape(_fmt_preview(row["preview"], row["chat_id"]))
