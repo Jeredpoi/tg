@@ -906,6 +906,13 @@ def main():
 
         app.job_queue.run_repeating(_cleanup_cmd_cooldown, interval=3600, first=3600, name="cleanup_cmd_cooldown")
 
+        # Сброс кэша аватаров раз в 24 ч — чтобы обновлять фото профиля
+        async def _clear_avatar_cache(ctx):
+            _avatar_cache_set.clear()
+            logger.debug("_avatar_cache_set: сброшен")
+
+        app.job_queue.run_repeating(_clear_avatar_cache, interval=86400, first=86400, name="clear_avatar_cache")
+
     async def on_shutdown(app):
         try:
             await app.bot.set_my_description("Скаут недоступен 🔴")

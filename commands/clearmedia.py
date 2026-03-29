@@ -23,17 +23,22 @@ async def clearmedia_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
         clear_all_photos()
 
         deleted = 0
+        failed = 0
         if os.path.isdir(PHOTOS_DIR):
             for fname in os.listdir(PHOTOS_DIR):
                 fpath = os.path.join(PHOTOS_DIR, fname)
                 if os.path.isfile(fpath):
-                    os.remove(fpath)
-                    deleted += 1
+                    try:
+                        os.remove(fpath)
+                        deleted += 1
+                    except OSError as file_err:
+                        failed += 1
+                        logger.warning("clearmedia: не удалось удалить %s: %s", fpath, file_err)
 
-        await update.message.reply_text(
-            f"🗑 Галерея очищена.\n"
-            f"Удалено файлов с диска: {deleted}"
-        )
+        msg = f"🗑 Галерея очищена.\nУдалено файлов с диска: {deleted}"
+        if failed:
+            msg += f"\n⚠️ Не удалось удалить: {failed}"
+        await update.message.reply_text(msg)
         logger.info("clearmedia: выполнено владельцем %s, файлов удалено: %d", user.id, deleted)
     except Exception as e:
         logger.error("clearmedia error: %s", e)

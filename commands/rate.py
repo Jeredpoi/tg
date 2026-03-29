@@ -75,6 +75,7 @@ async def rate_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     # Таймаут 5 минут — если не отправит медиа, сбрасываем состояние
     async def _rate_timeout(ctx):
         _RATE_WAITING.discard(user_id)
+        _RATE_PM_MSGS.pop(user_id, None)
     context.job_queue.run_once(_rate_timeout, 300, name=f"rate_timeout_{user_id}")
 
     try:
@@ -111,6 +112,7 @@ async def _process_media(update: Update, context: ContextTypes.DEFAULT_TYPE, pho
     async def _pending_timeout(ctx):
         _PENDING_PHOTOS.pop(key, None)
         _PHOTO_CAPTIONS.pop(key, None)
+        _RATE_PM_MSGS.pop(uid_for_cleanup, None)
         # Если пользователь нажал «добавить подпись» но так и не написал
         if _COMMENT_WAITING.get(uid_for_cleanup) == key:
             _COMMENT_WAITING.pop(uid_for_cleanup, None)
