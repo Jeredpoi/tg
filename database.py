@@ -138,10 +138,15 @@ def init_db() -> None:
                 sent_at    REAL NOT NULL DEFAULT (unixepoch())
             )
         """)
-        c.execute("CREATE INDEX IF NOT EXISTS idx_bot_messages_chat   ON bot_messages(chat_id, sent_at DESC)")
-        c.execute("CREATE INDEX IF NOT EXISTS idx_photo_ratings_key   ON photo_ratings(key)")
-        c.execute("CREATE INDEX IF NOT EXISTS idx_photo_ratings_chat  ON photo_ratings(chat_id)")
-        c.execute("CREATE INDEX IF NOT EXISTS idx_photo_votes_photo   ON photo_votes(photo_id)")
+        c.execute("CREATE INDEX IF NOT EXISTS idx_bot_messages_chat    ON bot_messages(chat_id, sent_at DESC)")
+        c.execute("CREATE INDEX IF NOT EXISTS idx_photo_ratings_key    ON photo_ratings(key)")
+        c.execute("CREATE INDEX IF NOT EXISTS idx_photo_ratings_chat   ON photo_ratings(chat_id)")
+        c.execute("CREATE INDEX IF NOT EXISTS idx_photo_votes_photo    ON photo_votes(photo_id)")
+        # Индексы для быстрых запросов /top и /stats
+        c.execute("CREATE INDEX IF NOT EXISTS idx_user_stats_msg       ON user_stats(chat_id, msg_count DESC)")
+        c.execute("CREATE INDEX IF NOT EXISTS idx_user_stats_swear     ON user_stats(chat_id, swear_count DESC)")
+        c.execute("CREATE INDEX IF NOT EXISTS idx_photo_ratings_author ON photo_ratings(author_id, chat_id)")
+        c.execute("CREATE INDEX IF NOT EXISTS idx_photo_comments_photo ON photo_comments(photo_id)")
 
         conn.commit()
     finally:
