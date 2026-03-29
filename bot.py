@@ -319,9 +319,26 @@ async def _rate_limit_guard(update, context):
     last = _cmd_last_used.get(key, 0)
 
     if now - last < cooldown:
+        remaining = int(cooldown - (now - last)) + 1
         chat = update.effective_chat
-        # Тихо удаляем команду, без уведомлений
         if chat and chat.type in ("group", "supergroup"):
+            try:
+                await msg.delete()
+                note = await context.bot.send_message(
+                    chat_id=chat.id,
+                    text=f"⏳ <b>{remaining} сек.</b> до следующего использования",
+                    parse_mode="HTML",
+                    disable_notification=True,
+                )
+                async def _del_cd(ctx):
+                    try:
+                        await ctx.bot.delete_message(chat.id, note.message_id)
+                    except Exception:
+                        pass
+                context.job_queue.run_once(_del_cd, 4)
+            except Exception:
+                pass
+        elif chat and chat.type == "private":
             try:
                 await msg.delete()
             except Exception:

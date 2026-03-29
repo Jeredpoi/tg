@@ -131,14 +131,15 @@ async def api_delete_photo(request: web.Request) -> web.Response:
     if not ok:
         raise web.HTTPForbidden()
 
-    # Удаляем файл с диска
-    ext = "mp4" if media_type == "video" else "jpg"
-    fpath = os.path.join(PHOTOS_DIR, f"{key}.{ext}")
-    try:
-        if os.path.exists(fpath):
-            os.remove(fpath)
-    except OSError as e:
-        logger.warning("api_delete_photo: не удалось удалить файл %s: %s", fpath, e)
+    # Удаляем файл с диска (пробуем оба расширения на случай повреждённого media_type в БД)
+    primary_ext = "mp4" if media_type == "video" else "jpg"
+    for ext in (primary_ext, "mp4" if primary_ext == "jpg" else "jpg"):
+        fpath = os.path.join(PHOTOS_DIR, f"{key}.{ext}")
+        try:
+            if os.path.exists(fpath):
+                os.remove(fpath)
+        except OSError as e:
+            logger.warning("api_delete_photo: не удалось удалить файл %s: %s", fpath, e)
 
     return web.json_response({"ok": True})
 

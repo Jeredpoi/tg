@@ -79,9 +79,9 @@ async def _fetch_weather(lat: float, lon: float) -> dict:
 
 
 def _build_current_text(city_name: str, data: dict) -> str:
-    fact = data["fact"]
-    temp = fact.get("temp", "?")
-    feels = fact.get("feels_like", "?")
+    fact = data.get("fact", {})
+    temp = fact.get("temp")
+    feels = fact.get("feels_like")
     cond_code = fact.get("condition", "")
     icon, cond_name = _cond(cond_code)
     wind_speed = fact.get("wind_speed", "?")
@@ -89,11 +89,14 @@ def _build_current_text(city_name: str, data: dict) -> str:
     humidity = fact.get("humidity", "?")
     pressure = fact.get("pressure_mm", "?")
 
+    t_str = _sign(temp) if isinstance(temp, (int, float)) else "?"
+    f_str = _sign(feels) if isinstance(feels, (int, float)) else "?"
+
     safe_city = _html.escape(city_name)
     lines = [
         f"{icon} <b>Погода в {safe_city}</b>",
         "─" * 22,
-        f"🌡 <b>Температура:</b> {_sign(temp)}°C  (ощущается {_sign(feels)}°C)",
+        f"🌡 <b>Температура:</b> {t_str}°C  (ощущается {f_str}°C)",
         f"{icon} <b>Состояние:</b> {cond_name}",
         f"💨 <b>Ветер:</b> {wind_dir}, {wind_speed} м/с",
         f"💧 <b>Влажность:</b> {humidity}%",
