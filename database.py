@@ -638,7 +638,8 @@ def get_and_delete_old_photos(days: int) -> list:
     try:
         rows = conn.execute(
             "SELECT key, media_type FROM photo_ratings "
-            "WHERE created_at IS NOT NULL AND created_at < datetime('now', '-' || ? || ' days')",
+            "WHERE key IS NOT NULL AND created_at IS NOT NULL "
+            "AND created_at < datetime('now', '-' || ? || ' days')",
             (days,)
         ).fetchall()
         if not rows:
