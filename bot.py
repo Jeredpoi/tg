@@ -22,7 +22,7 @@ from telegram.ext import (
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.request import HTTPXRequest
-from config import (BOT_TOKEN, PROXY_URL, WEBAPP_URL,
+from config import (BOT_TOKEN, PROXY_URL, WEBAPP_URL, OWNER_ID,
                     SWEAR_COOLDOWN, DEFAULT_CMD_COOLDOWN,
                     SWEAR_RESPONSE_DELAY, SWEAR_RESPONSE_CHANCE)
 
@@ -44,6 +44,10 @@ from commands.delmsg import delmsg_command, delmsg_callback
 from commands.resend import resend_command, handle_resend_message, resend_cancel
 from commands.settings import settings_command, settings_callback, handle_settings_input
 from commands.exportstats import exportstats_command
+from commands.maintenance import is_maintenance, maintenance_command
+from commands.backup import backup_command
+from commands.setavatar import setavatar_command
+from commands.restart import restart_command
 from chat_config import (get_main_chat_id, add_setup_chat, is_setup_chat, get_setting,
                           is_command_enabled, get_custom_swear_responses)
 
@@ -249,6 +253,38 @@ _CMD_COOLDOWNS: dict[str, int] = {
 
 # Словарь: (user_id, command) → timestamp последнего разрешённого вызова
 _cmd_last_used: dict[tuple[int, str], float] = {}
+
+
+async def _maintenance_guard(update, context):
+    """Middleware (group=-3): блокирует все команды не-владельца в режиме обслуживания."""
+    if not is_maintenance():
+        return
+    user = update.effective_user
+    if user and user.id == OWNER_ID:
+        return
+    msg = update.message
+    if msg:
+        try:
+            await msg.delete()
+        except Exception:
+            pass
+        chat = update.effective_chat
+        if chat and chat.type in ("group", "supergroup"):
+            try:
+                note = await context.bot.send_message(
+                    chat_id=chat.id,
+                    text="🔧 Бот на техническом обслуживании.",
+                    disable_notification=True,
+                )
+                async def _del(ctx):
+                    try:
+                        await ctx.bot.delete_message(chat.id, note.message_id)
+                    except Exception:
+                        pass
+                context.job_queue.run_once(_del, 5)
+            except Exception:
+                pass
+    raise ApplicationHandlerStop
 
 
 async def _rate_limit_guard(update, context):
@@ -706,8 +742,11 @@ def main():
         builder = builder.request(HTTPXRequest(read_timeout=15, write_timeout=15, connect_timeout=10))
     app = builder.build()
 
-    # Middleware: setup guard fires first (group=-2), then rate limiter (group=-1)
-    # PTB processes exactly one handler per group — so they must be in separate groups
+    # Middleware: maintenance (group=-3) → setup (group=-2) → rate limit (group=-1)
+    app.add_handler(
+        MessageHandler(filters.COMMAND, _maintenance_guard),
+        group=-3,
+    )
     app.add_handler(
         MessageHandler(filters.COMMAND & filters.ChatType.GROUPS, _setup_guard),
         group=-2,
@@ -759,6 +798,10 @@ def main():
     app.add_handler(CommandHandler("resend",       resend_command,       filters=filters.ChatType.PRIVATE))
     app.add_handler(CommandHandler("settings",     settings_command,     filters=filters.ChatType.PRIVATE))
     app.add_handler(CommandHandler("exportstats",  exportstats_command,  filters=filters.ChatType.PRIVATE))
+    app.add_handler(CommandHandler("backup",       backup_command,       filters=filters.ChatType.PRIVATE))
+    app.add_handler(CommandHandler("maintenance",  maintenance_command,  filters=filters.ChatType.PRIVATE))
+    app.add_handler(CommandHandler("restart",      restart_command,      filters=filters.ChatType.PRIVATE))
+    app.add_handler(CommandHandler("setavatar",    setavatar_command,    filters=filters.ChatType.GROUPS))
     app.add_handler(CommandHandler("ownerhelp",    ownerhelp_command))
 
     # Ловим любые другие команды в личке и вежливо отказываем
