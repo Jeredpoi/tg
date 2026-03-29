@@ -31,8 +31,9 @@ async def backup_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     msg = await update.message.reply_text("⏳ Формирую резервную копию...")
 
     try:
-        now = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M")
-        filename = f"backup_{now}.db"
+        _msk = datetime.timezone(datetime.timedelta(hours=3))
+        now = datetime.datetime.now(_msk)
+        filename = f"backup_{now.strftime('%Y-%m-%d_%H-%M')}.db"
         with open(DATABASE_PATH, "rb") as f:
             await context.bot.send_document(
                 chat_id=update.effective_chat.id,
@@ -40,7 +41,7 @@ async def backup_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
                 filename=filename,
                 caption=(
                     f"🗄 <b>Резервная копия базы данных</b>\n\n"
-                    f"📅 {datetime.datetime.now().strftime('%d.%m.%Y %H:%M')}\n"
+                    f"📅 {now.strftime('%d.%m.%Y %H:%M')} МСК\n"
                     f"📦 Размер: {size_str}"
                 ),
                 parse_mode="HTML",
