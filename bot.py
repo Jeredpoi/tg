@@ -45,7 +45,6 @@ from commands.settings import settings_command, settings_callback, handle_settin
 from commands.exportstats import exportstats_command
 from commands.maintenance import is_maintenance, maintenance_command
 from commands.backup import backup_command
-from commands.setavatar import setavatar_command
 from commands.restart import restart_command, send_restart_done
 from chat_config import (get_main_chat_id, add_setup_chat, is_setup_chat, get_setting,
                           is_command_enabled, get_custom_swear_responses, get_custom_swear_triggers)
@@ -910,7 +909,6 @@ def main():
     app.add_handler(CommandHandler("backup",       backup_command,       filters=filters.ChatType.PRIVATE))
     app.add_handler(CommandHandler("maintenance",  maintenance_command,  filters=filters.ChatType.PRIVATE))
     app.add_handler(CommandHandler("restart",      restart_command,      filters=filters.ChatType.PRIVATE))
-    app.add_handler(CommandHandler("setavatar",    setavatar_command,    filters=filters.ChatType.GROUPS))
     app.add_handler(CommandHandler("ownerhelp",    ownerhelp_command))
 
     # Ловим любые другие команды в личке и вежливо отказываем
