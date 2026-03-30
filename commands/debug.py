@@ -8,7 +8,7 @@ import sqlite3
 import aiohttp
 from telegram import Update, BotCommandScopeAllGroupChats
 from telegram.ext import ContextTypes
-from config import YANDEX_WEATHER_KEY, DATABASE_PATH, CHAT_ID, WEBAPP_URL
+from config import YANDEX_WEATHER_KEY, DATABASE_PATH, CHAT_ID, WEBAPP_URL, OWNER_ID
 from database import get_connection
 
 
@@ -172,4 +172,21 @@ async def debug_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         f"<b>Команды:</b>\n{cmds_text}"
     )
 
-    await message.reply_text(text, parse_mode="HTML")
+    msg = await message.reply_text(text, parse_mode="HTML")
+
+    if chat.type == "private" and user.id == OWNER_ID:
+        # Владелец в личке — закрепляем
+        try:
+            await context.bot.pin_chat_message(chat.id, msg.message_id, disable_notification=True)
+        except Exception:
+            pass
+    else:
+        # В группе — авто-удаление через 10 секунд
+        cid = chat.id
+        mid = msg.message_id
+        async def _del_debug(ctx):
+            try:
+                await ctx.bot.delete_message(cid, mid)
+            except Exception:
+                pass
+        context.job_queue.run_once(_del_debug, 10)

@@ -69,13 +69,32 @@ async def rate_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         return
 
     user_id = update.effective_user.id
+    pm_chat_id = update.effective_chat.id
     _RATE_PM_MSGS[user_id] = []
     _RATE_WAITING.add(user_id)  # ждём фото/видео
 
-    # Таймаут 5 минут — если не отправит медиа, сбрасываем состояние
+    # Таймаут 5 минут — если не отправит медиа, уведомляем и чистим
     async def _rate_timeout(ctx):
         _RATE_WAITING.discard(user_id)
-        _RATE_PM_MSGS.pop(user_id, None)
+        tracked = list(_RATE_PM_MSGS.pop(user_id, []))
+        try:
+            timeout_msg = await ctx.bot.send_message(
+                chat_id=pm_chat_id,
+                text="⏰ Время на отправку истекло. Используй /rate снова.",
+            )
+            tracked.append(timeout_msg.message_id)
+        except Exception:
+            pass
+        # Удаляем все PM-сообщения через 10 секунд
+        if tracked:
+            async def _del_all(c):
+                for mid in tracked:
+                    try:
+                        await c.bot.delete_message(pm_chat_id, mid)
+                    except Exception:
+                        pass
+            ctx.job_queue.run_once(_del_all, 10)
+
     context.job_queue.run_once(_rate_timeout, 300, name=f"rate_timeout_{user_id}")
 
     try:
@@ -84,7 +103,7 @@ async def rate_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         pass
 
     msg = await context.bot.send_message(
-        chat_id=update.effective_chat.id,
+        chat_id=pm_chat_id,
         text=(
             "📸🎥 Отправь мне фото или видео, которое хочешь выставить на оценку группы.\n"
             f"Голосование будет идти {get_setting('vote_duration')} минут, затем покажу итоговый счёт."

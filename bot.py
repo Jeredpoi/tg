@@ -35,11 +35,11 @@ from commands.mge import mge_command
 from commands.roast import roast_command
 from commands.top import top_command, top_callback
 from commands.rate import rate_command, rate_callback, handle_rate_photo, handle_rate_video, handle_rate_comment
-from commands.help import help_command, ownerhelp_command
+from commands.help import help_command, ownerhelp_command, ownerhelp_pin_callback
 from commands.weather import weather_command, weather_callback
 from commands.stats import stats_command
 from commands.anon import anon_command, handle_anon_cancel, handle_anon_message
-from commands.clearmedia import clearmedia_command
+from commands.clearmedia import clearmedia_command, clearmedia_callback
 from commands.delmsg import delmsg_command, delmsg_callback
 from commands.resend import resend_command, handle_resend_message, resend_cancel
 from commands.settings import settings_command, settings_callback, handle_settings_input
@@ -863,12 +863,14 @@ def main():
             pass
 
     # Inline-кнопки
-    app.add_handler(CallbackQueryHandler(_dismiss_callback,  pattern=r"^dismiss$"))
-    app.add_handler(CallbackQueryHandler(delmsg_callback,    pattern=r"^delmsg_"))
-    app.add_handler(CallbackQueryHandler(settings_callback,  pattern=r"^stg:"))
-    app.add_handler(CallbackQueryHandler(top_callback,     pattern=r"^top_"))
-    app.add_handler(CallbackQueryHandler(rate_callback,    pattern=r"^(anon_|rate_|comment_ask_|comment_skip_)"))
-    app.add_handler(CallbackQueryHandler(weather_callback, pattern=r"^w(forecast|refresh):"))
+    app.add_handler(CallbackQueryHandler(_dismiss_callback,      pattern=r"^dismiss$"))
+    app.add_handler(CallbackQueryHandler(delmsg_callback,        pattern=r"^delmsg_"))
+    app.add_handler(CallbackQueryHandler(settings_callback,      pattern=r"^stg:"))
+    app.add_handler(CallbackQueryHandler(top_callback,           pattern=r"^top_"))
+    app.add_handler(CallbackQueryHandler(rate_callback,          pattern=r"^(anon_|rate_|comment_ask_|comment_skip_)"))
+    app.add_handler(CallbackQueryHandler(weather_callback,       pattern=r"^w(forecast|refresh):"))
+    app.add_handler(CallbackQueryHandler(ownerhelp_pin_callback, pattern=r"^ownerhelp_pin$"))
+    app.add_handler(CallbackQueryHandler(clearmedia_callback,    pattern=r"^clearmedia_"))
 
     # Анонимные сообщения / подпись /rate / resend в личке + трекинг в группах
     async def _maybe_token_reply(update, context):
