@@ -193,40 +193,55 @@ def _has_swear_root(word: str) -> bool:
     return False
 
 
-# Таблица замены латинских букв, визуально похожих на кириллицу
+# Таблица замены латинских букв, визуально похожих на кириллицу.
+# Только настоящие гомоглифы: e≈е  a≈а  o≈о  c≈с  p≈р  x≈х  y≈у
+# НЕ включаем b/h/u/i/k/m/n — не похожи, дают ложные срабатывания на английских словах.
 _LAT_TO_CYR = str.maketrans({
-    'a': 'а', 'c': 'с', 'e': 'е', 'o': 'о', 'p': 'р',
-    'x': 'х', 'y': 'у', 'k': 'к', 'm': 'м', 'n': 'н',
-    'b': 'б', 'h': 'н', 'u': 'и', 'i': 'и',
-    'A': 'А', 'C': 'С', 'E': 'Е', 'O': 'О', 'P': 'Р',
-    'X': 'Х', 'Y': 'У', 'K': 'К', 'M': 'М', 'H': 'Н',
-    'B': 'Б',
+    'e': 'е', 'a': 'а', 'o': 'о', 'c': 'с', 'p': 'р', 'x': 'х', 'y': 'у',
+    'E': 'Е', 'A': 'А', 'O': 'О', 'C': 'С', 'P': 'Р', 'X': 'Х', 'Y': 'У',
 })
 
+# Символы цензуры между буквами (x*й, б.ять).
+# Дефис НЕ удаляем — нормальные составные слова (по-русски, тёмно-синий).
+_CENSOR_STRIP_RE = re.compile(r'(?<=[а-яёА-ЯЁa-zA-Z])[\*\.]+(?=[а-яёА-ЯЁa-zA-Z])')
 
-def _normalize_for_swear(text: str) -> str:
-    """Нормализует текст для детектора матов:
-    - Latin→Cyrillic гомоглифы (xуй → хуй)
-    - удаляет символы-цензуры между буквами (б*ять → бять, х*й → хй)
-    - ё→е
-    """
-    # Latin→Cyrillic
-    text = text.translate(_LAT_TO_CYR)
-    # Убираем *, ., -, _, | между буквами (цензура типа "б*ять")
-    text = re.sub(r'(?<=[а-яёa-z])[\*\.\-\_\|]+(?=[а-яёa-z])', '', text, flags=re.IGNORECASE)
-    # ё → е
-    return text.lower().replace('ё', 'е')
+# Паттерны цензурированных матов — проверяем ДО удаления символов цензуры,
+# чтобы не потерять короткие слова (х*й→хй — 2 буквы, не поймаем через слова).
+_CENSORED_RE = re.compile(
+    r'х[\*\.][йя]'        # х*й / х.й / х*я
+    r'|б[\*\.]ять'        # б*ять
+    r'|б[\*\.]ядь'        # б*ядь
+    r'|п[\*\.]зда'        # п*зда
+    r'|п[\*\.]здец'       # п*здец
+    r'|[её][\*\.]ать'     # е*ать / ё*ать
+    r'|е[\*\.]б',         # е*б (фрагмент ебать)
+    re.IGNORECASE,
+)
+
+# Начала слов — ложные срабатывания через prefix+root детектор.
+# "себ" = приставка "с" + корень "еб" → "Себастьян", "себялюбие" и т.п.
+_SWEAR_FP_STARTS = frozenset(["себ"])
 
 
 def _count_swears(text: str) -> int:
     """Считает количество матерных слов с учётом корней."""
-    normalized = _normalize_for_swear(text)
-    words = re.findall(r'\w+', normalized, re.UNICODE)
-    count = 0
-    for word in words:
+    if not text:
+        return 0
+    # Latin→Cyrillic гомоглифы
+    mapped = text.translate(_LAT_TO_CYR)
+    lower = mapped.lower().replace('ё', 'е')
+
+    # 1) Явные цензурированные паттерны (х*й и т.п.) — до удаления символов
+    count = len(_CENSORED_RE.findall(lower))
+
+    # 2) Обычные слова после удаления символов цензуры
+    clean = _CENSOR_STRIP_RE.sub('', lower)
+    for word in re.findall(r'[а-яё]+', clean):
         if word in _SWEAR_NORMALIZED:
             count += 1
-        elif _has_swear_root(word):
+        elif (len(word) >= 4
+              and not any(word.startswith(fp) for fp in _SWEAR_FP_STARTS)
+              and _has_swear_root(word)):
             count += 1
     return count
 

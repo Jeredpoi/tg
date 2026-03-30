@@ -15,7 +15,8 @@ logger = logging.getLogger(__name__)
 def get_connection() -> sqlite3.Connection:
     conn = sqlite3.connect(DATABASE_PATH, timeout=10)
     conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA journal_mode=WAL")
+    # journal_mode=WAL устанавливается один раз в init_db() и персистентна в файле БД.
+    # synchronous=NORMAL нужно ставить на каждое соединение (это per-connection настройка).
     conn.execute("PRAGMA synchronous=NORMAL")
     return conn
 
@@ -24,6 +25,8 @@ def init_db() -> None:
     """Инициализирует базу данных: создаёт таблицы, запускает миграции."""
     conn = get_connection()
     try:
+        # WAL-режим делаем здесь один раз — он сохраняется в файле БД навсегда.
+        conn.execute("PRAGMA journal_mode=WAL")
         c = conn.cursor()
 
         # ── user_stats ─────────────────────────────────────────────────────────
