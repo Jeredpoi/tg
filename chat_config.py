@@ -69,7 +69,7 @@ def _load_setup_chats() -> set[int]:
 
 def _save_setup_chats_to_disk(chats: set[int]) -> None:
     with open(_SETUP_FILE, "w", encoding="utf-8") as f:
-        json.dump(list(chats), f)
+        json.dump(list(chats), f, ensure_ascii=False, indent=2)
 
 
 def get_setup_chats() -> set[int]:
