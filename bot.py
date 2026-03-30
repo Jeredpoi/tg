@@ -457,8 +457,6 @@ async def _send_swear_response(context) -> None:
     if time.time() - last < _SWEAR_COOLDOWN:
         return
 
-    _swear_last_response[chat_id] = time.time()
-
     try:
         custom_response = d.get("custom_response")
         if custom_response:
@@ -476,6 +474,7 @@ async def _send_swear_response(context) -> None:
             text=text,
             reply_to_message_id=d["message_id"],
         )
+        _swear_last_response[chat_id] = time.time()
         track_bot_message(chat_id, msg.message_id, msg.text)
     except Exception as e:
         logger.warning("_send_swear_response: chat=%s err=%s", chat_id, e)
@@ -563,7 +562,7 @@ async def _track_message(update, context):
                 name=f"swear_{chat_id}",
             )
 
-    if swear_count and update.effective_chat.type != "private" and get_setting("swear_detect"):
+    if swear_count and not matched_trigger and update.effective_chat.type != "private" and get_setting("swear_detect"):
         name = user.first_name or user.username or "дружок"
 
         # Дебаунсинг: отменяем предыдущий отложенный ответ для этого чата

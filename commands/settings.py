@@ -297,6 +297,10 @@ async def settings_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         await _show_swear_triggers_list(query)
 
     elif data == "stg:trigger_resp_yes":
+        if not context.user_data.get("stg_trigger_word"):
+            await query.answer("❌ Сессия устарела. Начни заново.", show_alert=True)
+            await _show_swear_triggers_menu(query)
+            return
         context.user_data["stg_state"] = STATE_AWAIT_TRIGGER_RESP
         msg = await query.edit_message_text(
             "💬 <b>Свой ответ на слово</b>\n\n"
@@ -314,11 +318,14 @@ async def settings_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         word = context.user_data.pop("stg_trigger_word", None)
         context.user_data.pop("stg_state", None)
         context.user_data.pop("stg_msg_id", None)
-        if word:
-            add_custom_swear_trigger(word, None)
+        if not word:
+            await query.answer("❌ Сессия устарела. Начни заново.", show_alert=True)
+            await _show_swear_triggers_menu(query)
+            return
+        add_custom_swear_trigger(word, None)
         chance = int(get_setting("swear_response_chance") * 100)
         await query.edit_message_text(
-            f"✅ Слово «{html.escape(word or '?')}» добавлено!\n\n"
+            f"✅ Слово «{html.escape(word)}» добавлено!\n\n"
             f"Бот будет реагировать на него стандартными ответами "
             f"с шансом <b>{chance}%</b>.",
             parse_mode="HTML",
@@ -1061,15 +1068,14 @@ async def handle_settings_input(update: Update, context) -> bool:
 
     # ── Ввод слова-триггера ──
     if state == STATE_AWAIT_TRIGGER_WORD:
-        context.user_data.pop("stg_state", None)
-
         if not text:
-            await update.message.reply_text("❌ Пустое слово. Попробуй снова через /settings.")
+            await update.message.reply_text("❌ Пустое слово. Напиши слово ещё раз.")
             return True
         if len(text) > 100:
-            await update.message.reply_text("❌ Слишком длинное слово (макс. 100 символов).")
+            await update.message.reply_text("❌ Слишком длинное слово (макс. 100 символов). Напиши ещё раз.")
             return True
 
+        context.user_data.pop("stg_state", None)
         context.user_data["stg_trigger_word"] = text.lower().strip()
         user_mid   = update.message.message_id
         prompt_mid = context.user_data.pop("stg_msg_id", None)
@@ -1098,18 +1104,19 @@ async def handle_settings_input(update: Update, context) -> bool:
 
     # ── Ввод ответа на триггер ──
     if state == STATE_AWAIT_TRIGGER_RESP:
-        context.user_data.pop("stg_state", None)
-        word = context.user_data.pop("stg_trigger_word", None)
-
         if not text:
+            context.user_data.pop("stg_state", None)
+            word = context.user_data.pop("stg_trigger_word", None)
             await update.message.reply_text("❌ Пустой ответ. Слово сохранено без ответа.")
             if word:
                 add_custom_swear_trigger(word, None)
             return True
         if len(text) > 300:
-            await update.message.reply_text("❌ Слишком длинный ответ (макс. 300 символов).")
+            await update.message.reply_text("❌ Слишком длинный ответ (макс. 300 символов). Напиши короче.")
             return True
 
+        context.user_data.pop("stg_state", None)
+        word = context.user_data.pop("stg_trigger_word", None)
         if word:
             add_custom_swear_trigger(word, text)
 
