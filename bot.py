@@ -4,6 +4,7 @@
 
 import html as _html_mod
 import logging
+import math
 import os
 import re
 import random
@@ -356,7 +357,7 @@ async def _rate_limit_guard(update, context):
     last = _cmd_last_used.get(key, 0)
 
     if now - last < cooldown:
-        remaining = int(cooldown - (now - last)) + 1
+        remaining = math.ceil(cooldown - (now - last))
         chat = update.effective_chat
         if chat and chat.type in ("group", "supergroup"):
             try:
