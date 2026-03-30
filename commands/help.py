@@ -63,6 +63,12 @@ _pinned_ownerhelp: dict[int, int] = {}
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Обработчик команд /help и /start. Автоудаляется если autodel_help > 0."""
     user_msg = update.message
+    # В группах удаляем команду сразу, чтобы не засорять чат
+    if update.effective_chat and update.effective_chat.type in ("group", "supergroup"):
+        try:
+            await user_msg.delete()
+        except Exception:
+            pass
     bot_msg  = await user_msg.reply_text(HELP_TEXT, parse_mode="HTML")
 
     delay = get_setting("autodel_help")
