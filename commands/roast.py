@@ -2,6 +2,7 @@
 # commands/roast.py — Команда /roast
 # ==============================================================================
 
+import html
 import random
 from telegram import Update
 from telegram.ext import ContextTypes
@@ -121,6 +122,6 @@ async def roast_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         context.job_queue.run_once(_delete, 20)
         return
 
-    phrase = random.choice(ROAST_PHRASES).format(user=target)
-    msg = await update.message.reply_text(phrase)
+    phrase = random.choice(ROAST_PHRASES).format(user=html.escape(target))
+    msg = await update.message.reply_text(phrase, parse_mode="HTML")
     track_bot_message(update.effective_chat.id, msg.message_id, phrase[:80])
