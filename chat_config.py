@@ -268,3 +268,34 @@ def delete_custom_swear_response(idx: int) -> bool:
         return True
     return False
 
+
+_CUSTOM_TRIGGERS_FILE = os.path.join(os.path.dirname(__file__), "custom_triggers.json")
+
+
+def get_custom_swear_triggers() -> list[dict]:
+    """Возвращает список триггерных слов: [{word, response|None}]."""
+    try:
+        with open(_CUSTOM_TRIGGERS_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError):
+        return []
+
+
+def add_custom_swear_trigger(word: str, response: str | None) -> None:
+    """Добавляет триггерное слово (с опциональным ответом)."""
+    triggers = get_custom_swear_triggers()
+    triggers.append({"word": word.lower().strip(), "response": response})
+    with open(_CUSTOM_TRIGGERS_FILE, "w", encoding="utf-8") as f:
+        json.dump(triggers, f, ensure_ascii=False, indent=2)
+
+
+def delete_custom_swear_trigger(idx: int) -> bool:
+    """Удаляет триггер по индексу. Возвращает True если успешно."""
+    triggers = get_custom_swear_triggers()
+    if 0 <= idx < len(triggers):
+        triggers.pop(idx)
+        with open(_CUSTOM_TRIGGERS_FILE, "w", encoding="utf-8") as f:
+            json.dump(triggers, f, ensure_ascii=False, indent=2)
+        return True
+    return False
+

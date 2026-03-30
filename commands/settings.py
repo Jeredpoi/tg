@@ -14,6 +14,7 @@ from chat_config import (
     MGE_CHARACTERS,
     get_custom_mge_phrases, add_custom_mge_phrase, delete_custom_mge_phrase,
     get_custom_swear_responses, add_custom_swear_response, delete_custom_swear_response,
+    get_custom_swear_triggers, add_custom_swear_trigger, delete_custom_swear_trigger,
 )
 from config import OWNER_ID
 
@@ -21,6 +22,8 @@ from config import OWNER_ID
 # Хранятся в context.user_data["stg_state"]
 STATE_AWAIT_MGE_PHRASE   = "await_mge_phrase"    # ждём текст фразы
 STATE_AWAIT_SWEAR_RESP   = "await_swear_resp"    # ждём текст ответа на мат
+STATE_AWAIT_TRIGGER_WORD = "await_trigger_word"  # ждём слово-триггер
+STATE_AWAIT_TRIGGER_RESP = "await_trigger_resp"  # ждём ответ на триггер
 
 logger = logging.getLogger(__name__)
 
@@ -262,6 +265,68 @@ async def settings_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         set_setting("swear_response_chance", value)
         await query.answer(f"Шанс: {int(value * 100)}%")
         await _show_swear_settings(query)
+
+    elif data == "stg:swear_triggers":
+        await _show_swear_triggers_menu(query)
+
+    elif data == "stg:trigger_list":
+        await _show_swear_triggers_list(query)
+
+    elif data == "stg:trigger_add":
+        context.user_data["stg_state"] = STATE_AWAIT_TRIGGER_WORD
+        msg = await query.edit_message_text(
+            "🎯 <b>Добавление слова-триггера</b>\n\n"
+            "Напиши слово или фразу, на которую бот будет реагировать:\n\n"
+            "<i>Регистр не важен. Бот найдёт это слово в любом сообщении.</i>",
+            parse_mode="HTML",
+            reply_markup=InlineKeyboardMarkup([[
+                InlineKeyboardButton("❌ Отмена", callback_data="stg:swear_triggers"),
+            ]]),
+        )
+        context.user_data["stg_msg_id"] = msg.message_id
+        await query.answer()
+
+    elif data.startswith("stg:trigger_del:"):
+        try:
+            idx = int(data[16:])
+        except ValueError:
+            await query.answer("Ошибка данных.", show_alert=True)
+            return
+        delete_custom_swear_trigger(idx)
+        await query.answer("🗑 Слово удалено")
+        await _show_swear_triggers_list(query)
+
+    elif data == "stg:trigger_resp_yes":
+        context.user_data["stg_state"] = STATE_AWAIT_TRIGGER_RESP
+        msg = await query.edit_message_text(
+            "💬 <b>Свой ответ на слово</b>\n\n"
+            "Напиши ответ бота (используй <code>{name}</code> для упоминания пользователя):\n\n"
+            f"<i>Пример: Ну и зачем ты написал это, {{name}}?</i>",
+            parse_mode="HTML",
+            reply_markup=InlineKeyboardMarkup([[
+                InlineKeyboardButton("⏭ Пропустить", callback_data="stg:trigger_resp_skip"),
+            ]]),
+        )
+        context.user_data["stg_msg_id"] = msg.message_id
+        await query.answer()
+
+    elif data == "stg:trigger_resp_skip":
+        word = context.user_data.pop("stg_trigger_word", None)
+        context.user_data.pop("stg_state", None)
+        context.user_data.pop("stg_msg_id", None)
+        if word:
+            add_custom_swear_trigger(word, None)
+        chance = int(get_setting("swear_response_chance") * 100)
+        await query.edit_message_text(
+            f"✅ Слово «{html.escape(word or '?')}» добавлено!\n\n"
+            f"Бот будет реагировать на него стандартными ответами "
+            f"с шансом <b>{chance}%</b>.",
+            parse_mode="HTML",
+            reply_markup=InlineKeyboardMarkup([[
+                InlineKeyboardButton("⬅️ К триггерам", callback_data="stg:swear_triggers"),
+            ]]),
+        )
+        await query.answer("✅ Добавлено!")
 
     # ── Отчёты и рассылки ──
     elif data == "stg:reports":
@@ -533,9 +598,12 @@ async def _show_swear_settings(query) -> None:
     # Разбиваем на ряды по 3
     rows = [chance_buttons[i:i+3] for i in range(0, len(chance_buttons), 3)]
 
+    trigger_count = len(get_custom_swear_triggers())
+    trigger_badge = f" ({trigger_count})" if trigger_count else ""
     kb = InlineKeyboardMarkup([
         [InlineKeyboardButton(toggle_text, callback_data="stg:swear_toggle")],
         *rows,
+        [InlineKeyboardButton(f"🎯 Слова-триггеры{trigger_badge}", callback_data="stg:swear_triggers")],
         [_back_to_menu_btn()],
     ])
 
@@ -547,6 +615,61 @@ async def _show_swear_settings(query) -> None:
         f"Здесь можно включить/выключить это и настроить частоту.</i>",
         parse_mode="HTML",
         reply_markup=kb,
+    )
+    await query.answer()
+
+
+async def _show_swear_triggers_menu(query) -> None:
+    """Меню управления словами-триггерами."""
+    triggers = get_custom_swear_triggers()
+    count = len(triggers)
+    kb = InlineKeyboardMarkup([
+        [InlineKeyboardButton("➕ Добавить слово", callback_data="stg:trigger_add")],
+        [InlineKeyboardButton(
+            f"📋 Добавленные слова ({count})" if count else "📋 Слов пока нет",
+            callback_data="stg:trigger_list",
+        )],
+        [InlineKeyboardButton("⬅️ Назад", callback_data="stg:swear")],
+    ])
+    await query.edit_message_text(
+        f"🎯 <b>Слова-триггеры</b>\n\n"
+        f"Добавлено слов: <b>{count}</b>\n\n"
+        f"<i>Бот будет реагировать на эти слова так же, как на маты — "
+        f"с настроенным шансом ответа. Можно задать свой ответ на каждое слово.</i>",
+        parse_mode="HTML",
+        reply_markup=kb,
+    )
+    await query.answer()
+
+
+async def _show_swear_triggers_list(query) -> None:
+    """Список триггерных слов с кнопками удаления."""
+    triggers = get_custom_swear_triggers()
+    if not triggers:
+        await query.edit_message_text(
+            "🎯 <b>Слова-триггеры</b>\n\nСвоих слов пока нет.",
+            parse_mode="HTML",
+            reply_markup=InlineKeyboardMarkup([[
+                InlineKeyboardButton("⬅️ Назад", callback_data="stg:swear_triggers"),
+            ]]),
+        )
+        await query.answer()
+        return
+
+    rows = []
+    for i, t in enumerate(triggers):
+        resp_hint = " + ответ" if t.get("response") else ""
+        rows.append([InlineKeyboardButton(
+            f"🗑 «{t['word']}»{resp_hint}",
+            callback_data=f"stg:trigger_del:{i}",
+        )])
+    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="stg:swear_triggers")])
+
+    await query.edit_message_text(
+        f"🎯 <b>Слова-триггеры</b> ({len(triggers)} шт.)\n\n"
+        f"Нажми на слово чтобы удалить его:",
+        parse_mode="HTML",
+        reply_markup=InlineKeyboardMarkup(rows),
     )
     await query.answer()
 
@@ -934,6 +1057,88 @@ async def handle_settings_input(update: Update, context) -> bool:
                     pass
 
         context.job_queue.run_once(_cleanup_swear, 4)
+        return True
+
+    # ── Ввод слова-триггера ──
+    if state == STATE_AWAIT_TRIGGER_WORD:
+        context.user_data.pop("stg_state", None)
+
+        if not text:
+            await update.message.reply_text("❌ Пустое слово. Попробуй снова через /settings.")
+            return True
+        if len(text) > 100:
+            await update.message.reply_text("❌ Слишком длинное слово (макс. 100 символов).")
+            return True
+
+        context.user_data["stg_trigger_word"] = text.lower().strip()
+        user_mid   = update.message.message_id
+        prompt_mid = context.user_data.pop("stg_msg_id", None)
+        chat_id    = update.message.chat_id
+
+        # Удаляем промпт и ввод пользователя
+        for mid in filter(None, [user_mid, prompt_mid]):
+            try:
+                await context.bot.delete_message(chat_id, mid)
+            except Exception:
+                pass
+
+        # Спрашиваем про кастомный ответ через новое сообщение
+        msg = await context.bot.send_message(
+            chat_id=chat_id,
+            text=f"✅ Слово «<b>{html.escape(text.lower().strip())}</b>» принято!\n\n"
+                 f"Хочешь добавить свой ответ бота на это слово?",
+            parse_mode="HTML",
+            reply_markup=InlineKeyboardMarkup([[
+                InlineKeyboardButton("✅ Да, добавить ответ", callback_data="stg:trigger_resp_yes"),
+                InlineKeyboardButton("⏭ Нет, пропустить",    callback_data="stg:trigger_resp_skip"),
+            ]]),
+        )
+        context.user_data["stg_msg_id"] = msg.message_id
+        return True
+
+    # ── Ввод ответа на триггер ──
+    if state == STATE_AWAIT_TRIGGER_RESP:
+        context.user_data.pop("stg_state", None)
+        word = context.user_data.pop("stg_trigger_word", None)
+
+        if not text:
+            await update.message.reply_text("❌ Пустой ответ. Слово сохранено без ответа.")
+            if word:
+                add_custom_swear_trigger(word, None)
+            return True
+        if len(text) > 300:
+            await update.message.reply_text("❌ Слишком длинный ответ (макс. 300 символов).")
+            return True
+
+        if word:
+            add_custom_swear_trigger(word, text)
+
+        try:
+            preview = text.format(name="Вася") if "{name}" in text else text
+        except (KeyError, IndexError):
+            preview = text
+
+        user_mid   = update.message.message_id
+        prompt_mid = context.user_data.pop("stg_msg_id", None)
+        chat_id    = update.message.chat_id
+        chance     = int(get_setting("swear_response_chance") * 100)
+
+        bot_msg = await update.message.reply_text(
+            f"✅ Готово! Слово «<b>{html.escape(word or '?')}</b>» добавлено с ответом.\n\n"
+            f"Пример ответа: <i>{html.escape(preview)}</i>\n\n"
+            f"Бот будет реагировать с шансом <b>{chance}%</b>.",
+            parse_mode="HTML",
+        )
+        bot_mid = bot_msg.message_id
+
+        async def _cleanup_trigger(ctx):
+            for mid in filter(None, [user_mid, prompt_mid, bot_mid]):
+                try:
+                    await ctx.bot.delete_message(chat_id, mid)
+                except Exception:
+                    pass
+
+        context.job_queue.run_once(_cleanup_trigger, 5)
         return True
 
     return False

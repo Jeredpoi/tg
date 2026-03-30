@@ -49,7 +49,7 @@ from commands.backup import backup_command
 from commands.setavatar import setavatar_command
 from commands.restart import restart_command, send_restart_done
 from chat_config import (get_main_chat_id, add_setup_chat, is_setup_chat, get_setting,
-                          is_command_enabled, get_custom_swear_responses)
+                          is_command_enabled, get_custom_swear_responses, get_custom_swear_triggers)
 
 
 logging.basicConfig(
@@ -463,8 +463,12 @@ async def _send_swear_response(context) -> None:
     _swear_last_response[chat_id] = time.time()
 
     try:
-        all_responses = SWEAR_RESPONSES + get_custom_swear_responses()
-        template = random.choice(all_responses)
+        custom_response = d.get("custom_response")
+        if custom_response:
+            template = custom_response
+        else:
+            all_responses = SWEAR_RESPONSES + get_custom_swear_responses()
+            template = random.choice(all_responses)
         try:
             text = template.format(name=d["name"])
         except (KeyError, IndexError):
@@ -534,6 +538,33 @@ async def _track_message(update, context):
 
     if swear_count and update.effective_chat.type in ("group", "supergroup"):
         track_daily_swear(chat_id, user.id, user.first_name or user.username or "Аноним", swear_count)
+
+    # Проверяем кастомные слова-триггеры
+    custom_triggers = get_custom_swear_triggers() if get_setting("swear_detect") else []
+    matched_trigger = None
+    if custom_triggers and text:
+        text_lower = text.lower()
+        for trigger in custom_triggers:
+            if trigger["word"] in text_lower:
+                matched_trigger = trigger
+                break
+
+    if matched_trigger and update.effective_chat.type in ("group", "supergroup"):
+        name = user.first_name or user.username or "дружок"
+        for job in context.job_queue.get_jobs_by_name(f"swear_{chat_id}"):
+            job.schedule_removal()
+        if random.random() < get_setting("swear_response_chance"):
+            context.job_queue.run_once(
+                _send_swear_response,
+                SWEAR_RESPONSE_DELAY,
+                data={
+                    "chat_id": chat_id,
+                    "name": name,
+                    "message_id": update.message.message_id,
+                    "custom_response": matched_trigger.get("response"),
+                },
+                name=f"swear_{chat_id}",
+            )
 
     if swear_count and update.effective_chat.type != "private" and get_setting("swear_detect"):
         name = user.first_name or user.username or "дружок"
@@ -624,6 +655,22 @@ async def gallery_command(update, context):
             reply_markup=kb,
         )
     track_bot_message(chat.id, msg.message_id, "🖼 Галерея рейтингов")
+
+    # Автоудаление через autodel_gallery секунд (команда + ответ бота)
+    delay = get_setting("autodel_gallery")
+    if delay:
+        cmd_mid = update.message.message_id
+        bot_mid = msg.message_id
+        gal_chat_id = chat.id
+
+        async def _del_gallery_msg(ctx):
+            for mid in [cmd_mid, bot_mid]:
+                try:
+                    await ctx.bot.delete_message(gal_chat_id, mid)
+                except Exception:
+                    pass
+
+        context.job_queue.run_once(_del_gallery_msg, delay)
 
 
 async def _private_command_guard(update, context):
