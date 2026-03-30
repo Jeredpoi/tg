@@ -53,6 +53,8 @@ async def resend_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     async def _expire_resend(ctx):
         _RESEND_WAITING.pop(user_id, None)
         _RESEND_PROMPT_MSG.pop(user_id, None)
+    for _old in context.job_queue.get_jobs_by_name(f"resend_expire_{user_id}"):
+        _old.schedule_removal()
     context.job_queue.run_once(_expire_resend, 600, name=f"resend_expire_{user_id}")
 
     msg = await context.bot.send_message(
