@@ -39,8 +39,9 @@ async def restart_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
                 "cmd_mid":  update.message.message_id,
                 "note_mid": note.message_id,
             }, f)
-    except Exception:
-        pass
+    except Exception as e:
+        await note.edit_text(f"❌ Не удалось сохранить состояние: {e}\nПерезапуск отменён.")
+        return
 
     await asyncio.sleep(0.5)
     os.execl(sys.executable, sys.executable, *sys.argv)
@@ -82,4 +83,5 @@ async def send_restart_done(app) -> None:
                 except Exception:
                     pass
 
-    app.job_queue.run_once(_cleanup, 20)
+    if app.job_queue:
+        app.job_queue.run_once(_cleanup, 20)
