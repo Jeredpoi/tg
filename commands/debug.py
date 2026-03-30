@@ -8,7 +8,7 @@ import sqlite3
 import aiohttp
 from telegram import Update, BotCommandScopeAllGroupChats
 from telegram.ext import ContextTypes
-from config import YANDEX_WEATHER_KEY, DATABASE_PATH, CHAT_ID, WEBAPP_URL, OWNER_ID
+from config import DATABASE_PATH, CHAT_ID, WEBAPP_URL, OWNER_ID
 from database import get_connection
 
 
@@ -21,17 +21,6 @@ async def _check_db() -> tuple[bool, str]:
     except Exception as e:
         return False, f"❌ База данных ({e})"
 
-
-async def _check_weather() -> tuple[bool, str]:
-    try:
-        url = "https://api.weather.yandex.ru/v2/forecast?lat=55.75&lon=37.61&limit=1"
-        async with aiohttp.ClientSession() as s:
-            async with s.get(url, headers={"X-Yandex-API-Key": YANDEX_WEATHER_KEY}, timeout=aiohttp.ClientTimeout(total=5)) as r:
-                if r.status == 200:
-                    return True, "✅ Яндекс.Погода"
-                return False, f"❌ Яндекс.Погода (HTTP {r.status})"
-    except Exception as e:
-        return False, f"❌ Яндекс.Погода ({type(e).__name__})"
 
 
 async def _check_steam() -> tuple[bool, str]:
@@ -91,11 +80,11 @@ async def debug_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     if not message or not chat or not user:
         return
 
-    (db_ok, db_txt), (w_ok, w_txt), (s_ok, s_txt), (wa_ok, wa_txt) = await asyncio.gather(
-        _check_db(), _check_weather(), _check_steam(), _check_webapp()
+    (db_ok, db_txt), (s_ok, s_txt), (wa_ok, wa_txt) = await asyncio.gather(
+        _check_db(), _check_steam(), _check_webapp()
     )
 
-    all_ok = all([db_ok, w_ok, s_ok, wa_ok])
+    all_ok = all([db_ok, s_ok, wa_ok])
     status = "🟢 Все системы работают" if all_ok else "🟡 Есть проблемы"
 
     # Права бота в чате
@@ -165,7 +154,6 @@ async def debug_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
         f"⚙️ <b>Компоненты:</b> {status}\n"
         f"  {db_txt}\n"
-        f"  {w_txt}\n"
         f"  {s_txt}\n"
         f"  {wa_txt}\n\n"
 

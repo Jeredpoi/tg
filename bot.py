@@ -36,7 +36,6 @@ from commands.roast import roast_command
 from commands.top import top_command, top_callback
 from commands.rate import rate_command, rate_callback, handle_rate_photo, handle_rate_video, handle_rate_comment
 from commands.help import help_command, ownerhelp_command, ownerhelp_pin_callback
-from commands.weather import weather_command, weather_callback
 from commands.stats import stats_command
 from commands.anon import anon_command, handle_anon_cancel, handle_anon_message
 from commands.clearmedia import clearmedia_command, clearmedia_callback
@@ -285,7 +284,6 @@ _CMD_COOLDOWNS: dict[str, int] = {
     "/kdecree": 0,
     "/kreward": 0,
     "/ktax":    0,
-    "/weather": 30,
     "/anon":    30,
     # /rate — фото в личке → чат, лимит 5 минут
     "/rate":    300,
@@ -881,7 +879,6 @@ def main():
     app.add_handler(CommandHandler("dice",    dice_command,    filters=filters.ChatType.GROUPS))
     app.add_handler(CommandHandler("roast",   roast_command,   filters=filters.ChatType.GROUPS))
     app.add_handler(CommandHandler("top",     top_command,     filters=filters.ChatType.GROUPS))
-    app.add_handler(CommandHandler("weather", weather_command, filters=filters.ChatType.GROUPS))
 
     # MGE
     app.add_handler(CommandHandler("mge",   mge_command,   filters=filters.ChatType.GROUPS))
@@ -958,7 +955,6 @@ def main():
     app.add_handler(CallbackQueryHandler(settings_callback,      pattern=r"^stg:"))
     app.add_handler(CallbackQueryHandler(top_callback,           pattern=r"^top_"))
     app.add_handler(CallbackQueryHandler(rate_callback,          pattern=r"^(anon_|rate_|comment_ask_|comment_skip_)"))
-    app.add_handler(CallbackQueryHandler(weather_callback,       pattern=r"^w(forecast|refresh):"))
     app.add_handler(CallbackQueryHandler(ownerhelp_pin_callback, pattern=r"^ownerhelp_pin$"))
     app.add_handler(CallbackQueryHandler(clearmedia_callback,    pattern=r"^clearmedia_"))
 
