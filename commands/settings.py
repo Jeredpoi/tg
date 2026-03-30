@@ -254,7 +254,11 @@ async def settings_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         await _show_swear_settings(query)
 
     elif data.startswith("stg:swear_chance:"):
-        value = float(data[17:])
+        try:
+            value = float(data[17:])
+        except ValueError:
+            await query.answer("Ошибка данных.", show_alert=True)
+            return
         set_setting("swear_response_chance", value)
         await query.answer(f"Шанс: {int(value * 100)}%")
         await _show_swear_settings(query)
@@ -357,6 +361,7 @@ async def settings_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     elif data == "stg:mge_cancel":
         context.user_data.pop("stg_state", None)
         context.user_data.pop("stg_mge_char", None)
+        context.user_data.pop("stg_msg_id", None)
         await _show_mge_menu(query)
 
     elif data == "stg:mge_list":
@@ -388,6 +393,7 @@ async def settings_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) 
 
     elif data == "stg:swear_resp_cancel":
         context.user_data.pop("stg_state", None)
+        context.user_data.pop("stg_msg_id", None)
         await _show_swear_resp_menu(query)
 
     elif data == "stg:swear_resp_list":

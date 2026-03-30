@@ -745,7 +745,7 @@ async def _handle_edited_message(update, context):
     if _count_swears(text) == 0:
         chat_id = msg.chat_id
         for job in context.job_queue.get_jobs_by_name(f"swear_{chat_id}"):
-            if job.data.get("message_id") == msg.message_id:
+            if job.data and job.data.get("message_id") == msg.message_id:
                 job.schedule_removal()
 
 

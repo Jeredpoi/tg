@@ -8,6 +8,7 @@ import hashlib
 import hmac
 import logging
 import os
+import re
 import sys
 import time
 
@@ -89,10 +90,20 @@ async def api_gallery(request: web.Request) -> web.Response:
         return web.json_response({"photos": [], "error": str(e)}, status=500)
 
 
+_KEY_RE = re.compile(r'^[a-zA-Z0-9_-]+$')
+
+
+def _validate_key(key: str) -> None:
+    """Raises HTTPBadRequest if key contains path-traversal or unsafe chars."""
+    if not _KEY_RE.match(key):
+        raise web.HTTPBadRequest()
+
+
 # ── /api/comments/{key} ──────────────────────────────────────────────────────
 
 async def api_get_comments(request: web.Request) -> web.Response:
     key = request.match_info["key"]
+    _validate_key(key)
     row = get_photo_by_key(key)
     if not row:
         raise web.HTTPNotFound()
@@ -112,6 +123,7 @@ async def api_get_comments(request: web.Request) -> web.Response:
 
 async def api_delete_photo(request: web.Request) -> web.Response:
     key = request.match_info["key"]
+    _validate_key(key)
     # Требуем Telegram auth в теле запроса
     try:
         body = await request.json()
@@ -150,6 +162,7 @@ async def api_config(request: web.Request) -> web.Response:
 
 async def api_post_comment(request: web.Request) -> web.Response:
     key = request.match_info["key"]
+    _validate_key(key)
     row = get_photo_by_key(key)
     if not row:
         raise web.HTTPNotFound()
@@ -183,6 +196,7 @@ async def api_post_comment(request: web.Request) -> web.Response:
 
 async def api_photo(request: web.Request) -> web.Response:
     key = request.match_info["key"]
+    _validate_key(key)
     row = get_photo_by_key(key)
     if not row or not row["photo_id"]:
         raise web.HTTPNotFound()

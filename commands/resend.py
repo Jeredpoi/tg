@@ -51,8 +51,8 @@ async def resend_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
     # Автоочистка через 10 минут если владелец так и не ввёл текст
     async def _expire_resend(ctx):
-        if _RESEND_WAITING.pop(user_id, None) is not None:
-            _RESEND_PROMPT_MSG.pop(user_id, None)
+        _RESEND_WAITING.pop(user_id, None)
+        _RESEND_PROMPT_MSG.pop(user_id, None)
     context.job_queue.run_once(_expire_resend, 600, name=f"resend_expire_{user_id}")
 
     msg = await context.bot.send_message(

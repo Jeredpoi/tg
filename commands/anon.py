@@ -69,6 +69,8 @@ async def anon_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     except Forbidden:
         # Бот не может написать пользователю — он не начал диалог
         del _pending[user.id]
+        for job in context.job_queue.get_jobs_by_name(f"anon_expire_{user.id}"):
+            job.schedule_removal()
         try:
             display = f"@{user.username}" if user.username else html.escape(user.first_name or "")
             msg = await context.bot.send_message(

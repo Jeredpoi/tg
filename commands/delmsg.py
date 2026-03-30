@@ -194,7 +194,7 @@ async def delmsg_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         try:
             page = int(data.split("_")[-1])
         except ValueError:
-            await query.answer()
+            await query.answer("❌ Неверный номер страницы.", show_alert=True)
             return
 
         rows = get_all_bot_messages_recent(offset=page * PAGE_SIZE, limit=PAGE_SIZE)
