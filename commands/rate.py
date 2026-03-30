@@ -70,7 +70,11 @@ async def rate_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 
     user_id = update.effective_user.id
     pm_chat_id = update.effective_chat.id
+    # Отменяем предыдущий таймаут /rate, если пользователь вызвал команду повторно
+    for job in context.job_queue.get_jobs_by_name(f"rate_timeout_{user_id}"):
+        job.schedule_removal()
     _RATE_PM_MSGS[user_id] = []
+    _COMMENT_WAITING.pop(user_id, None)  # чистим незавершённый ввод подписи
     _RATE_WAITING.add(user_id)  # ждём фото/видео
 
     # Таймаут 5 минут — если не отправит медиа, уведомляем и чистим
