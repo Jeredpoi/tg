@@ -47,7 +47,7 @@ from commands.exportstats import exportstats_command
 from commands.maintenance import is_maintenance, maintenance_command
 from commands.backup import backup_command
 from commands.setavatar import setavatar_command
-from commands.restart import restart_command
+from commands.restart import restart_command, send_restart_done
 from chat_config import (get_main_chat_id, add_setup_chat, is_setup_chat, get_setting,
                           is_command_enabled, get_custom_swear_responses)
 
@@ -193,9 +193,34 @@ def _has_swear_root(word: str) -> bool:
     return False
 
 
+# Таблица замены латинских букв, визуально похожих на кириллицу
+_LAT_TO_CYR = str.maketrans({
+    'a': 'а', 'c': 'с', 'e': 'е', 'o': 'о', 'p': 'р',
+    'x': 'х', 'y': 'у', 'k': 'к', 'm': 'м', 'n': 'н',
+    'b': 'б', 'h': 'н', 'u': 'и', 'i': 'и',
+    'A': 'А', 'C': 'С', 'E': 'Е', 'O': 'О', 'P': 'Р',
+    'X': 'Х', 'Y': 'У', 'K': 'К', 'M': 'М', 'H': 'Н',
+    'B': 'Б',
+})
+
+
+def _normalize_for_swear(text: str) -> str:
+    """Нормализует текст для детектора матов:
+    - Latin→Cyrillic гомоглифы (xуй → хуй)
+    - удаляет символы-цензуры между буквами (б*ять → бять, х*й → хй)
+    - ё→е
+    """
+    # Latin→Cyrillic
+    text = text.translate(_LAT_TO_CYR)
+    # Убираем *, ., -, _, | между буквами (цензура типа "б*ять")
+    text = re.sub(r'(?<=[а-яёa-z])[\*\.\-\_\|]+(?=[а-яёa-z])', '', text, flags=re.IGNORECASE)
+    # ё → е
+    return text.lower().replace('ё', 'е')
+
+
 def _count_swears(text: str) -> int:
     """Считает количество матерных слов с учётом корней."""
-    normalized = text.lower().replace("ё", "е")
+    normalized = _normalize_for_swear(text)
     words = re.findall(r'\w+', normalized, re.UNICODE)
     count = 0
     for word in words:
@@ -324,6 +349,9 @@ async def _rate_limit_guard(update, context):
         if chat and chat.type in ("group", "supergroup"):
             try:
                 await msg.delete()
+            except Exception:
+                pass
+            try:
                 note = await context.bot.send_message(
                     chat_id=chat.id,
                     text=f"⏳ <b>{remaining} сек.</b> до следующего использования",
@@ -895,6 +923,7 @@ def main():
     async def on_startup(app):
         await app.bot.set_my_description("Скаут на связи 🟢")
         await app.bot.set_my_short_description("Скаут на связи 🟢")
+        await send_restart_done(app)
         # set_my_commands намеренно не вызывается — список команд настраивается
         # вручную через BotFather и не должен перезаписываться при каждом запуске
 

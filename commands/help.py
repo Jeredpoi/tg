@@ -93,6 +93,11 @@ async def ownerhelp_command(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     if update.effective_user.id != OWNER_ID:
         return
     user_msg = update.message
+    # Удаляем команду сразу
+    try:
+        await user_msg.delete()
+    except Exception:
+        pass
     kb = InlineKeyboardMarkup([[
         InlineKeyboardButton("📌 Закрепить", callback_data="ownerhelp_pin"),
     ]])
