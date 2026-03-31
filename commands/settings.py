@@ -11,7 +11,7 @@ from chat_config import (
     get_monitor_chat_id, set_monitor_chat_id, unset_monitor_chat, is_monitor_chat,
     get_setup_chats, get_settings, get_setting, set_setting,
     MANAGEABLE_COMMANDS, get_disabled_commands, disable_command, enable_command,
-    is_command_enabled,
+    is_command_enabled, sync_bot_commands,
     MGE_CHARACTERS,
     get_custom_mge_phrases, add_custom_mge_phrase, delete_custom_mge_phrase,
     get_custom_swear_responses, add_custom_swear_response, delete_custom_swear_response,
@@ -435,6 +435,7 @@ async def settings_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         else:
             enable_command(cmd)
             await query.answer(f"🟢 {cmd} включена")
+        await sync_bot_commands(context.bot)
         await _show_commands_settings(query)
 
     # ── Кастомные MGE-фразы ──

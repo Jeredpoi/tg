@@ -49,7 +49,8 @@ from commands.backup import backup_command
 from commands.restart import restart_command, send_restart_done
 from commands.dashboard import dashboard_callback, dashboard_update_job, DASHBOARD_UPDATE_INTERVAL
 from chat_config import (get_main_chat_id, add_setup_chat, is_setup_chat, get_setting,
-                          is_command_enabled, get_custom_swear_responses, get_custom_swear_triggers)
+                          is_command_enabled, get_custom_swear_responses, get_custom_swear_triggers,
+                          sync_bot_commands)
 
 
 logging.basicConfig(
@@ -982,8 +983,7 @@ def main():
         await app.bot.set_my_description("Скаут на связи 🟢")
         await app.bot.set_my_short_description("Скаут на связи 🟢")
         await send_restart_done(app)
-        # set_my_commands намеренно не вызывается — список команд настраивается
-        # вручную через BotFather и не должен перезаписываться при каждом запуске
+        await sync_bot_commands(app.bot)  # синхронизирует список команд с текущими настройками
 
         msk = datetime.timezone(datetime.timedelta(hours=3))
 

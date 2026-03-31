@@ -226,6 +226,22 @@ def is_command_enabled(cmd: str) -> bool:
     return cmd not in get_disabled_commands()
 
 
+async def sync_bot_commands(bot) -> None:
+    """Синхронизирует список команд бота с текущими настройками (включены/выключены)."""
+    from telegram import BotCommand, BotCommandScopeAllGroupChats, BotCommandScopeDefault
+    enabled = [
+        BotCommand(cmd.lstrip("/"), desc)
+        for cmd, desc in MANAGEABLE_COMMANDS.items()
+        if is_command_enabled(cmd)
+    ]
+    try:
+        await bot.set_my_commands(enabled, scope=BotCommandScopeAllGroupChats())
+        await bot.set_my_commands(enabled, scope=BotCommandScopeDefault())
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).warning("sync_bot_commands failed: %s", e)
+
+
 # ── Кастомные MGE-фразы ───────────────────────────────────────────────────────
 
 _CUSTOM_PHRASES_FILE = os.path.join(os.path.dirname(__file__), "custom_mge.json")

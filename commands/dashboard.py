@@ -16,7 +16,10 @@ from telegram.error import BadRequest
 
 from chat_config import get_monitor_chat_id, get_main_chat_id
 from commands.maintenance import is_maintenance, set_maintenance
-from database import get_all_users, get_gallery, get_daily_swear_report, get_and_delete_old_photos
+from database import (
+    get_all_users, get_gallery, get_daily_swear_report, get_and_delete_old_photos,
+    get_top_messages, get_top_swears, get_king_today,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -26,14 +29,15 @@ _BOT_START_TIME = time.time()
 
 DASHBOARD_UPDATE_INTERVAL = 300  # 5 минут
 
-# Все ключи панелей в порядке отправки; "control" — последняя, мета-панель
-_PANEL_KEYS = ("status", "stats", "server", "actions", "control")
+# Порядок: control первым (мета-панель), потом по убыванию важности
+_PANEL_KEYS = ("control", "status", "actions", "server", "stats", "activity")
 _PANEL_LABELS = {
-    "status":  "📌 Панель: Статус бота",
-    "stats":   "📌 Панель: Статистика",
-    "server":  "📌 Панель: Сервер",
-    "actions": "📌 Панель: Быстрые действия",
-    "control": "🎛 Управление дашбордом",
+    "control":  "🎛 Управление дашбордом",
+    "status":   "📌 Статус бота",
+    "actions":  "📌 Быстрые действия",
+    "server":   "📌 Сервер",
+    "stats":    "📌 Статистика",
+    "activity": "📌 Активность",
 }
 
 
@@ -244,6 +248,54 @@ def _text_actions() -> str:
     )
 
 
+async def _text_activity_async() -> str:
+    """Топ активных пользователей и король дня из основной группы."""
+    main_id = get_main_chat_id()
+    now = _now_msk()
+    if not main_id:
+        return (
+            f"⚠️ Основная группа не назначена\n"
+            f"━━━━━━━━━━━━━━━━━━━━\n"
+            f"<i>Обновлено: {now.strftime('%H:%M:%S')}</i>"
+        )
+
+    top_msg, top_sw, king = [], [], None
+    try:
+        top_msg = get_top_messages(chat_id=main_id, limit=5)
+    except Exception:
+        pass
+    try:
+        top_sw = get_top_swears(chat_id=main_id, limit=3)
+    except Exception:
+        pass
+    try:
+        king = get_king_today(main_id)
+    except Exception:
+        pass
+
+    def _fmt_top(rows, name_key="first_name", count_key="message_count") -> str:
+        lines = []
+        for i, r in enumerate(rows, 1):
+            name  = r[name_key] or r.get("username") or "?"
+            count = r[count_key]
+            lines.append(f"  {i}. {name} — {count}")
+        return "\n".join(lines) if lines else "  нет данных"
+
+    king_line = ""
+    if king:
+        king_name = king["first_name"] or king.get("username") or "?"
+        king_line = f"👑 Король дня: <b>{king_name}</b>\n"
+
+    return (
+        f"{king_line}"
+        f"━━━━━━━━━━━━━━━━━━━━\n"
+        f"💬 Топ по сообщениям:\n{_fmt_top(top_msg, count_key='message_count')}\n\n"
+        f"🤬 Топ по матам (всего):\n{_fmt_top(top_sw, count_key='swear_count')}\n"
+        f"━━━━━━━━━━━━━━━━━━━━\n"
+        f"<i>Обновлено: {now.strftime('%H:%M:%S')}</i>"
+    )
+
+
 def _text_control() -> str:
     """Мета-панель: статус каждой панели и управление дашбордом."""
     state = _load_state()
@@ -302,6 +354,12 @@ def _kb_actions() -> InlineKeyboardMarkup:
     ])
 
 
+def _kb_activity() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup([[
+        InlineKeyboardButton("🔄 Обновить", callback_data="dash:refresh_activity"),
+    ]])
+
+
 def _kb_control() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("➕ Восстановить недостающие", callback_data="dash:restore_missing")],
@@ -316,12 +374,15 @@ def _kb_control() -> InlineKeyboardMarkup:
 
 async def _get_all_panel_texts(bot) -> dict:
     """Возвращает dict key→(text, kb) для всех панелей."""
+    stats_text    = await _text_stats_async(bot)
+    activity_text = await _text_activity_async()
     return {
-        "status":  (_text_status(),                 _kb_status()),
-        "stats":   (await _text_stats_async(bot),   _kb_stats()),
-        "server":  (_text_server(),                 _kb_server()),
-        "actions": (_text_actions(),                _kb_actions()),
-        "control": (_text_control(),                _kb_control()),
+        "control":  (_text_control(),   _kb_control()),
+        "status":   (_text_status(),    _kb_status()),
+        "actions":  (_text_actions(),   _kb_actions()),
+        "server":   (_text_server(),    _kb_server()),
+        "stats":    (stats_text,        _kb_stats()),
+        "activity": (activity_text,     _kb_activity()),
     }
 
 
@@ -515,6 +576,11 @@ async def dashboard_callback(update, context) -> None:
     elif data == "dash:refresh_control":
         await query.answer("🔄 Обновляю...")
         await _update_panel(context.bot, monitor_id, "control", _text_control(), _kb_control())
+
+    elif data == "dash:refresh_activity":
+        await query.answer("🔄 Обновляю...")
+        text = await _text_activity_async()
+        await _update_panel(context.bot, monitor_id, "activity", text, _kb_activity())
 
     elif data == "dash:refresh_all":
         await query.answer("🔄 Обновляю все панели...")
