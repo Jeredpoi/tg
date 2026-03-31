@@ -20,6 +20,7 @@ from database import (
     get_all_users, get_gallery, get_daily_swear_report, get_and_delete_old_photos,
     get_top_messages, get_top_swears, get_king_today,
     get_chat_message_count, get_chat_user_count, get_today_swear_count,
+    get_top_streaks,
 )
 
 logger = logging.getLogger(__name__)
@@ -296,13 +297,17 @@ async def _text_activity_async() -> str:
             f"<i>Обновлено: {now.strftime('%H:%M:%S')}</i>"
         )
 
-    top_msg, top_sw, king = [], [], None
+    top_msg, top_sw, top_streaks, king = [], [], [], None
     try:
         top_msg = get_top_messages(chat_id=main_id, limit=5)
     except Exception:
         pass
     try:
         top_sw = get_top_swears(chat_id=main_id, limit=3)
+    except Exception:
+        pass
+    try:
+        top_streaks = get_top_streaks(chat_id=main_id, limit=3)
     except Exception:
         pass
     try:
@@ -325,11 +330,22 @@ async def _text_activity_async() -> str:
         king_name = k.get("first_name") or k.get("username") or "?"
         king_line = f"👑 Король дня: <b>{king_name}</b>\n"
 
+    # Топ стриков
+    streak_lines = "  нет данных"
+    if top_streaks:
+        sl = []
+        for i, r in enumerate(top_streaks, 1):
+            rd = dict(r)
+            n = rd.get("first_name") or rd.get("username") or "?"
+            sl.append(f"  {i}. {n} — {rd.get('streak', 0)} дн. 🔥")
+        streak_lines = "\n".join(sl)
+
     return (
         f"{king_line}"
         f"━━━━━━━━━━━━━━━━━━━━\n"
         f"💬 Топ по сообщениям:\n{_fmt_top(top_msg, count_key='msg_count')}\n\n"
-        f"🤬 Топ по матам (всего):\n{_fmt_top(top_sw, count_key='swear_count')}\n"
+        f"🤬 Топ по матам (всего):\n{_fmt_top(top_sw, count_key='swear_count')}\n\n"
+        f"🔥 Топ по стрику:\n{streak_lines}\n"
         f"━━━━━━━━━━━━━━━━━━━━\n"
         f"<i>Обновлено: {now.strftime('%H:%M:%S')}</i>"
     )

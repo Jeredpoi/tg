@@ -28,7 +28,9 @@ from config import (BOT_TOKEN, PROXY_URL, WEBAPP_URL, OWNER_ID,
                     SWEAR_RESPONSE_DELAY, SWEAR_RESPONSE_CHANCE)
 
 from database import (init_db, track_message, track_daily_swear, get_daily_swear_report,
-                       get_best_photo_since, get_and_delete_old_photos, track_bot_message)
+                       get_best_photo_since, get_and_delete_old_photos, track_bot_message,
+                       get_user_stats, update_streak, get_streak)
+from commands.achievements import check_message_achievements, check_streak_achievements
 
 from commands.debug import debug_command
 from commands.dice import dice_command
@@ -240,6 +242,40 @@ def _count_swears(text: str) -> int:
               and _has_swear_root(word)):
             count += 1
     return count
+
+# Ответы на пересланные сообщения из других чатов
+FORWARD_RESPONSES = [
+    "О, {name} шпионит за другими чатами 👀",
+    "{name}, что это ты притащил?",
+    "Интересно, {name}, а они знают, что ты это сюда скинул?",
+    "{name} разведчик года 🕵️",
+    "Тащишь контрабанду из чужих чатов, {name}?",
+    "{name}, предатель что ли?",
+    "Утечка информации обнаружена. Виновный — {name}.",
+    "{name} ворует чужие мысли",
+]
+
+# Ответы на упоминание имени бота
+NAME_RESPONSES = [
+    "Чё надо?",
+    "Звал?",
+    "Слушаю 👀",
+    "Я здесь, но не факт что помогу",
+    "Да-да, слышу тебя",
+    "Ну что ещё?",
+    "Отвлекаешь от важных дел",
+    "Хм?",
+    "Занят. Отстань.",
+    "Это ты мне?",
+]
+
+# Cooldown для реакций на форварды и упоминания (по chat_id)
+_forward_last: dict[int, float] = {}
+_mention_last: dict[int, float] = {}
+_FORWARD_COOLDOWN = 30   # сек между ответами на форварды в одном чате
+_MENTION_COOLDOWN = 20   # сек между ответами на упоминания
+_FORWARD_CHANCE   = 0.4  # шанс реагировать на пересланное
+_MENTION_CHANCE   = 0.7  # шанс ответить на упоминание имени
 
 SWEAR_RESPONSES = [
     "Ай-яй-яй, {name}! Что за слова такие!",
@@ -539,14 +575,74 @@ async def _track_message(update, context):
         )
 
     chat_id = update.effective_chat.id
+    chat_type = update.effective_chat.type
+    is_group = chat_type in ("group", "supergroup")
 
     text = update.message.text or update.message.caption or ""
     swear_count = _count_swears(text)
 
     track_message(user.id, user.username, user.first_name, swear_count, chat_id)
 
-    if swear_count and update.effective_chat.type in ("group", "supergroup"):
+    if swear_count and is_group:
         track_daily_swear(chat_id, user.id, user.first_name or user.username or "Аноним", swear_count)
+
+    # ── Стрики и ачивки ──────────────────────────────────────────────────────
+    if is_group:
+        try:
+            streak, is_new_day = update_streak(user.id, chat_id)
+            user_name = user.first_name or user.username or "Участник"
+            if is_new_day:
+                # Проверяем стрик-ачивки только в новый день
+                context.job_queue.run_once(
+                    lambda ctx, _uid=user.id, _cid=chat_id, _n=user_name, _s=streak: (
+                        check_streak_achievements(ctx.bot, _cid, _uid, _n, _s)
+                    ),
+                    1,
+                )
+            # Получаем актуальные счётчики и проверяем ачивки
+            stats = get_user_stats(user.id, chat_id)
+            context.job_queue.run_once(
+                lambda ctx, _uid=user.id, _cid=chat_id, _n=user_name, \
+                       _mc=stats["msg_count"], _sc=stats["swear_count"]: (
+                    check_message_achievements(ctx.bot, _cid, _uid, _n, _mc, _sc)
+                ),
+                1,
+            )
+        except Exception as e:
+            logger.warning("streak/achievement check failed: %s", e)
+
+    # ── Реакция на пересланные сообщения ─────────────────────────────────────
+    if is_group and update.message.forward_origin is not None:
+        now = time.time()
+        if now - _forward_last.get(chat_id, 0) > _FORWARD_COOLDOWN:
+            if random.random() < _FORWARD_CHANCE:
+                name = user.first_name or user.username or "кто-то"
+                resp = random.choice(FORWARD_RESPONSES).format(name=name)
+                try:
+                    await update.message.reply_text(resp)
+                    _forward_last[chat_id] = now
+                except Exception:
+                    pass
+
+    # ── Реакция на упоминание имени бота ─────────────────────────────────────
+    if is_group and text:
+        bot_name = (context.bot.first_name or "").lower()
+        bot_username = (context.bot.username or "").lower()
+        text_lower = text.lower()
+        # Проверяем что имя/юзернейм упомянуты но нет команды
+        name_mentioned = (
+            (bot_name and bot_name in text_lower) or
+            (bot_username and f"@{bot_username}" in text_lower)
+        )
+        if name_mentioned and not text.startswith("/"):
+            now = time.time()
+            if now - _mention_last.get(chat_id, 0) > _MENTION_COOLDOWN:
+                if random.random() < _MENTION_CHANCE:
+                    try:
+                        await update.message.reply_text(random.choice(NAME_RESPONSES))
+                        _mention_last[chat_id] = now
+                    except Exception:
+                        pass
 
     # Проверяем кастомные слова-триггеры
     custom_triggers = get_custom_swear_triggers() if get_setting("swear_detect") else []

@@ -5,7 +5,8 @@
 import html
 from telegram import Update
 from telegram.ext import ContextTypes
-from database import get_user_stats
+from database import get_user_stats, get_streak
+from commands.achievements import format_achievements
 
 
 async def stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -33,6 +34,14 @@ async def stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     if s["king_count"]:
         lines.append(f"👑 Король дня: <b>{s['king_count']}</b> раз(а)")
 
+    # Стрик активности
+    streak, max_streak = get_streak(target.id, chat_id)
+    if streak or max_streak:
+        streak_line = f"🔥 Стрик: <b>{streak}</b> дн."
+        if max_streak > streak:
+            streak_line += f"  (рекорд: {max_streak} дн.)"
+        lines.append(streak_line)
+
     # Рейтинг
     lines.append("")
     if s["photo_count"]:
@@ -41,5 +50,11 @@ async def stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         lines.append(f"🗳 Голосов получено: <b>{s['total_votes']}</b>")
     else:
         lines.append("📸 В рейтинге пока не участвовал")
+
+    # Ачивки
+    ach_line = format_achievements(target.id, chat_id)
+    if ach_line:
+        lines.append("")
+        lines.append(ach_line)
 
     await update.message.reply_text("\n".join(lines), parse_mode="HTML")

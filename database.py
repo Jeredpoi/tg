@@ -143,6 +143,29 @@ def init_db() -> None:
                 sent_at    REAL NOT NULL DEFAULT (unixepoch())
             )
         """)
+        # ── achievements ─────────────────────────────────────────────────────────
+        c.execute("""
+            CREATE TABLE IF NOT EXISTS achievements (
+                user_id        INTEGER,
+                chat_id        INTEGER,
+                achievement_id TEXT,
+                earned_at      TEXT,
+                PRIMARY KEY (user_id, chat_id, achievement_id)
+            )
+        """)
+
+        # ── activity_streaks ──────────────────────────────────────────────────────
+        c.execute("""
+            CREATE TABLE IF NOT EXISTS activity_streaks (
+                user_id    INTEGER,
+                chat_id    INTEGER,
+                last_date  TEXT,
+                streak     INTEGER DEFAULT 1,
+                max_streak INTEGER DEFAULT 1,
+                PRIMARY KEY (user_id, chat_id)
+            )
+        """)
+
         c.execute("CREATE INDEX IF NOT EXISTS idx_bot_messages_chat    ON bot_messages(chat_id, sent_at DESC)")
         c.execute("CREATE INDEX IF NOT EXISTS idx_photo_ratings_key    ON photo_ratings(key)")
         c.execute("CREATE INDEX IF NOT EXISTS idx_photo_ratings_chat   ON photo_ratings(chat_id)")
@@ -154,6 +177,113 @@ def init_db() -> None:
         c.execute("CREATE INDEX IF NOT EXISTS idx_photo_comments_photo ON photo_comments(photo_id)")
 
         conn.commit()
+    finally:
+        conn.close()
+
+
+# ── achievements ───────────────────────────────────────────────────────────
+
+def grant_achievement(user_id: int, chat_id: int, achievement_id: str) -> bool:
+    """Выдаёт ачивку. Возвращает True если выдана впервые (не дубль)."""
+    conn = get_connection()
+    try:
+        conn.execute("""
+            INSERT OR IGNORE INTO achievements (user_id, chat_id, achievement_id, earned_at)
+            VALUES (?, ?, ?, ?)
+        """, (user_id, chat_id, achievement_id, datetime.datetime.now(_MSK).isoformat()))
+        changed = conn.total_changes
+        conn.commit()
+        return changed > 0
+    finally:
+        conn.close()
+
+
+def get_user_achievements(user_id: int, chat_id: int) -> list:
+    """Возвращает список ачивок пользователя [(achievement_id, earned_at), ...]."""
+    conn = get_connection()
+    try:
+        return conn.execute(
+            "SELECT achievement_id, earned_at FROM achievements "
+            "WHERE user_id=? AND chat_id=? ORDER BY earned_at",
+            (user_id, chat_id)
+        ).fetchall()
+    finally:
+        conn.close()
+
+
+# ── activity_streaks ───────────────────────────────────────────────────────
+
+def update_streak(user_id: int, chat_id: int) -> tuple[int, bool]:
+    """
+    Обновляет стрик активности. Возвращает (текущий_стрик, is_new_day).
+    is_new_day=True только если это первое сообщение за сегодня.
+    """
+    today = datetime.datetime.now(_MSK).date().isoformat()
+    conn = get_connection()
+    try:
+        row = conn.execute(
+            "SELECT last_date, streak, max_streak FROM activity_streaks "
+            "WHERE user_id=? AND chat_id=?",
+            (user_id, chat_id)
+        ).fetchone()
+
+        if row is None:
+            conn.execute(
+                "INSERT INTO activity_streaks (user_id, chat_id, last_date, streak, max_streak) "
+                "VALUES (?, ?, ?, 1, 1)",
+                (user_id, chat_id, today)
+            )
+            conn.commit()
+            return 1, True
+
+        rd = dict(row)
+        if rd["last_date"] == today:
+            return rd["streak"], False  # уже обновляли сегодня
+
+        last_d  = datetime.date.fromisoformat(rd["last_date"])
+        today_d = datetime.date.fromisoformat(today)
+        diff    = (today_d - last_d).days
+
+        new_streak = rd["streak"] + 1 if diff == 1 else 1
+        new_max    = max(rd["max_streak"], new_streak)
+        conn.execute(
+            "UPDATE activity_streaks SET last_date=?, streak=?, max_streak=? "
+            "WHERE user_id=? AND chat_id=?",
+            (today, new_streak, new_max, user_id, chat_id)
+        )
+        conn.commit()
+        return new_streak, True
+    finally:
+        conn.close()
+
+
+def get_streak(user_id: int, chat_id: int) -> tuple[int, int]:
+    """Возвращает (current_streak, max_streak)."""
+    conn = get_connection()
+    try:
+        row = conn.execute(
+            "SELECT streak, max_streak FROM activity_streaks WHERE user_id=? AND chat_id=?",
+            (user_id, chat_id)
+        ).fetchone()
+        if not row:
+            return 0, 0
+        return row["streak"], row["max_streak"]
+    finally:
+        conn.close()
+
+
+def get_top_streaks(chat_id: int, limit: int = 5) -> list:
+    """Топ участников по текущему стрику."""
+    conn = get_connection()
+    try:
+        return conn.execute("""
+            SELECT s.user_id, s.streak, s.max_streak,
+                   u.first_name, u.username
+            FROM activity_streaks s
+            LEFT JOIN user_stats u ON s.user_id = u.user_id AND s.chat_id = u.chat_id
+            WHERE s.chat_id = ?
+            ORDER BY s.streak DESC LIMIT ?
+        """, (chat_id, limit)).fetchall()
     finally:
         conn.close()
 
