@@ -712,3 +712,34 @@ async def dashboard_callback(update, context) -> None:
 
     else:
         await query.answer()
+
+
+# ── Команда /dashboard ────────────────────────────────────────────────────────
+
+async def dashboard_command(update, context) -> None:
+    """/dashboard — отправить/пересоздать панели мониторинга (только владелец)."""
+    from config import OWNER_ID
+    user = update.effective_user
+    if not user or user.id != OWNER_ID:
+        return
+
+    # Удаляем команду немедленно
+    try:
+        await update.message.delete()
+    except Exception:
+        pass
+
+    monitor_id = get_monitor_chat_id()
+    if not monitor_id:
+        try:
+            note = await update.message.reply_text(
+                "⚠️ Монитор-группа не назначена. Иди в /settings → Управление чатами."
+            )
+            import asyncio as _aio
+            await _aio.sleep(8)
+            await note.delete()
+        except Exception:
+            pass
+        return
+
+    await setup_dashboard(context.bot, monitor_id)

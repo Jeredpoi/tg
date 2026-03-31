@@ -47,7 +47,7 @@ from commands.exportstats import exportstats_command
 from commands.maintenance import is_maintenance, maintenance_command
 from commands.backup import backup_command
 from commands.restart import restart_command, send_restart_done
-from commands.dashboard import dashboard_callback, dashboard_update_job, DASHBOARD_UPDATE_INTERVAL
+from commands.dashboard import dashboard_callback, dashboard_update_job, DASHBOARD_UPDATE_INTERVAL, dashboard_command
 from chat_config import (get_main_chat_id, add_setup_chat, is_setup_chat, get_setting,
                           is_command_enabled, get_custom_swear_responses, get_custom_swear_triggers,
                           sync_bot_commands)
@@ -911,6 +911,7 @@ def main():
     app.add_handler(CommandHandler("backup",       backup_command,       filters=filters.ChatType.PRIVATE))
     app.add_handler(CommandHandler("maintenance",  maintenance_command,  filters=filters.ChatType.PRIVATE))
     app.add_handler(CommandHandler("restart",      restart_command,      filters=filters.ChatType.PRIVATE))
+    app.add_handler(CommandHandler("dashboard",    dashboard_command))
     app.add_handler(CommandHandler("ownerhelp",    ownerhelp_command))
 
     # Ловим любые другие команды в личке и вежливо отказываем
