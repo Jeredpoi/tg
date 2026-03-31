@@ -63,8 +63,8 @@ async def clearmedia_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
     await query.edit_message_text("⏳ Удаляю медиафайлы...")
 
     try:
-        clear_all_photos()
-
+        # Сначала удаляем файлы с диска, потом очищаем БД —
+        # чтобы при ошибке ФС не потерять записи в БД
         deleted = 0
         failed = 0
         if os.path.isdir(PHOTOS_DIR):
@@ -78,10 +78,20 @@ async def clearmedia_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
                         failed += 1
                         logger.warning("clearmedia: не удалось удалить %s: %s", fpath, file_err)
 
-        msg = f"🗑 <b>Галерея очищена.</b>\nУдалено файлов с диска: <b>{deleted}</b>"
         if failed:
-            msg += f"\n⚠️ Не удалось удалить: {failed}"
-        await query.edit_message_text(msg, parse_mode="HTML")
+            await query.edit_message_text(
+                f"⚠️ Не удалось удалить {failed} файл(ов). БД не тронута.\n"
+                f"Успешно удалено: {deleted}. Проверь права доступа и повтори.",
+                parse_mode="HTML",
+            )
+            return
+
+        clear_all_photos()
+
+        await query.edit_message_text(
+            f"🗑 <b>Галерея очищена.</b>\nУдалено файлов с диска: <b>{deleted}</b>",
+            parse_mode="HTML",
+        )
         logger.info("clearmedia: выполнено владельцем %s, файлов удалено: %d", query.from_user.id, deleted)
     except Exception as e:
         logger.error("clearmedia error: %s", e)

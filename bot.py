@@ -47,6 +47,7 @@ from commands.exportstats import exportstats_command
 from commands.maintenance import is_maintenance, maintenance_command
 from commands.backup import backup_command
 from commands.restart import restart_command, send_restart_done
+from commands.dashboard import dashboard_callback, dashboard_update_job, DASHBOARD_UPDATE_INTERVAL
 from chat_config import (get_main_chat_id, add_setup_chat, is_setup_chat, get_setting,
                           is_command_enabled, get_custom_swear_responses, get_custom_swear_triggers)
 
@@ -955,6 +956,7 @@ def main():
     app.add_handler(CallbackQueryHandler(rate_callback,          pattern=r"^(anon_|rate_|comment_ask_|comment_skip_)"))
     app.add_handler(CallbackQueryHandler(ownerhelp_pin_callback, pattern=r"^ownerhelp_pin$"))
     app.add_handler(CallbackQueryHandler(clearmedia_callback,    pattern=r"^clearmedia_"))
+    app.add_handler(CallbackQueryHandler(dashboard_callback,     pattern=r"^dash:"))
 
     # Анонимные сообщения / подпись /rate / resend в личке + трекинг в группах
     async def _maybe_token_reply(update, context):
@@ -1021,6 +1023,15 @@ def main():
             logger.debug("_avatar_cache_set: сброшен")
 
         app.job_queue.run_repeating(_clear_avatar_cache, interval=86400, first=86400, name="clear_avatar_cache")
+
+        # Периодическое обновление дашборда мониторинга
+        app.job_queue.run_repeating(
+            dashboard_update_job,
+            interval=DASHBOARD_UPDATE_INTERVAL,
+            first=60,
+            name="dashboard_update",
+        )
+        logger.info("Обновление дашборда запланировано каждые %ds", DASHBOARD_UPDATE_INTERVAL)
 
     async def on_shutdown(app):
         try:

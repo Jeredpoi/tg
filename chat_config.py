@@ -9,7 +9,7 @@ _ROLES_FILE = os.path.join(os.path.dirname(__file__), "chat_roles.json")
 _SETUP_FILE = os.path.join(os.path.dirname(__file__), "setup_chats.json")
 
 
-# ── Роли (main / test) ────────────────────────────────────────────────────────
+# ── Роли (main / test / monitor) ─────────────────────────────────────────────
 
 def _load_roles() -> dict:
     try:
@@ -52,6 +52,33 @@ def is_main_chat(chat_id: int) -> bool:
     """True если chat_id является основной группой."""
     main = _roles.get("main")
     return main is not None and int(main) == chat_id
+
+
+def get_monitor_chat_id() -> int | None:
+    """Возвращает chat_id монитор-группы или None."""
+    v = _roles.get("monitor")
+    return int(v) if v is not None else None
+
+
+def set_monitor_chat_id(chat_id: int) -> None:
+    """Назначает chat_id монитор-группой."""
+    _roles["monitor"] = chat_id
+    _save_roles(_roles)
+
+
+def unset_monitor_chat(chat_id: int) -> bool:
+    """Снимает метку monitor с chat_id. Возвращает True если она там была."""
+    if _roles.get("monitor") == chat_id:
+        del _roles["monitor"]
+        _save_roles(_roles)
+        return True
+    return False
+
+
+def is_monitor_chat(chat_id: int) -> bool:
+    """True если chat_id является монитор-группой."""
+    mon = _roles.get("monitor")
+    return mon is not None and int(mon) == chat_id
 
 
 # ── Инициализированные чаты (setup_chats) ─────────────────────────────────────

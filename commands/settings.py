@@ -8,6 +8,7 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
 from chat_config import (
     get_main_chat_id, set_main_chat_id, unset_main_chat, is_main_chat,
+    get_monitor_chat_id, set_monitor_chat_id, unset_monitor_chat, is_monitor_chat,
     get_setup_chats, get_settings, get_setting, set_setting,
     MANAGEABLE_COMMANDS, get_disabled_commands, disable_command, enable_command,
     is_command_enabled,
@@ -244,6 +245,35 @@ async def settings_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         removed = unset_main_chat(chat_id)
         logger.info("settings: метка main снята с чата %s (была: %s)", chat_id, removed)
         await query.answer("✅ Метка «основной» снята." if removed else "ℹ️ Чат и так не основной.")
+        await _show_chat_detail(query, context, chat_id)
+
+    elif data.startswith("stg:mk_monitor:"):
+        try:
+            chat_id = int(data[15:])
+        except ValueError:
+            await query.answer("Ошибка данных.", show_alert=True)
+            return
+        set_monitor_chat_id(chat_id)
+        logger.info("settings: чат %s назначен монитором", chat_id)
+        await query.answer("🖥 Настраиваю дашборд...", show_alert=False)
+        await _show_chat_detail(query, context, chat_id)
+        # Запускаем настройку дашборда в фоне
+        from commands.dashboard import setup_dashboard
+        context.job_queue.run_once(
+            lambda ctx: setup_dashboard(ctx.bot, chat_id),
+            10,
+            name=f"dashboard_setup_{chat_id}",
+        )
+
+    elif data.startswith("stg:mk_nomonitor:"):
+        try:
+            chat_id = int(data[17:])
+        except ValueError:
+            await query.answer("Ошибка данных.", show_alert=True)
+            return
+        removed = unset_monitor_chat(chat_id)
+        logger.info("settings: метка monitor снята с чата %s (была: %s)", chat_id, removed)
+        await query.answer("✅ Роль монитора снята." if removed else "ℹ️ Чат и так не монитор.")
         await _show_chat_detail(query, context, chat_id)
 
     # ── Мат-детекция ──
@@ -496,6 +526,7 @@ async def _show_chat_list(query, context) -> None:
         await query.answer()
         return
 
+    monitor_id = get_monitor_chat_id()
     buttons = []
     for cid in sorted(setup_chats):
         try:
@@ -503,7 +534,12 @@ async def _show_chat_list(query, context) -> None:
             name = chat.title or str(cid)
         except Exception:
             name = str(cid)
-        icon = "🟢" if cid == main_id else "⚪"
+        if cid == main_id:
+            icon = "🟢"
+        elif cid == monitor_id:
+            icon = "🖥"
+        else:
+            icon = "⚪"
         buttons.append([InlineKeyboardButton(
             f"{icon} {name}",
             callback_data=f"stg:chat:{cid}",
@@ -526,6 +562,7 @@ async def _show_chat_list(query, context) -> None:
         f"💬 <b>Управление чатами</b>{main_hint}\n\n"
         "Нажми на чат чтобы изменить его роль:\n"
         "🟢 — основная группа (рассылки, /anon, /rate)\n"
+        "🖥 — основная тестовая (мониторинг бота)\n"
         "⚪ — тестовая / без роли",
         parse_mode="HTML",
         reply_markup=InlineKeyboardMarkup(buttons),
@@ -535,8 +572,10 @@ async def _show_chat_list(query, context) -> None:
 
 async def _show_chat_detail(query, context, chat_id: int) -> None:
     """Показывает информацию о конкретном чате и кнопки управления."""
-    main_id = get_main_chat_id()
-    is_main = (main_id == chat_id)
+    main_id    = get_main_chat_id()
+    monitor_id = get_monitor_chat_id()
+    is_main    = (main_id == chat_id)
+    is_monitor = (monitor_id == chat_id)
 
     try:
         chat = await context.bot.get_chat(chat_id)
@@ -547,26 +586,41 @@ async def _show_chat_detail(query, context, chat_id: int) -> None:
         name = str(chat_id)
         members_line = ""
 
-    role_text = "🟢 Основная" if is_main else "⚪ Тестовая / без роли"
-    role_desc = (
-        "Сюда идут: ночной отчёт, фото недели, /anon, /rate"
-        if is_main else
-        "Рассылки и /anon сюда не приходят"
-    )
-
     if is_main:
-        action_btn = InlineKeyboardButton(
+        role_text = "🟢 Основная"
+        role_desc = "Сюда идут: ночной отчёт, фото недели, /anon, /rate"
+    elif is_monitor:
+        role_text = "🖥 Основная тестовая (мониторинг)"
+        role_desc = "Центр управления и мониторинга бота"
+    else:
+        role_text = "⚪ Тестовая / без роли"
+        role_desc = "Рассылки и /anon сюда не приходят"
+
+    action_rows = []
+    if is_main:
+        action_rows.append([InlineKeyboardButton(
             "⚪ Снять как основную",
             callback_data=f"stg:mk_test:{chat_id}",
-        )
+        )])
     else:
-        action_btn = InlineKeyboardButton(
+        action_rows.append([InlineKeyboardButton(
             "🟢 Сделать основной",
             callback_data=f"stg:mk_main:{chat_id}",
-        )
+        )])
+
+    if is_monitor:
+        action_rows.append([InlineKeyboardButton(
+            "⚪ Снять роль монитора",
+            callback_data=f"stg:mk_nomonitor:{chat_id}",
+        )])
+    else:
+        action_rows.append([InlineKeyboardButton(
+            "🖥 Назначить основной тестовой",
+            callback_data=f"stg:mk_monitor:{chat_id}",
+        )])
 
     kb = InlineKeyboardMarkup([
-        [action_btn],
+        *action_rows,
         [_back_to_chats_btn()],
     ])
 
