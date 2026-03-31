@@ -683,16 +683,21 @@ async def _track_message(update, context):
 
 
 def _save_chat_id_to_config(new_id: int) -> None:
-    """Перезаписывает строку CHAT_ID в config.py."""
-    config_path = os.path.join(os.path.dirname(__file__), "config.py")
-    with open(config_path, "r", encoding="utf-8") as f:
-        content = f.read()
-    new_content, count = re.subn(r"^CHAT_ID\s*=.*$", f"CHAT_ID = {new_id}", content, flags=re.MULTILINE)
-    if count == 0:
-        logger.warning("_save_chat_id_to_config: строка CHAT_ID не найдена в config.py — ID не сохранится после перезапуска")
-        return
-    with open(config_path, "w", encoding="utf-8") as f:
-        f.write(new_content)
+    """Сохраняет CHAT_ID в .env файл."""
+    env_path = os.path.join(os.path.dirname(__file__), ".env")
+    try:
+        if os.path.exists(env_path):
+            with open(env_path, "r", encoding="utf-8") as f:
+                content = f.read()
+            new_content, count = re.subn(r"^CHAT_ID=.*$", f"CHAT_ID={new_id}", content, flags=re.MULTILINE)
+            if count == 0:
+                new_content = content.rstrip("\n") + f"\nCHAT_ID={new_id}\n"
+        else:
+            new_content = f"CHAT_ID={new_id}\n"
+        with open(env_path, "w", encoding="utf-8") as f:
+            f.write(new_content)
+    except OSError as e:
+        logger.warning("_save_chat_id_to_config: не удалось записать .env — %s", e)
 
 
 async def _on_bot_added(update, context):
