@@ -371,16 +371,6 @@ def get_daily_swear_report(chat_id: int, date: str) -> tuple:
         conn.close()
 
 
-def get_all_users(chat_id: int = 0) -> list:
-    conn = get_connection()
-    try:
-        return conn.execute(
-            "SELECT user_id, username, first_name FROM user_stats WHERE chat_id = ?",
-            (chat_id,)
-        ).fetchall()
-    finally:
-        conn.close()
-
 
 # ── king_of_day ────────────────────────────────────────────────────────────
 

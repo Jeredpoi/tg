@@ -17,7 +17,7 @@ from telegram.error import BadRequest
 from chat_config import get_monitor_chat_id, get_main_chat_id
 from commands.maintenance import is_maintenance, set_maintenance
 from database import (
-    get_all_users, get_gallery, get_daily_swear_report, get_and_delete_old_photos,
+    get_gallery, get_daily_swear_report, get_and_delete_old_photos,
     get_top_messages, get_top_swears, get_king_today,
     get_chat_message_count, get_chat_user_count, get_today_swear_count,
     get_top_streaks,

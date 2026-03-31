@@ -309,18 +309,11 @@ _DEFAULT_CMD_COOLDOWN = DEFAULT_CMD_COOLDOWN
 
 # Переопределения для конкретных команд (0 = без лимита)
 _CMD_COOLDOWNS: dict[str, int] = {
-    "/help":    30,
-    "/start":   0,
-    "/debug":   0,
-    # Королевские команды не ограничиваем — ими пользуется только король
-    "/kfine":   0,
-    "/kpardon": 0,
-    "/kdecree": 0,
-    "/kreward": 0,
-    "/ktax":    0,
-    "/anon":    30,
-    # /rate — фото в личке → чат, лимит 5 минут
-    "/rate":    300,
+    "/help":  30,
+    "/start": 0,
+    "/debug": 0,
+    "/anon":  30,
+    "/rate":  300,  # фото в личке → чат, лимит 5 минут
 }
 
 # Словарь: (user_id, command) → timestamp последнего разрешённого вызова
@@ -591,24 +584,20 @@ async def _track_message(update, context):
     if is_group:
         try:
             streak, is_new_day = update_streak(user.id, chat_id)
-            user_name = user.first_name or user.username or "Участник"
+            _user_name = user.first_name or user.username or "Участник"
+            _uid, _cid = user.id, chat_id
+
             if is_new_day:
-                # Проверяем стрик-ачивки только в новый день
-                context.job_queue.run_once(
-                    lambda ctx, _uid=user.id, _cid=chat_id, _n=user_name, _s=streak: (
-                        check_streak_achievements(ctx.bot, _cid, _uid, _n, _s)
-                    ),
-                    1,
-                )
-            # Получаем актуальные счётчики и проверяем ачивки
+                _streak = streak
+                async def _run_streak_check(ctx):
+                    await check_streak_achievements(ctx.bot, _cid, _uid, _user_name, _streak)
+                context.job_queue.run_once(_run_streak_check, 1)
+
             stats = get_user_stats(user.id, chat_id)
-            context.job_queue.run_once(
-                lambda ctx, _uid=user.id, _cid=chat_id, _n=user_name, \
-                       _mc=stats["msg_count"], _sc=stats["swear_count"]: (
-                    check_message_achievements(ctx.bot, _cid, _uid, _n, _mc, _sc)
-                ),
-                1,
-            )
+            _mc, _sc = stats["msg_count"], stats["swear_count"]
+            async def _run_msg_check(ctx):
+                await check_message_achievements(ctx.bot, _cid, _uid, _user_name, _mc, _sc)
+            context.job_queue.run_once(_run_msg_check, 1)
         except Exception as e:
             logger.warning("streak/achievement check failed: %s", e)
 
@@ -1134,12 +1123,17 @@ def main():
         app.job_queue.run_daily(_cleanup_old_photos, time=three_am, name="cleanup_old_photos")
         logger.info("Авточистка старых фото запланирована на 03:00 МСК")
 
-        # Авточистка _cmd_last_used — каждый час убираем записи старше 2 часов
+        # Авточистка in-memory словарей — каждый час убираем устаревшие записи
         async def _cleanup_cmd_cooldown(ctx):
             cutoff = time.time() - 7200
             stale = [k for k, v in _cmd_last_used.items() if v < cutoff]
             for k in stale:
                 _cmd_last_used.pop(k, None)
+            # Чистим cooldown-словари для реакций (forward/mention/swear)
+            for d in (_forward_last, _mention_last, _swear_last_response):
+                old = [k for k, v in d.items() if v < cutoff]
+                for k in old:
+                    d.pop(k, None)
             if stale:
                 logger.debug("_cmd_last_used: удалено %d устаревших записей", len(stale))
 
