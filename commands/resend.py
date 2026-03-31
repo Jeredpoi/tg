@@ -8,6 +8,7 @@ import logging
 from telegram import Update
 from telegram.ext import ContextTypes
 from database import track_bot_message
+from chat_config import get_main_chat_id
 import config
 
 logger = logging.getLogger(__name__)
@@ -24,8 +25,8 @@ async def resend_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     if update.effective_user.id != config.OWNER_ID:
         return
 
-    # Определяем целевой чат: аргумент или config.CHAT_ID
-    target_chat_id = config.CHAT_ID
+    # Определяем целевой чат: аргумент → основная группа → config.CHAT_ID
+    target_chat_id = get_main_chat_id() or config.CHAT_ID
     if context.args:
         try:
             target_chat_id = int(context.args[0])

@@ -50,7 +50,7 @@ from commands.restart import restart_command, send_restart_done
 from commands.dashboard import dashboard_callback, dashboard_update_job, DASHBOARD_UPDATE_INTERVAL, dashboard_command
 from chat_config import (get_main_chat_id, add_setup_chat, is_setup_chat, get_setting,
                           is_command_enabled, get_custom_swear_responses, get_custom_swear_triggers,
-                          sync_bot_commands)
+                          sync_bot_commands, is_monitor_chat)
 
 
 logging.basicConfig(
@@ -406,8 +406,19 @@ async def _setup_guard(update, context):
     if not chat or chat.type not in ("group", "supergroup"):
         return
 
-    # /start пропускаем всегда — через него происходит инициализация
     command = msg.text.split()[0].split("@")[0].lower()
+
+    # Монитор-группа: разрешаем только /dashboard владельцу, всё остальное — удаляем тихо
+    if is_monitor_chat(chat.id):
+        if command != "/dashboard":
+            try:
+                await msg.delete()
+            except Exception:
+                pass
+            raise ApplicationHandlerStop
+        return
+
+    # /start пропускаем всегда — через него происходит инициализация
     if command == "/start":
         return
 
@@ -509,6 +520,10 @@ async def _track_message(update, context):
     if not user or user.is_bot:
         return
 
+    # Монитор-группа — не трекаем активность и не реагируем на маты
+    if update.effective_chat and is_monitor_chat(update.effective_chat.id):
+        return
+
     # Кэшируем аватар один раз за сессию (в фоне, не блокируем)
     if user.id not in _avatar_cache_set:
         _avatar_cache_set.add(user.id)
@@ -607,6 +622,12 @@ async def _on_bot_added(update, context):
 
     import config
     chat_id = chat.id
+
+    # Монитор-группа — не перезаписываем CHAT_ID и не отправляем приветствие
+    if is_monitor_chat(chat_id):
+        logger.info("Бот добавлен в монитор-группу %r — CHAT_ID не меняем", chat.title)
+        return
+
     config.CHAT_ID = chat_id
     _save_chat_id_to_config(chat_id)
 

@@ -273,23 +273,25 @@ async def _text_activity_async() -> str:
     except Exception:
         pass
 
-    def _fmt_top(rows, name_key="first_name", count_key="message_count") -> str:
+    def _fmt_top(rows, name_key="first_name", count_key="msg_count") -> str:
         lines = []
         for i, r in enumerate(rows, 1):
-            name  = r[name_key] or r.get("username") or "?"
-            count = r[count_key]
+            rd = dict(r)
+            name  = rd.get(name_key) or rd.get("username") or "?"
+            count = rd.get(count_key, 0)
             lines.append(f"  {i}. {name} — {count}")
         return "\n".join(lines) if lines else "  нет данных"
 
     king_line = ""
     if king:
-        king_name = king["first_name"] or king["username"] or "?"
+        k = dict(king)
+        king_name = k.get("first_name") or k.get("username") or "?"
         king_line = f"👑 Король дня: <b>{king_name}</b>\n"
 
     return (
         f"{king_line}"
         f"━━━━━━━━━━━━━━━━━━━━\n"
-        f"💬 Топ по сообщениям:\n{_fmt_top(top_msg, count_key='message_count')}\n\n"
+        f"💬 Топ по сообщениям:\n{_fmt_top(top_msg, count_key='msg_count')}\n\n"
         f"🤬 Топ по матам (всего):\n{_fmt_top(top_sw, count_key='swear_count')}\n"
         f"━━━━━━━━━━━━━━━━━━━━\n"
         f"<i>Обновлено: {now.strftime('%H:%M:%S')}</i>"
