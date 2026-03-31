@@ -50,6 +50,7 @@ from commands.maintenance import is_maintenance, maintenance_command
 from commands.backup import backup_command
 from commands.restart import restart_command, send_restart_done
 from commands.dashboard import dashboard_callback, dashboard_update_job, DASHBOARD_UPDATE_INTERVAL, dashboard_command
+from commands.clearstats import clearstats_command, clearstats_callback
 from chat_config import (get_main_chat_id, add_setup_chat, is_setup_chat, get_setting,
                           is_command_enabled, get_custom_swear_responses, get_custom_swear_triggers,
                           sync_bot_commands, is_monitor_chat)
@@ -1021,6 +1022,7 @@ def main():
     app.add_handler(CommandHandler("settings",     settings_command,     filters=filters.ChatType.PRIVATE))
     app.add_handler(CommandHandler("exportstats",  exportstats_command,  filters=filters.ChatType.PRIVATE))
     app.add_handler(CommandHandler("backup",       backup_command,       filters=filters.ChatType.PRIVATE))
+    app.add_handler(CommandHandler("clearstats",   clearstats_command,   filters=filters.ChatType.PRIVATE))
     app.add_handler(CommandHandler("maintenance",  maintenance_command,  filters=filters.ChatType.PRIVATE))
     app.add_handler(CommandHandler("restart",      restart_command,      filters=filters.ChatType.PRIVATE))
     app.add_handler(CommandHandler("dashboard",    dashboard_command))
@@ -1070,6 +1072,7 @@ def main():
     app.add_handler(CallbackQueryHandler(rate_callback,          pattern=r"^(anon_|rate_|comment_ask_|comment_skip_)"))
     app.add_handler(CallbackQueryHandler(ownerhelp_pin_callback, pattern=r"^ownerhelp_pin$"))
     app.add_handler(CallbackQueryHandler(clearmedia_callback,    pattern=r"^clearmedia_"))
+    app.add_handler(CallbackQueryHandler(clearstats_callback,    pattern=r"^clrstats:"))
     app.add_handler(CallbackQueryHandler(dashboard_callback,     pattern=r"^dash:"))
 
     # Анонимные сообщения / подпись /rate / resend в личке + трекинг в группах

@@ -448,6 +448,26 @@ def get_today_swear_count(chat_id: int) -> int:
     finally:
         conn.close()
 
+def clear_chat_stats(chat_id: int) -> dict:
+    """
+    Полная очистка статистики чата.
+    Удаляет: user_stats, achievements, activity_streaks, daily_swears, king_of_day.
+    НЕ трогает: photo_ratings, photo_votes, photo_comments, bot_messages.
+    Возвращает dict {table: rows_deleted}.
+    """
+    tables = ("user_stats", "achievements", "activity_streaks", "daily_swears", "king_of_day")
+    conn = get_connection()
+    try:
+        counts = {}
+        for table in tables:
+            cur = conn.execute(f"DELETE FROM {table} WHERE chat_id = ?", (chat_id,))
+            counts[table] = cur.rowcount
+        conn.commit()
+        return counts
+    finally:
+        conn.close()
+
+
 def save_photo(photo_id: str, message_id: int, chat_id: int,
                author_id: int, author_name: str, anonymous: bool,
                key: str = "", media_type: str = "photo") -> None:

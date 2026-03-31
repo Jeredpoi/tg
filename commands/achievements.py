@@ -2,6 +2,7 @@
 # commands/achievements.py — Система ачивок и достижений
 # ==============================================================================
 
+import asyncio
 import logging
 from database import grant_achievement, get_user_achievements
 
@@ -59,7 +60,15 @@ async def _announce(bot, chat_id: int, user_name: str, ach_id: str) -> None:
         f"<i>{ach['desc']}</i>"
     )
     try:
-        await bot.send_message(chat_id=chat_id, text=text, parse_mode="HTML")
+        msg = await bot.send_message(chat_id=chat_id, text=text, parse_mode="HTML")
+        # Автоудаление через 10 секунд — не засоряем чат
+        async def _delete():
+            await asyncio.sleep(10)
+            try:
+                await bot.delete_message(chat_id, msg.message_id)
+            except Exception:
+                pass
+        asyncio.create_task(_delete())
     except Exception as e:
         logger.warning("achievements: не удалось отправить анонс %s: %s", ach_id, e)
 
