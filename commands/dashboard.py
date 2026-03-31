@@ -32,7 +32,7 @@ _BOT_START_TIME = time.time()
 DASHBOARD_UPDATE_INTERVAL = 300  # 5 минут
 
 # Порядок: control первым (мета-панель), потом по убыванию важности
-_PANEL_KEYS = ("control", "status", "actions", "server", "stats", "activity")
+_PANEL_KEYS = ("control", "status", "actions", "server", "stats", "activity", "logs")
 _PANEL_LABELS = {
     "control":  "🎛 Управление дашбордом",
     "status":   "📌 Статус бота",
@@ -40,6 +40,7 @@ _PANEL_LABELS = {
     "server":   "📌 Сервер",
     "stats":    "📌 Статистика",
     "activity": "📌 Активность",
+    "logs":     "📋 Последние логи",
 }
 
 
@@ -385,6 +386,27 @@ def _text_control() -> str:
     )
 
 
+def _text_logs() -> str:
+    """Последние строки из bot.log."""
+    from log_utils import get_recent_logs
+    now = _now_msk()
+    recent = get_recent_logs(15)
+    if recent:
+        log_lines = []
+        for line in recent:
+            if len(line) > 100:
+                line = line[:97] + "..."
+            log_lines.append(line)
+        logs_text = "\n".join(log_lines)
+    else:
+        logs_text = "Лог пуст"
+    return (
+        f"<pre>{logs_text}</pre>\n"
+        f"━━━━━━━━━━━━━━━━━━━━\n"
+        f"<i>Обновлено: {now.strftime('%H:%M:%S')}</i>"
+    )
+
+
 # ── Клавиатуры ────────────────────────────────────────────────────────────────
 
 def _kb_status() -> InlineKeyboardMarkup:
@@ -428,6 +450,12 @@ def _kb_activity() -> InlineKeyboardMarkup:
     ]])
 
 
+def _kb_logs() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup([[
+        InlineKeyboardButton("🔄 Обновить", callback_data="dash:refresh_logs"),
+    ]])
+
+
 def _kb_control() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("➕ Восстановить недостающие", callback_data="dash:restore_missing")],
@@ -451,6 +479,7 @@ async def _get_all_panel_texts(bot) -> dict:
         "server":   (_text_server(),    _kb_server()),
         "stats":    (stats_text,        _kb_stats()),
         "activity": (activity_text,     _kb_activity()),
+        "logs":     (_text_logs(),      _kb_logs()),
     }
 
 
@@ -649,6 +678,10 @@ async def dashboard_callback(update, context) -> None:
         await query.answer("🔄 Обновляю...")
         text = await _text_activity_async()
         await _update_panel(context.bot, monitor_id, "activity", text, _kb_activity())
+
+    elif data == "dash:refresh_logs":
+        await query.answer("🔄 Обновляю...")
+        await _update_panel(context.bot, monitor_id, "logs", _text_logs(), _kb_logs())
 
     elif data == "dash:refresh_all":
         await query.answer("🔄 Обновляю все панели...")
