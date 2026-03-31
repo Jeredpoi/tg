@@ -283,7 +283,7 @@ async def _text_activity_async() -> str:
 
     king_line = ""
     if king:
-        king_name = king["first_name"] or king.get("username") or "?"
+        king_name = king["first_name"] or king["username"] or "?"
         king_line = f"👑 Король дня: <b>{king_name}</b>\n"
 
     return (
@@ -723,23 +723,35 @@ async def dashboard_command(update, context) -> None:
     if not user or user.id != OWNER_ID:
         return
 
+    cmd_chat_id = update.effective_chat.id
+
     # Удаляем команду немедленно
     try:
         await update.message.delete()
     except Exception:
         pass
 
-    monitor_id = get_monitor_chat_id()
-    if not monitor_id:
-        try:
-            note = await update.message.reply_text(
-                "⚠️ Монитор-группа не назначена. Иди в /settings → Управление чатами."
-            )
-            import asyncio as _aio
-            await _aio.sleep(8)
-            await note.delete()
-        except Exception:
-            pass
-        return
+    # Определяем целевой чат: монитор-группа или текущий чат
+    monitor_id = get_monitor_chat_id() or cmd_chat_id
 
-    await setup_dashboard(context.bot, monitor_id)
+    # Уведомляем что начали (в ЛС владельцу, чтобы не мусорить в группе)
+    progress = None
+    try:
+        progress = await context.bot.send_message(
+            user.id,
+            f"⏳ Отправляю панели дашборда в чат <code>{monitor_id}</code>...",
+            parse_mode="HTML",
+        )
+    except Exception:
+        pass
+
+    try:
+        await setup_dashboard(context.bot, monitor_id)
+        if progress:
+            await progress.edit_text("✅ Дашборд отправлен и закреплён!")
+            await asyncio.sleep(5)
+            await progress.delete()
+    except Exception as e:
+        logger.error("dashboard_command error: %s", e, exc_info=True)
+        if progress:
+            await progress.edit_text(f"❌ Ошибка: {e}")
