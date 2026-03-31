@@ -312,6 +312,10 @@ async def setup_dashboard(bot, chat_id: int) -> None:
         except Exception as e:
             logger.error("dashboard: ошибка отправки %s: %s", key, e)
 
+    if len(sent_ids) < len(_PANEL_KEYS):
+        logger.error("dashboard: только %d из %d панелей отправлены", len(sent_ids), len(_PANEL_KEYS))
+        if not sent_ids:
+            return  # Вообще ничего не отправилось — не сохраняем битое состояние
     _save_state({"chat_id": chat_id, **sent_ids})
     logger.info("dashboard: инициализирован для чата %s, IDs=%s", chat_id, sent_ids)
 
@@ -462,6 +466,9 @@ async def dashboard_callback(update, context) -> None:
 
     data = query.data
     monitor_id = get_monitor_chat_id()
+    if not monitor_id:
+        await query.answer("🚫 Дашборд не настроен — выбери монитор-группу в /settings.", show_alert=True)
+        return
 
     if data == "dash:refresh_status":
         await query.answer("🔄 Обновляю...")
@@ -491,7 +498,8 @@ async def dashboard_callback(update, context) -> None:
         import json as _json
         try:
             with open("/tmp/tg_restart_state.json", "w", encoding="utf-8") as f:
-                _json.dump({"chat_id": monitor_id, "cmd_mid": None, "note_mid": None}, f)
+                # Нет сообщения-команды из которого запущен рестарт — только chat_id для уведомления
+                _json.dump({"chat_id": monitor_id}, f)
         except Exception:
             pass
         await asyncio.sleep(0.3)
