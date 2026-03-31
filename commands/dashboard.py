@@ -16,28 +16,28 @@ from telegram.error import BadRequest
 
 from chat_config import get_monitor_chat_id, get_main_chat_id
 from commands.maintenance import is_maintenance, set_maintenance
-from database import get_all_users, get_gallery, get_daily_swear_report, get_and_delete_old_photos  # noqa: F401
+from database import get_all_users, get_gallery, get_daily_swear_report, get_and_delete_old_photos
 
 logger = logging.getLogger(__name__)
 
-_STATE_FILE = os.path.join(os.path.dirname(__file__), "..", "dashboard_state.json")
-_BOT_DIR    = os.path.dirname(os.path.dirname(__file__))
+_STATE_FILE     = os.path.join(os.path.dirname(__file__), "..", "dashboard_state.json")
+_BOT_DIR        = os.path.dirname(os.path.dirname(__file__))
 _BOT_START_TIME = time.time()
 
-# Интервал авто-обновления (секунды)
 DASHBOARD_UPDATE_INTERVAL = 300  # 5 минут
 
-# Все ключи панелей в порядке отправки
-_PANEL_KEYS = ("status", "stats", "server", "actions")
+# Все ключи панелей в порядке отправки; "control" — последняя, мета-панель
+_PANEL_KEYS = ("status", "stats", "server", "actions", "control")
 _PANEL_LABELS = {
     "status":  "📌 Панель: Статус бота",
     "stats":   "📌 Панель: Статистика",
     "server":  "📌 Панель: Сервер",
     "actions": "📌 Панель: Быстрые действия",
+    "control": "🎛 Управление дашбордом",
 }
 
 
-# ── Хранение ID сообщений ─────────────────────────────────────────────────────
+# ── Хранение состояния ────────────────────────────────────────────────────────
 
 def _load_state() -> dict:
     try:
@@ -56,19 +56,17 @@ def _save_state(state: dict) -> None:
 
 def _get_server_stats() -> dict:
     stats = {}
-    # CPU — /proc/loadavg
     try:
         with open("/proc/loadavg") as f:
             parts = f.read().split()
         stats["load1"]  = float(parts[0])
         stats["load5"]  = float(parts[1])
         stats["load15"] = float(parts[2])
-        stats["procs"]  = parts[3]   # running/total
+        stats["procs"]  = parts[3]
     except Exception:
         stats["load1"] = stats["load5"] = stats["load15"] = 0.0
         stats["procs"] = "?/?"
 
-    # RAM — /proc/meminfo
     try:
         mem = {}
         with open("/proc/meminfo") as f:
@@ -84,7 +82,6 @@ def _get_server_stats() -> dict:
     except Exception:
         stats["ram_total_mb"] = stats["ram_used_mb"] = stats["ram_pct"] = 0
 
-    # Процесс бота — /proc/self/status
     try:
         pstats = {}
         with open("/proc/self/status") as f:
@@ -92,12 +89,10 @@ def _get_server_stats() -> dict:
                 if ":" in line:
                     k, v = line.split(":", 1)
                     pstats[k.strip()] = v.strip()
-        vm_rss = pstats.get("VmRSS", "0 kB").split()[0]
-        stats["bot_rss_mb"] = int(vm_rss) // 1024
+        stats["bot_rss_mb"] = int(pstats.get("VmRSS", "0 kB").split()[0]) // 1024
     except Exception:
         stats["bot_rss_mb"] = 0
 
-    # Диск — os.statvfs
     try:
         s = os.statvfs("/")
         total_b = s.f_frsize * s.f_blocks
@@ -113,7 +108,6 @@ def _get_server_stats() -> dict:
 
 
 def _get_git_info() -> tuple[str, str]:
-    """Возвращает (branch, short_commit)."""
     try:
         branch = subprocess.check_output(
             ["git", "rev-parse", "--abbrev-ref", "HEAD"],
@@ -144,6 +138,10 @@ def _bar(pct: int, width: int = 10) -> str:
     return "█" * filled + "░" * (width - filled)
 
 
+def _now_msk() -> datetime.datetime:
+    return datetime.datetime.now(datetime.timezone(datetime.timedelta(hours=3)))
+
+
 # ── Текст панелей ─────────────────────────────────────────────────────────────
 
 def _text_status() -> str:
@@ -151,32 +149,40 @@ def _text_status() -> str:
     status_icon = "🔴 Техобслуживание" if maintenance else "🟢 Работает"
     branch, commit = _get_git_info()
     py_ver = f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}"
-    now = datetime.datetime.now(datetime.timezone(datetime.timedelta(hours=3)))
+    now = _now_msk()
     return (
         f"Состояние: {status_icon}\n"
         f"Аптайм: <b>{_uptime_str()}</b>\n"
         f"Python: {py_ver}\n"
         f"Ветка: <code>{branch}</code>\n"
-        f"Коммит: <code>{commit[:50]}</code>\n"
+        f"Коммит: <code>{commit[:55]}</code>\n"
         f"Время: {now.strftime('%d.%m.%Y %H:%M')} МСК\n"
         f"━━━━━━━━━━━━━━━━━━━━\n"
         f"<i>Обновлено: {now.strftime('%H:%M:%S')}</i>"
     )
 
 
-def _text_stats() -> str:
-    """Статистика из основной группы."""
+async def _text_stats_async(bot=None) -> str:
+    """Статистика из основной группы. bot передаётся для получения реального числа участников."""
     main_id = get_main_chat_id()
-    chat_label = f"основная группа" if main_id else "нет основной группы"
+    chat_label = "основная группа" if main_id else "⚠️ нет основной группы"
 
-    user_count = 0
-    photo_count = 0
-    swear_total = 0
+    real_members = None
+    db_users     = 0
+    photo_count  = 0
+    swear_total  = 0
     swear_top: list = []
 
     if main_id:
+        # Реальное число участников через Telegram API
+        if bot:
+            try:
+                real_members = await bot.get_chat_member_count(main_id)
+            except Exception:
+                pass
+        # Пользователи в БД (взаимодействовавшие с ботом)
         try:
-            user_count = len(get_all_users(main_id))
+            db_users = len(get_all_users(main_id))
         except Exception:
             pass
         try:
@@ -189,17 +195,23 @@ def _text_stats() -> str:
         except Exception:
             pass
 
+    members_line = (
+        f"👥 Участников: <b>{real_members}</b> (в боте: {db_users})\n"
+        if real_members is not None
+        else f"👥 В базе: <b>{db_users}</b>\n"
+    )
+
     top_lines = ""
     if swear_top:
         top_lines = "\n"
         for i, (name, cnt) in enumerate(swear_top[:3], 1):
             top_lines += f"  {i}. {name}: {cnt}\n"
 
-    now = datetime.datetime.now(datetime.timezone(datetime.timedelta(hours=3)))
+    now = _now_msk()
     return (
         f"Источник: <i>{chat_label}</i>\n"
         f"━━━━━━━━━━━━━━━━━━━━\n"
-        f"👥 Пользователей: <b>{user_count}</b>\n"
+        f"{members_line}"
         f"🖼 Фото в галерее: <b>{photo_count}</b>\n"
         f"🤬 Матов сегодня: <b>{swear_total}</b>{top_lines}"
         f"━━━━━━━━━━━━━━━━━━━━\n"
@@ -209,7 +221,7 @@ def _text_stats() -> str:
 
 def _text_server() -> str:
     s = _get_server_stats()
-    now = datetime.datetime.now(datetime.timezone(datetime.timedelta(hours=3)))
+    now = _now_msk()
     return (
         f"CPU (1/5/15м): {s['load1']:.2f} / {s['load5']:.2f} / {s['load15']:.2f}\n"
         f"Процессов: {s['procs']}\n\n"
@@ -224,28 +236,47 @@ def _text_server() -> str:
 
 
 def _text_actions() -> str:
-    now = datetime.datetime.now(datetime.timezone(datetime.timedelta(hours=3)))
+    now = _now_msk()
     return (
-        f"Нажми кнопку для быстрого действия.\n"
+        f"Кнопки быстрых действий:\n"
         f"━━━━━━━━━━━━━━━━━━━━\n"
         f"<i>Обновлено: {now.strftime('%H:%M:%S')}</i>"
     )
 
 
-# ── Клавиатуры панелей ────────────────────────────────────────────────────────
+def _text_control() -> str:
+    """Мета-панель: статус каждой панели и управление дашбордом."""
+    state = _load_state()
+    now = _now_msk()
+    lines = []
+    for key in _PANEL_KEYS:
+        if key == "control":
+            continue
+        mid = state.get(key)
+        icon = "✅" if mid else "❌"
+        lines.append(f"{icon} {_PANEL_LABELS[key]}")
+    panels_status = "\n".join(lines)
+    return (
+        f"Статус панелей:\n"
+        f"━━━━━━━━━━━━━━━━━━━━\n"
+        f"{panels_status}\n"
+        f"━━━━━━━━━━━━━━━━━━━━\n"
+        f"<i>Обновлено: {now.strftime('%H:%M:%S')}</i>"
+    )
+
+
+# ── Клавиатуры ────────────────────────────────────────────────────────────────
 
 def _kb_status() -> InlineKeyboardMarkup:
     maintenance = is_maintenance()
     maint_text = "🟢 Выкл. тех.обсл." if maintenance else "🔴 Вкл. тех.обсл."
     return InlineKeyboardMarkup([
         [
-            InlineKeyboardButton("🔄 Перезапустить",    callback_data="dash:restart"),
-            InlineKeyboardButton(maint_text,             callback_data="dash:toggle_maintenance"),
+            InlineKeyboardButton("🔄 Перезапустить",      callback_data="dash:restart"),
+            InlineKeyboardButton(maint_text,               callback_data="dash:toggle_maintenance"),
         ],
-        [
-            InlineKeyboardButton("📥 Git Pull + Restart", callback_data="dash:git_pull_restart"),
-        ],
-        [InlineKeyboardButton("🔄 Обновить", callback_data="dash:refresh_status")],
+        [InlineKeyboardButton("📥 Git Pull + Restart",    callback_data="dash:git_pull_restart")],
+        [InlineKeyboardButton("🔄 Обновить",              callback_data="dash:refresh_status")],
     ])
 
 
@@ -264,25 +295,42 @@ def _kb_server() -> InlineKeyboardMarkup:
 def _kb_actions() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup([
         [
-            InlineKeyboardButton("🗑 Очистить кэш аватаров",  callback_data="dash:clear_avatars"),
-            InlineKeyboardButton("🧹 Удалить фото >30 дней",  callback_data="dash:cleanup_photos"),
+            InlineKeyboardButton("🗑 Кэш аватаров",       callback_data="dash:clear_avatars"),
+            InlineKeyboardButton("🧹 Фото >30 дней",      callback_data="dash:cleanup_photos"),
         ],
-        [
-            InlineKeyboardButton("🔄 Обновить все панели",    callback_data="dash:refresh_all"),
-        ],
+        [InlineKeyboardButton("🔄 Обновить все панели",   callback_data="dash:refresh_all")],
     ])
+
+
+def _kb_control() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton("➕ Восстановить недостающие", callback_data="dash:restore_missing")],
+        [InlineKeyboardButton("🔄 Пересоздать все панели",   callback_data="dash:recreate_all")],
+        [InlineKeyboardButton("📌 Перезакрепить все",        callback_data="dash:repin_all")],
+        [InlineKeyboardButton("🗑 Удалить все панели",       callback_data="dash:delete_all")],
+        [InlineKeyboardButton("🔄 Обновить эту панель",      callback_data="dash:refresh_control")],
+    ])
+
+
+# ── Helpers ───────────────────────────────────────────────────────────────────
+
+async def _get_all_panel_texts(bot) -> dict:
+    """Возвращает dict key→(text, kb) для всех панелей."""
+    return {
+        "status":  (_text_status(),                 _kb_status()),
+        "stats":   (await _text_stats_async(bot),   _kb_stats()),
+        "server":  (_text_server(),                 _kb_server()),
+        "actions": (_text_actions(),                _kb_actions()),
+        "control": (_text_control(),                _kb_control()),
+    }
 
 
 # ── Инициализация дашборда ────────────────────────────────────────────────────
 
 async def setup_dashboard(bot, chat_id: int) -> None:
-    """Отправляет панели дашборда и закрепляет их."""
-    panels = [
-        ("status",  _text_status(),   _kb_status()),
-        ("stats",   _text_stats(),    _kb_stats()),
-        ("server",  _text_server(),   _kb_server()),
-        ("actions", _text_actions(),  _kb_actions()),
-    ]
+    """Отправляет все панели дашборда и закрепляет их."""
+    panel_data = await _get_all_panel_texts(bot)
+    panels = [(key, *panel_data[key]) for key in _PANEL_KEYS]
 
     # Удаляем старые сообщения если есть
     old = _load_state()
@@ -312,15 +360,16 @@ async def setup_dashboard(bot, chat_id: int) -> None:
         except Exception as e:
             logger.error("dashboard: ошибка отправки %s: %s", key, e)
 
+    if not sent_ids:
+        logger.error("dashboard: ни одна панель не отправлена, состояние не сохранено")
+        return
     if len(sent_ids) < len(_PANEL_KEYS):
-        logger.error("dashboard: только %d из %d панелей отправлены", len(sent_ids), len(_PANEL_KEYS))
-        if not sent_ids:
-            return  # Вообще ничего не отправилось — не сохраняем битое состояние
+        logger.warning("dashboard: %d из %d панелей отправлено", len(sent_ids), len(_PANEL_KEYS))
     _save_state({"chat_id": chat_id, **sent_ids})
     logger.info("dashboard: инициализирован для чата %s, IDs=%s", chat_id, sent_ids)
 
 
-# ── Обновление панели ─────────────────────────────────────────────────────────
+# ── Обновление одной панели ───────────────────────────────────────────────────
 
 async def _update_panel(bot, chat_id: int, key: str, text: str, kb: InlineKeyboardMarkup) -> None:
     state = _load_state()
@@ -338,9 +387,8 @@ async def _update_panel(bot, chat_id: int, key: str, text: str, kb: InlineKeyboa
     except BadRequest as e:
         err = str(e).lower()
         if "not modified" in err:
-            pass  # ничего не изменилось — ок
+            pass
         elif "message to edit not found" in err or "message_id_invalid" in err:
-            # Сообщение удалено — сбрасываем ID чтобы не пытаться снова
             state.pop(key, None)
             _save_state(state)
             logger.warning("dashboard: панель %s удалена, ID сброшен", key)
@@ -351,20 +399,20 @@ async def _update_panel(bot, chat_id: int, key: str, text: str, kb: InlineKeyboa
 
 
 async def update_dashboard(bot) -> None:
-    """Обновляет все панели дашборда."""
+    """Обновляет все существующие панели."""
     monitor_id = get_monitor_chat_id()
     if not monitor_id:
         return
     state = _load_state()
     if state.get("chat_id") != monitor_id:
         return
-    await _update_panel(bot, monitor_id, "status",  _text_status(),   _kb_status())
-    await _update_panel(bot, monitor_id, "stats",   _text_stats(),    _kb_stats())
-    await _update_panel(bot, monitor_id, "server",  _text_server(),   _kb_server())
-    await _update_panel(bot, monitor_id, "actions", _text_actions(),  _kb_actions())
+    panel_data = await _get_all_panel_texts(bot)
+    for key in _PANEL_KEYS:
+        text, kb = panel_data[key]
+        await _update_panel(bot, monitor_id, key, text, kb)
 
 
-# ── Job для периодического обновления ─────────────────────────────────────────
+# ── Job ───────────────────────────────────────────────────────────────────────
 
 async def dashboard_update_job(context) -> None:
     await update_dashboard(context.bot)
@@ -373,44 +421,29 @@ async def dashboard_update_job(context) -> None:
 # ── Git pull + restart ────────────────────────────────────────────────────────
 
 async def _git_pull_and_restart(bot, monitor_id: int) -> None:
-    """Запускает git pull, уведомляет о результате, перезапускает бота и вебсервер."""
-    import json as _json
-
-    # Сообщение о начале
     status_msg = None
     try:
-        status_msg = await bot.send_message(
-            monitor_id,
-            "⏳ <b>Git Pull...</b>",
-            parse_mode="HTML",
-        )
+        status_msg = await bot.send_message(monitor_id, "⏳ <b>Git Pull...</b>", parse_mode="HTML")
     except Exception:
         pass
 
-    # git pull
     try:
         result = subprocess.run(
             ["git", "pull"],
-            cwd=_BOT_DIR,
-            capture_output=True,
-            text=True,
-            timeout=30,
+            cwd=_BOT_DIR, capture_output=True, text=True, timeout=30,
         )
-        pull_out = (result.stdout + result.stderr).strip()[:300]
-        success = result.returncode == 0
+        pull_out = (result.stdout + result.stderr).strip()[:400]
+        success  = result.returncode == 0
     except subprocess.TimeoutExpired:
-        pull_out = "Timeout (>30s)"
-        success = False
+        pull_out, success = "Timeout (>30s)", False
     except Exception as e:
-        pull_out = str(e)
-        success = False
+        pull_out, success = str(e), False
 
     if not success:
         try:
             if status_msg:
                 await bot.edit_message_text(
-                    chat_id=monitor_id,
-                    message_id=status_msg.message_id,
+                    chat_id=monitor_id, message_id=status_msg.message_id,
                     text=f"❌ <b>Git pull не удался:</b>\n<pre>{pull_out}</pre>",
                     parse_mode="HTML",
                 )
@@ -421,8 +454,7 @@ async def _git_pull_and_restart(bot, monitor_id: int) -> None:
     try:
         if status_msg:
             await bot.edit_message_text(
-                chat_id=monitor_id,
-                message_id=status_msg.message_id,
+                chat_id=monitor_id, message_id=status_msg.message_id,
                 text=f"✅ <b>Git pull выполнен:</b>\n<pre>{pull_out}</pre>\n\n🔄 Перезапускаю...",
                 parse_mode="HTML",
             )
@@ -430,28 +462,24 @@ async def _git_pull_and_restart(bot, monitor_id: int) -> None:
         pass
 
     await asyncio.sleep(0.5)
-
-    # Перезапускаем вебсервер отдельно если systemctl доступен
     try:
         subprocess.Popen(
             ["systemctl", "restart", "tg-webserver"],
             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
         )
     except Exception:
-        pass  # systemctl недоступен в dev-окружении
+        pass
 
-    # Сохраняем состояние для уведомления после перезапуска
     try:
         with open("/tmp/tg_restart_state.json", "w", encoding="utf-8") as f:
-            _json.dump({"chat_id": monitor_id, "cmd_mid": None, "note_mid": None}, f)
+            json.dump({"chat_id": monitor_id}, f)
     except Exception:
         pass
 
-    # Перезапускаем бота
     os.execl(sys.executable, sys.executable, *sys.argv)
 
 
-# ── Callback-обработчик кнопок дашборда ──────────────────────────────────────
+# ── Callback ──────────────────────────────────────────────────────────────────
 
 async def dashboard_callback(update, context) -> None:
     from config import OWNER_ID
@@ -464,28 +492,35 @@ async def dashboard_callback(update, context) -> None:
         await query.answer("🚫 Только для владельца.", show_alert=True)
         return
 
-    data = query.data
+    data       = query.data
     monitor_id = get_monitor_chat_id()
     if not monitor_id:
         await query.answer("🚫 Дашборд не настроен — выбери монитор-группу в /settings.", show_alert=True)
         return
 
+    # ── Обновление отдельных панелей ──
     if data == "dash:refresh_status":
         await query.answer("🔄 Обновляю...")
         await _update_panel(context.bot, monitor_id, "status", _text_status(), _kb_status())
 
     elif data == "dash:refresh_stats":
         await query.answer("🔄 Обновляю...")
-        await _update_panel(context.bot, monitor_id, "stats", _text_stats(), _kb_stats())
+        text = await _text_stats_async(context.bot)
+        await _update_panel(context.bot, monitor_id, "stats", text, _kb_stats())
 
     elif data == "dash:refresh_server":
         await query.answer("🔄 Обновляю...")
         await _update_panel(context.bot, monitor_id, "server", _text_server(), _kb_server())
 
+    elif data == "dash:refresh_control":
+        await query.answer("🔄 Обновляю...")
+        await _update_panel(context.bot, monitor_id, "control", _text_control(), _kb_control())
+
     elif data == "dash:refresh_all":
         await query.answer("🔄 Обновляю все панели...")
         await update_dashboard(context.bot)
 
+    # ── Управление ботом ──
     elif data == "dash:toggle_maintenance":
         new_state = not is_maintenance()
         set_maintenance(new_state)
@@ -495,11 +530,9 @@ async def dashboard_callback(update, context) -> None:
 
     elif data == "dash:restart":
         await query.answer("🔄 Перезапускаю...", show_alert=True)
-        import json as _json
         try:
             with open("/tmp/tg_restart_state.json", "w", encoding="utf-8") as f:
-                # Нет сообщения-команды из которого запущен рестарт — только chat_id для уведомления
-                _json.dump({"chat_id": monitor_id}, f)
+                json.dump({"chat_id": monitor_id}, f)
         except Exception:
             pass
         await asyncio.sleep(0.3)
@@ -507,16 +540,14 @@ async def dashboard_callback(update, context) -> None:
 
     elif data == "dash:git_pull_restart":
         await query.answer("📥 Запускаю git pull...", show_alert=True)
-        # Запускаем в фоне чтобы ответить на callback до execl
         asyncio.create_task(_git_pull_and_restart(context.bot, monitor_id))
 
+    # ── Быстрые действия ──
     elif data == "dash:clear_avatars":
-        # Очищаем кэш аватаров через модуль bot (избегаем циклического импорта — импортируем здесь)
         try:
-            import importlib
-            bot_module = sys.modules.get("bot") or importlib.import_module("bot")
-            cache = getattr(bot_module, "_avatar_cache_set", None)
-            count = len(cache) if cache is not None else 0
+            bot_module = sys.modules.get("bot")
+            cache  = getattr(bot_module, "_avatar_cache_set", None) if bot_module else None
+            count  = len(cache) if cache is not None else 0
             if cache is not None:
                 cache.clear()
             await query.answer(f"🗑 Кэш аватаров очищен ({count} записей)")
@@ -525,23 +556,93 @@ async def dashboard_callback(update, context) -> None:
         await _update_panel(context.bot, monitor_id, "actions", _text_actions(), _kb_actions())
 
     elif data == "dash:cleanup_photos":
-        await query.answer("🧹 Удаляю старые фото...")
+        await query.answer("🧹 Удаляю...")
         try:
-            deleted = get_and_delete_old_photos(30)
-            count = len(deleted) if deleted else 0
-            # Удаляем файлы с диска; deleted — список (key, media_type)
+            deleted    = get_and_delete_old_photos(30)
+            count      = len(deleted) if deleted else 0
             photos_dir = os.path.join(_BOT_DIR, "photos")
             for key, media_type in deleted:
                 ext = ".mp4" if media_type == "video" else ".jpg"
-                fpath = os.path.join(photos_dir, key + ext)
                 try:
-                    os.remove(fpath)
+                    os.remove(os.path.join(photos_dir, key + ext))
                 except FileNotFoundError:
                     pass
             await query.answer(f"🧹 Удалено {count} старых фото", show_alert=True)
         except Exception as e:
             await query.answer(f"❌ Ошибка: {e}", show_alert=True)
-        await _update_panel(context.bot, monitor_id, "stats", _text_stats(), _kb_stats())
+        text = await _text_stats_async(context.bot)
+        await _update_panel(context.bot, monitor_id, "stats", text, _kb_stats())
+
+    # ── Управление дашбордом (мета-панель) ──
+    elif data == "dash:restore_missing":
+        """Отправляет только те панели, которых нет в состоянии."""
+        await query.answer("➕ Восстанавливаю недостающие панели...")
+        state      = _load_state()
+        panel_data = await _get_all_panel_texts(context.bot)
+        restored   = 0
+        for key in _PANEL_KEYS:
+            if state.get(key):
+                continue  # уже есть
+            text, kb = panel_data[key]
+            try:
+                msg = await context.bot.send_message(
+                    chat_id=monitor_id,
+                    text=f"<b>{_PANEL_LABELS[key]}</b>\n\n{text}",
+                    parse_mode="HTML",
+                    reply_markup=kb,
+                )
+                state[key] = msg.message_id
+                restored += 1
+                try:
+                    await context.bot.pin_chat_message(monitor_id, msg.message_id, disable_notification=True)
+                except Exception:
+                    pass
+            except Exception as e:
+                logger.error("dashboard restore_missing %s: %s", key, e)
+        state["chat_id"] = monitor_id
+        _save_state(state)
+        await _update_panel(context.bot, monitor_id, "control", _text_control(), _kb_control())
+        if restored == 0:
+            await query.answer("✅ Все панели на месте", show_alert=True)
+        else:
+            await query.answer(f"✅ Восстановлено {restored} панел(ей)", show_alert=True)
+
+    elif data == "dash:recreate_all":
+        await query.answer("🔄 Пересоздаю все панели...")
+        await setup_dashboard(context.bot, monitor_id)
+
+    elif data == "dash:repin_all":
+        await query.answer("📌 Перезакрепляю...")
+        state   = _load_state()
+        pinned  = 0
+        failed  = 0
+        for key in _PANEL_KEYS:
+            mid = state.get(key)
+            if not mid:
+                continue
+            try:
+                await context.bot.pin_chat_message(monitor_id, mid, disable_notification=True)
+                pinned += 1
+            except Exception as e:
+                logger.warning("repin %s: %s", key, e)
+                failed += 1
+        result = f"📌 Закреплено: {pinned}"
+        if failed:
+            result += f", не удалось: {failed}"
+        await query.answer(result, show_alert=True)
+
+    elif data == "dash:delete_all":
+        await query.answer("🗑 Удаляю все панели...")
+        state = _load_state()
+        for key in _PANEL_KEYS:
+            mid = state.get(key)
+            if mid:
+                try:
+                    await context.bot.delete_message(monitor_id, mid)
+                except Exception:
+                    pass
+        _save_state({})
+        await query.answer("🗑 Все панели удалены. Пересоздай через /settings.", show_alert=True)
 
     else:
         await query.answer()
