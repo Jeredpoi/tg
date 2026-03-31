@@ -725,16 +725,24 @@ async def dashboard_command(update, context) -> None:
     if not user or user.id != OWNER_ID:
         return
 
-    cmd_chat_id = update.effective_chat.id
-
     # Удаляем команду немедленно
     try:
         await update.message.delete()
     except Exception:
         pass
 
-    # Определяем целевой чат: монитор-группа или текущий чат
-    monitor_id = get_monitor_chat_id() or cmd_chat_id
+    # Определяем целевой чат — только монитор-группа, fallback запрещён
+    monitor_id = get_monitor_chat_id()
+    if not monitor_id:
+        try:
+            await context.bot.send_message(
+                user.id,
+                "❌ Монитор-группа не назначена.\n"
+                "Сначала назначь её: /settings → Чаты бота → нужная группа → 🖥 Сделать монитором",
+            )
+        except Exception:
+            pass
+        return
 
     # Уведомляем что начали (в ЛС владельцу, чтобы не мусорить в группе)
     progress = None
