@@ -259,8 +259,13 @@ async def settings_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         await _show_chat_detail(query, context, chat_id)
         # Запускаем настройку дашборда в фоне
         from commands.dashboard import setup_dashboard
+        _cid = chat_id
+
+        async def _do_setup(ctx):
+            await setup_dashboard(ctx.bot, _cid)
+
         context.job_queue.run_once(
-            lambda ctx: setup_dashboard(ctx.bot, chat_id),
+            _do_setup,
             10,
             name=f"dashboard_setup_{chat_id}",
         )
