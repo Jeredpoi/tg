@@ -279,7 +279,44 @@ def set_king_today(chat_id: int, user_id: int, username: str, first_name: str) -
         conn.close()
 
 
-# ── photo_ratings ──────────────────────────────────────────────────────────
+def get_chat_message_count(chat_id: int) -> int:
+    """Возвращает суммарное количество сообщений в чате (всё время)."""
+    conn = get_connection()
+    try:
+        row = conn.execute(
+            "SELECT SUM(msg_count) AS total FROM user_stats WHERE chat_id = ?",
+            (chat_id,)
+        ).fetchone()
+        return int(dict(row).get("total") or 0)
+    finally:
+        conn.close()
+
+
+def get_chat_user_count(chat_id: int) -> int:
+    """Возвращает количество уникальных пользователей в чате (в базе)."""
+    conn = get_connection()
+    try:
+        row = conn.execute(
+            "SELECT COUNT(*) AS cnt FROM user_stats WHERE chat_id = ?",
+            (chat_id,)
+        ).fetchone()
+        return int(dict(row).get("cnt") or 0)
+    finally:
+        conn.close()
+
+
+def get_today_swear_count(chat_id: int) -> int:
+    """Возвращает суммарное количество матов за сегодня (МСК)."""
+    today = datetime.datetime.now(_MSK).date().isoformat()
+    conn = get_connection()
+    try:
+        row = conn.execute(
+            "SELECT SUM(swear_count) AS total FROM daily_swears WHERE chat_id = ? AND date = ?",
+            (chat_id, today)
+        ).fetchone()
+        return int(dict(row).get("total") or 0)
+    finally:
+        conn.close()
 
 def save_photo(photo_id: str, message_id: int, chat_id: int,
                author_id: int, author_name: str, anonymous: bool,

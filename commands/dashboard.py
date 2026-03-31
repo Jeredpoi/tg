@@ -19,6 +19,7 @@ from commands.maintenance import is_maintenance, set_maintenance
 from database import (
     get_all_users, get_gallery, get_daily_swear_report, get_and_delete_old_photos,
     get_top_messages, get_top_swears, get_king_today,
+    get_chat_message_count, get_chat_user_count, get_today_swear_count,
 )
 
 logger = logging.getLogger(__name__)
@@ -142,6 +143,14 @@ def _bar(pct: int, width: int = 10) -> str:
     return "█" * filled + "░" * (width - filled)
 
 
+def _alert_icon(pct: int, warn: int = 75, crit: int = 90) -> str:
+    if pct >= crit:
+        return "🚨"
+    if pct >= warn:
+        return "⚠️"
+    return "✅"
+
+
 def _now_msk() -> datetime.datetime:
     return datetime.datetime.now(datetime.timezone(datetime.timedelta(hours=3)))
 
@@ -173,6 +182,7 @@ async def _text_stats_async(bot=None) -> str:
 
     real_members = None
     db_users     = 0
+    msg_total    = 0
     photo_count  = 0
     swear_total  = 0
     swear_top: list = []
@@ -184,16 +194,20 @@ async def _text_stats_async(bot=None) -> str:
                 real_members = await bot.get_chat_member_count(main_id)
             except Exception:
                 pass
-        # Пользователи в БД (взаимодействовавшие с ботом)
+        # Пользователи и сообщения из БД
         try:
-            db_users = len(get_all_users(main_id))
+            db_users = get_chat_user_count(main_id)
+        except Exception:
+            pass
+        try:
+            msg_total = get_chat_message_count(main_id)
         except Exception:
             pass
         try:
             photo_count = len(get_gallery(limit=9999, chat_id=main_id))
         except Exception:
             pass
-        today = datetime.date.today().isoformat()
+        today = _now_msk().date().isoformat()  # МСК, не UTC
         try:
             swear_total, swear_top = get_daily_swear_report(main_id, today)
         except Exception:
@@ -216,6 +230,7 @@ async def _text_stats_async(bot=None) -> str:
         f"Источник: <i>{chat_label}</i>\n"
         f"━━━━━━━━━━━━━━━━━━━━\n"
         f"{members_line}"
+        f"💬 Сообщений всего: <b>{msg_total:,}</b>\n"
         f"🖼 Фото в галерее: <b>{photo_count}</b>\n"
         f"🤬 Матов сегодня: <b>{swear_total}</b>{top_lines}"
         f"━━━━━━━━━━━━━━━━━━━━\n"
@@ -223,17 +238,39 @@ async def _text_stats_async(bot=None) -> str:
     )
 
 
+def _get_db_size_mb() -> float:
+    """Возвращает размер файла БД в МБ."""
+    from config import DATABASE_PATH
+    try:
+        size = os.path.getsize(DATABASE_PATH)
+        return round(size / 1024 / 1024, 2)
+    except Exception:
+        return 0.0
+
+
 def _text_server() -> str:
     s = _get_server_stats()
     now = _now_msk()
+    db_mb = _get_db_size_mb()
+
+    ram_icon  = _alert_icon(s['ram_pct'])
+    disk_icon = _alert_icon(s['disk_pct'])
+
+    # CPU load alert — для однопроцессорного сервера load > 1 это занятость
+    cpu_alert = ""
+    if s['load1'] >= 2.0:
+        cpu_alert = " 🚨"
+    elif s['load1'] >= 1.0:
+        cpu_alert = " ⚠️"
+
     return (
-        f"CPU (1/5/15м): {s['load1']:.2f} / {s['load5']:.2f} / {s['load15']:.2f}\n"
+        f"🖥 <b>CPU</b>{cpu_alert}\n"
+        f"Нагрузка: {s['load1']:.2f} / {s['load5']:.2f} / {s['load15']:.2f} (1/5/15м)\n"
         f"Процессов: {s['procs']}\n\n"
-        f"RAM: {s['ram_used_mb']} / {s['ram_total_mb']} МБ  ({s['ram_pct']}%)\n"
-        f"{_bar(s['ram_pct'])}\n"
-        f"Бот занимает: {s['bot_rss_mb']} МБ\n\n"
-        f"Диск: {s['disk_used_gb']} / {s['disk_total_gb']} ГБ  ({s['disk_pct']}%)\n"
-        f"{_bar(s['disk_pct'])}\n"
+        f"{ram_icon} <b>RAM</b>: {s['ram_used_mb']} / {s['ram_total_mb']} МБ ({s['ram_pct']}%)\n"
+        f"{_bar(s['ram_pct'])}  бот: {s['bot_rss_mb']} МБ\n\n"
+        f"{disk_icon} <b>Диск</b>: {s['disk_used_gb']} / {s['disk_total_gb']} ГБ ({s['disk_pct']}%)\n"
+        f"{_bar(s['disk_pct'])}  БД: {db_mb} МБ\n"
         f"━━━━━━━━━━━━━━━━━━━━\n"
         f"<i>Обновлено: {now.strftime('%H:%M:%S')}</i>"
     )
@@ -299,7 +336,7 @@ async def _text_activity_async() -> str:
 
 
 def _text_control() -> str:
-    """Мета-панель: статус каждой панели и управление дашбордом."""
+    """Мета-панель: статус каждой панели + быстрые метрики сервера."""
     state = _load_state()
     now = _now_msk()
     lines = []
@@ -310,10 +347,23 @@ def _text_control() -> str:
         icon = "✅" if mid else "❌"
         lines.append(f"{icon} {_PANEL_LABELS[key]}")
     panels_status = "\n".join(lines)
+
+    # Быстрые метрики сервера
+    s = _get_server_stats()
+    ram_icon  = _alert_icon(s['ram_pct'])
+    disk_icon = _alert_icon(s['disk_pct'])
+    health_line = (
+        f"{ram_icon} RAM {s['ram_pct']}% · "
+        f"{disk_icon} Диск {s['disk_pct']}% · "
+        f"CPU {s['load1']:.2f}"
+    )
+
     return (
         f"Статус панелей:\n"
         f"━━━━━━━━━━━━━━━━━━━━\n"
         f"{panels_status}\n"
+        f"━━━━━━━━━━━━━━━━━━━━\n"
+        f"🖥 {health_line}\n"
         f"━━━━━━━━━━━━━━━━━━━━\n"
         f"<i>Обновлено: {now.strftime('%H:%M:%S')}</i>"
     )

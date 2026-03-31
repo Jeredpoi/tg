@@ -1002,6 +1002,18 @@ def main():
         await send_restart_done(app)
         await sync_bot_commands(app.bot)  # синхронизирует список команд с текущими настройками
 
+        # Авто-восстановление дашборда: если монитор назначен, но панели не отправлены
+        from commands.dashboard import setup_dashboard, _load_state, get_monitor_chat_id as _get_mon
+        _mon_id = _get_mon()
+        if _mon_id:
+            _st = _load_state()
+            _has_panels = any(_st.get(k) for k in ("status", "server", "stats", "activity"))
+            if not _has_panels:
+                logger.info("on_startup: дашборд не найден, авто-настройка для чата %s", _mon_id)
+                async def _auto_setup(ctx):
+                    await setup_dashboard(ctx.bot, _mon_id)
+                app.job_queue.run_once(_auto_setup, 30, name="dashboard_auto_setup")
+
         msk = datetime.timezone(datetime.timedelta(hours=3))
 
         # Ночной отчёт о матах в 00:00 МСК

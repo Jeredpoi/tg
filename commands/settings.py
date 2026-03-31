@@ -231,6 +231,13 @@ async def settings_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         except ValueError:
             await query.answer("Ошибка данных.", show_alert=True)
             return
+        # Если чат является монитором — нельзя делать его основным
+        if is_monitor_chat(chat_id):
+            await query.answer(
+                "⚠️ Этот чат уже монитор-группа. Сначала сними роль монитора.",
+                show_alert=True,
+            )
+            return
         set_main_chat_id(chat_id)
         logger.info("settings: чат %s назначен основным", chat_id)
         await query.answer("✅ Чат назначен основным!")
@@ -253,11 +260,24 @@ async def settings_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         except ValueError:
             await query.answer("Ошибка данных.", show_alert=True)
             return
+
+        # Если чат является основным — нельзя делать его монитором
+        if is_main_chat(chat_id):
+            await query.answer(
+                "⚠️ Этот чат уже назначен основным. Сначала сними роль основного.",
+                show_alert=True,
+            )
+            return
+
         set_monitor_chat_id(chat_id)
         logger.info("settings: чат %s назначен монитором", chat_id)
         await query.answer("🖥 Настраиваю дашборд...", show_alert=False)
         await _show_chat_detail(query, context, chat_id)
-        # Запускаем настройку дашборда в фоне
+
+        # Отменяем предыдущие незавершённые задачи настройки дашборда для этого чата
+        for _old in context.job_queue.get_jobs_by_name(f"dashboard_setup_{chat_id}"):
+            _old.schedule_removal()
+
         from commands.dashboard import setup_dashboard
         _cid = chat_id
 
@@ -278,6 +298,13 @@ async def settings_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) 
             return
         removed = unset_monitor_chat(chat_id)
         logger.info("settings: метка monitor снята с чата %s (была: %s)", chat_id, removed)
+        # Очищаем состояние дашборда чтобы старые панели не мешали
+        if removed:
+            from commands.dashboard import _load_state, _save_state
+            st = _load_state()
+            if st.get("chat_id") == chat_id:
+                _save_state({})
+                logger.info("settings: состояние дашборда очищено (chat_id=%s)", chat_id)
         await query.answer("✅ Роль монитора снята." if removed else "ℹ️ Чат и так не монитор.")
         await _show_chat_detail(query, context, chat_id)
 
