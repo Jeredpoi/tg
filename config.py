@@ -10,11 +10,12 @@ load_dotenv()
 
 # ── Секреты из .env ───────────────────────────────────────────────────────────
 
-BOT_TOKEN = 8456580239:AAE6loIwAaMZZ2i1w5KfwkyPrgc3I4_YmEU
+BOT_TOKEN = "8456580239:AAE6loIwAaMZZ2i1w5KfwkyPrgc3I4_YmEU"
 OWNER_ID = 6093532805
 CHAT_ID = -1002686704764
-WEBAPP_URL = https://144.31.75.246.sslip.io
-PROXY_URL = socks5://user:pass@host:port or None
+WEBAPP_URL = "https://144.31.75.246.sslip.io"
+PROXY_URL = None
+# или так, если нужен прокси:
 
 # ── Настройки БД ──────────────────────────────────────────────────────────────
 
