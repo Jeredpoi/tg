@@ -134,9 +134,6 @@ _DEFAULT_SETTINGS = {
     "autodel_help": 25,            # Автоудаление ответа /help (сек, 0 = выкл)
     "autodel_gallery": 25,         # Автоудаление ссылки галереи (сек, 0 = выкл)
     "autodel_ownerhelp": 20,       # Автоудаление ответа /ownerhelp (сек, 0 = выкл)
-    "autodel_top": 3600,           # Автоудаление /top (сек, 0 = выкл)
-    "autodel_stats": 60,           # Автоудаление /stats (сек, 0 = выкл)
-    "autodel_debug": 20,           # Автоудаление /debug (сек, 0 = выкл)
 }
 
 _settings_cache: dict | None = None
@@ -203,18 +200,7 @@ MANAGEABLE_COMMANDS = {
 def get_disabled_commands() -> set[str]:
     """Возвращает множество отключённых команд (напр. {'/mge', '/dice'})."""
     raw = get_settings().get("disabled_commands", [])
-    raw_set = {
-        str(cmd).strip().lower()
-        for cmd in raw
-        if isinstance(cmd, str) and str(cmd).strip()
-    }
-    allowed = set(MANAGEABLE_COMMANDS.keys())
-    filtered = raw_set & allowed
-    if filtered != raw_set:
-        settings = get_settings()
-        settings["disabled_commands"] = sorted(filtered)
-        _save_settings(settings)
-    return filtered
+    return set(raw)
 
 
 def disable_command(cmd: str) -> None:

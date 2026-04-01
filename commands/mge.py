@@ -17,10 +17,7 @@ async def mge_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     Если команда является ответом на чьё-то сообщение, упоминает этого пользователя.
     """
     # Объединяем стандартные и кастомные фразы
-    try:
-        custom = [(p["char"], p["phrase"]) for p in get_custom_mge_phrases()]
-    except Exception:
-        custom = []
+    custom = [(p["char"], p["phrase"]) for p in get_custom_mge_phrases()]
     all_phrases = MGE_PHRASES + custom
     speaker, phrase = random.choice(all_phrases)
 

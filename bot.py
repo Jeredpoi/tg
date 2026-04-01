@@ -7,6 +7,7 @@ import logging
 import logging.handlers
 import math
 import os
+import re
 import random
 import time
 import datetime
@@ -31,11 +32,7 @@ from config import (BOT_TOKEN, PROXY_URL, WEBAPP_URL, OWNER_ID,
 from database import (init_db, track_message, track_daily_swear, get_daily_swear_report,
                        get_best_photo_since, get_and_delete_old_photos, track_bot_message,
                        get_user_stats, update_streak, get_streak)
-from commands.achievements import (
-    check_message_achievements,
-    check_streak_achievements,
-    check_unknown_command_achievement,
-)
+from commands.achievements import check_message_achievements, check_streak_achievements
 
 from commands.debug import debug_command
 from commands.dice import dice_command
@@ -386,40 +383,14 @@ async def _track_message(update, context):
 
             if is_new_day:
                 _streak = streak
-                async def _run_streak_check(
-                    ctx,
-                    cid=_cid,
-                    uid=_uid,
-                    user_name=_user_name,
-                    streak_value=_streak,
-                ):
-                    await check_streak_achievements(ctx.bot, cid, uid, user_name, streak_value)
+                async def _run_streak_check(ctx):
+                    await check_streak_achievements(ctx.bot, _cid, _uid, _user_name, _streak)
                 context.job_queue.run_once(_run_streak_check, 1)
 
             stats = get_user_stats(user.id, chat_id)
             _mc, _sc = stats["msg_count"], stats["swear_count"]
-            async def _run_msg_check(
-                ctx,
-                cid=_cid,
-                uid=_uid,
-                user_name=_user_name,
-                msg_count=_mc,
-                swear_count=_sc,
-                message_text=text,
-                bot_username=context.bot.username or "",
-                bot_name=context.bot.first_name or "",
-            ):
-                await check_message_achievements(
-                    ctx.bot,
-                    cid,
-                    uid,
-                    user_name,
-                    msg_count,
-                    swear_count,
-                    text=message_text,
-                    bot_username=bot_username,
-                    bot_name=bot_name,
-                )
+            async def _run_msg_check(ctx):
+                await check_message_achievements(ctx.bot, _cid, _uid, _user_name, _mc, _sc)
             context.job_queue.run_once(_run_msg_check, 1)
         except Exception as e:
             logger.warning("streak/achievement check failed: %s", e)
@@ -505,8 +476,26 @@ async def _track_message(update, context):
             )
 
 
+def _save_chat_id_to_config(new_id: int) -> None:
+    """Сохраняет CHAT_ID в .env файл."""
+    env_path = os.path.join(os.path.dirname(__file__), ".env")
+    try:
+        if os.path.exists(env_path):
+            with open(env_path, "r", encoding="utf-8") as f:
+                content = f.read()
+            new_content, count = re.subn(r"^CHAT_ID=.*$", f"CHAT_ID={new_id}", content, flags=re.MULTILINE)
+            if count == 0:
+                new_content = content.rstrip("\n") + f"\nCHAT_ID={new_id}\n"
+        else:
+            new_content = f"CHAT_ID={new_id}\n"
+        with open(env_path, "w", encoding="utf-8") as f:
+            f.write(new_content)
+    except OSError as e:
+        logger.warning("_save_chat_id_to_config: не удалось записать .env — %s", e)
+
+
 async def _on_bot_added(update, context):
-    """Срабатывает когда бот добавлен в группу — отправляет приветственное сообщение."""
+    """Срабатывает когда бот добавлен в группу — сохраняет CHAT_ID."""
     event = update.my_chat_member
     new_status = event.new_chat_member.status
     chat = event.chat
@@ -516,14 +505,18 @@ async def _on_bot_added(update, context):
     if chat.type not in ("group", "supergroup"):
         return
 
+    import config
     chat_id = chat.id
 
-    # Монитор-группа: не шлём onboarding
+    # Монитор-группа — не перезаписываем CHAT_ID и не отправляем приветствие
     if is_monitor_chat(chat_id):
-        logger.info("Бот добавлен в монитор-группу %r", chat.title)
+        logger.info("Бот добавлен в монитор-группу %r — CHAT_ID не меняем", chat.title)
         return
 
-    logger.info("Бот добавлен в группу %r (%s)", chat.title, chat_id)
+    config.CHAT_ID = chat_id
+    _save_chat_id_to_config(chat_id)
+
+    logger.info("Бот добавлен в группу %r, CHAT_ID обновлён на %s", chat.title, chat_id)
 
     try:
         await context.bot.send_message(
@@ -545,9 +538,6 @@ async def gallery_command(update, context):
     """Отправляет кнопку галереи через deep link — без личных данных в группе."""
     chat = update.effective_chat
     bot_username = context.bot.username
-    if not bot_username:
-        await update.message.reply_text("❌ У бота не установлен username, deep-link недоступен.")
-        return
     # Ссылка ведёт в личку бота, где он выдаст персональный URL с uid/uname
     deep_url = f"https://t.me/{bot_username}?start=gallery_{chat.id}"
     kb = InlineKeyboardMarkup([[
@@ -586,12 +576,9 @@ async def gallery_command(update, context):
 async def _private_command_guard(update, context):
     """Отвечает на неизвестные команды в личке."""
     await update.message.reply_text(
-        "❌ Команда недоступна в личке.\n\n"
-        "В личке работают:\n"
-        "/start — запуск и ссылки\n"
-        "/help — список команд\n"
-        "/rate — отправка фото/видео на оценку\n"
-        "/settings, /backup, /restart и другие owner-команды — только владельцу"
+        "❌ В личке доступны только:\n"
+        "/rate — отправить фото на оценку группы\n"
+        "/help — список команд группы"
     )
 
 
@@ -837,21 +824,6 @@ def main():
 
     # Неизвестные команды в группе
     async def _unknown_command(update, context):
-        user = update.effective_user
-        chat = update.effective_chat
-        msg = update.message
-        if user and not user.is_bot and chat and msg:
-            uname = user.first_name or user.username or "Участник"
-            try:
-                await check_unknown_command_achievement(
-                    context.bot,
-                    chat.id,
-                    user.id,
-                    uname,
-                    msg.text or "",
-                )
-            except Exception:
-                pass
         await update.message.reply_text("Сосунок я таких слов не знаю!")
 
     app.add_handler(MessageHandler(
@@ -859,7 +831,7 @@ def main():
         _unknown_command,
     ))
 
-    # Onboarding при добавлении бота в группу
+    # Автоопределение CHAT_ID при добавлении бота в группу
     app.add_handler(ChatMemberHandler(_on_bot_added, ChatMemberHandler.MY_CHAT_MEMBER))
 
     # Приём фото/видео в личке для /rate
@@ -925,8 +897,8 @@ def main():
             _has_panels = any(_st.get(k) for k in ("status", "server", "stats", "activity"))
             if not _has_panels:
                 logger.info("on_startup: дашборд не найден, авто-настройка для чата %s", _mon_id)
-                async def _auto_setup(ctx, mon_id=_mon_id):
-                    await setup_dashboard(ctx.bot, mon_id)
+                async def _auto_setup(ctx):
+                    await setup_dashboard(ctx.bot, _mon_id)
                 app.job_queue.run_once(_auto_setup, 30, name="dashboard_auto_setup")
 
         msk = datetime.timezone(datetime.timedelta(hours=3))

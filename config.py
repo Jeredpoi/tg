@@ -12,6 +12,7 @@ load_dotenv()
 
 BOT_TOKEN = os.environ["BOT_TOKEN"]
 OWNER_ID  = int(os.environ["OWNER_ID"])
+CHAT_ID   = int(os.environ.get("CHAT_ID", 0))
 WEBAPP_URL = os.environ.get("WEBAPP_URL", "")
 PROXY_URL  = os.environ.get("PROXY_URL") or None
 

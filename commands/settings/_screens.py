@@ -496,7 +496,7 @@ async def _show_swear_resp_list(query) -> None:
 
 # ── Экран автоудаления ────────────────────────────────────────────────────────
 
-_AUTODEL_OPTIONS = [0, 10, 15, 20, 30, 60, 120, 300, 600, 1800, 3600]  # 0 = выкл
+_AUTODEL_OPTIONS = [0, 10, 15, 20, 25, 30, 60]  # 0 = выкл
 
 def _autodel_row(setting_key: str, cb_prefix: str, label: str) -> list:
     """Строка кнопок для одной настройки автоудаления."""
@@ -513,9 +513,6 @@ async def _show_autodel_settings(query) -> None:
     h  = get_setting("autodel_help")
     g  = get_setting("autodel_gallery")
     ow = get_setting("autodel_ownerhelp")
-    tp = get_setting("autodel_top")
-    st = get_setting("autodel_stats")
-    dbg = get_setting("autodel_debug")
 
     def fmt(v): return "выкл" if v == 0 else f"{v} сек."
 
@@ -526,12 +523,6 @@ async def _show_autodel_settings(query) -> None:
         _autodel_row("autodel_gallery",   "stg:adg:",  "галерея"),
         [InlineKeyboardButton("👑 /ownerhelp", callback_data="stg:noop")],
         _autodel_row("autodel_ownerhelp", "stg:adow:", "/ownerhelp"),
-        [InlineKeyboardButton("📊 /top", callback_data="stg:noop")],
-        _autodel_row("autodel_top",       "stg:adt:",  "/top"),
-        [InlineKeyboardButton("📈 /stats", callback_data="stg:noop")],
-        _autodel_row("autodel_stats",     "stg:ads:",  "/stats"),
-        [InlineKeyboardButton("🛠 /debug", callback_data="stg:noop")],
-        _autodel_row("autodel_debug",     "stg:add:",  "/debug"),
         [_back_to_menu_btn()],
     ])
 
@@ -539,10 +530,7 @@ async def _show_autodel_settings(query) -> None:
         "🗑 <b>Автоудаление сообщений</b>\n\n"
         f"📖 /help: <b>{fmt(h)}</b>\n"
         f"🖼 Галерея (личка): <b>{fmt(g)}</b>\n"
-        f"👑 /ownerhelp: <b>{fmt(ow)}</b>\n"
-        f"📊 /top: <b>{fmt(tp)}</b>\n"
-        f"📈 /stats: <b>{fmt(st)}</b>\n"
-        f"🛠 /debug: <b>{fmt(dbg)}</b>\n\n"
+        f"👑 /ownerhelp: <b>{fmt(ow)}</b>\n\n"
         "<i>Сколько секунд показывается сообщение перед удалением.\n"
         "«выкл» — сообщение не удаляется.</i>",
         parse_mode="HTML",
