@@ -1,0 +1,55 @@
+# ==============================================================================
+# .github/workflows/deploy.yml — автодеплой на сервер при пуше в main
+#
+# НАСТРОЙКА (один раз):
+# 1. Сгенерировать SSH-ключ на сервере:
+#      ssh-keygen -t ed25519 -C "github-deploy" -f ~/.ssh/github_deploy
+#      cat ~/.ssh/github_deploy.pub >> ~/.ssh/authorized_keys
+#
+# 2. Добавить приватный ключ в GitHub Secrets:
+#    Settings → Secrets and variables → Actions → New repository secret
+#    Имя: SSH_PRIVATE_KEY
+#    Значение: содержимое ~/.ssh/github_deploy (приватный ключ)
+#
+# 3. Убедиться что /root/tg — это git-репозиторий с remote origin:
+#      cd /root/tg && git remote -v
+# ==============================================================================
+
+name: Deploy
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    name: Deploy to server
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: 144.31.75.246
+          username: root
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          timeout: 60s
+          script: |
+            set -e
+
+            echo "=== Pulling latest code ==="
+            cd /root/tg
+            git fetch origin main
+            git reset --hard origin/main
+
+            echo "=== Installing dependencies ==="
+            /root/tg/venv/bin/pip install -q -r requirements.txt 2>/dev/null || true
+
+            echo "=== Restarting bot ==="
+            systemctl restart tg-bot
+
+            echo "=== Checking status ==="
+            sleep 3
+            systemctl is-active tg-bot && echo "Bot is running OK" || echo "WARNING: bot may have failed to start"

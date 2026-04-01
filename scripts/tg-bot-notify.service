@@ -1,0 +1,27 @@
+# ==============================================================================
+# scripts/tg-bot-notify.service — systemd-сервис для уведомлений о падении
+#
+# УСТАНОВКА (на сервере):
+#   cp /root/tg/scripts/tg-bot-notify.service /etc/systemd/system/
+#   chmod +x /root/tg/scripts/notify_crash.sh
+#   systemctl daemon-reload
+#
+# Затем добавить в /etc/systemd/system/tg-bot.service в секцию [Unit]:
+#   OnFailure=tg-bot-notify.service
+#
+# И перезагрузить:
+#   systemctl daemon-reload
+#   systemctl restart tg-bot
+# ==============================================================================
+
+[Unit]
+Description=Notify owner in Telegram when tg-bot crashes
+After=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/root/tg/scripts/notify_crash.sh
+# Не перезапускать сам нотифайер
+Restart=no
+# Небольшой таймаут — не висеть вечно если нет сети
+TimeoutStartSec=15
