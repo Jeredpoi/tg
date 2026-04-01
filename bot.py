@@ -31,7 +31,11 @@ from config import (BOT_TOKEN, PROXY_URL, WEBAPP_URL, OWNER_ID,
 from database import (init_db, track_message, track_daily_swear, get_daily_swear_report,
                        get_best_photo_since, get_and_delete_old_photos, track_bot_message,
                        get_user_stats, update_streak, get_streak)
-from commands.achievements import check_message_achievements, check_streak_achievements
+from commands.achievements import (
+    check_message_achievements,
+    check_streak_achievements,
+    check_unknown_command_achievement,
+)
 
 from commands.debug import debug_command
 from commands.dice import dice_command
@@ -401,8 +405,21 @@ async def _track_message(update, context):
                 user_name=_user_name,
                 msg_count=_mc,
                 swear_count=_sc,
+                message_text=text,
+                bot_username=context.bot.username or "",
+                bot_name=context.bot.first_name or "",
             ):
-                await check_message_achievements(ctx.bot, cid, uid, user_name, msg_count, swear_count)
+                await check_message_achievements(
+                    ctx.bot,
+                    cid,
+                    uid,
+                    user_name,
+                    msg_count,
+                    swear_count,
+                    text=message_text,
+                    bot_username=bot_username,
+                    bot_name=bot_name,
+                )
             context.job_queue.run_once(_run_msg_check, 1)
         except Exception as e:
             logger.warning("streak/achievement check failed: %s", e)
@@ -820,6 +837,21 @@ def main():
 
     # Неизвестные команды в группе
     async def _unknown_command(update, context):
+        user = update.effective_user
+        chat = update.effective_chat
+        msg = update.message
+        if user and not user.is_bot and chat and msg:
+            uname = user.first_name or user.username or "Участник"
+            try:
+                await check_unknown_command_achievement(
+                    context.bot,
+                    chat.id,
+                    user.id,
+                    uname,
+                    msg.text or "",
+                )
+            except Exception:
+                pass
         await update.message.reply_text("Сосунок я таких слов не знаю!")
 
     app.add_handler(MessageHandler(

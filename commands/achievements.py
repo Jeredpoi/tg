@@ -3,171 +3,122 @@
 # ==============================================================================
 
 import asyncio
+import datetime
 import logging
+import re
 from database import grant_achievement, get_user_achievements
 
 logger = logging.getLogger(__name__)
+_MSK = datetime.timezone(datetime.timedelta(hours=3))
+
 
 # ── Определения ачивок ────────────────────────────────────────────────────────
 
 ACHIEVEMENTS: dict[str, dict] = {
     # Сообщения
-    "first_msg":      {"icon": "🗣",  "name": "Первый шаг",         "desc": "Написал первое сообщение в чате"},
-    "msg_5":          {"icon": "👀",  "name": "Разогрев",           "desc": "5 сообщений"},
-    "msg_10":         {"icon": "💬",  "name": "Разговорчивый",      "desc": "10 сообщений"},
-    "msg_25":         {"icon": "📝",  "name": "На связи",           "desc": "25 сообщений"},
-    "msg_50":         {"icon": "📨",  "name": "Постоянный гость",   "desc": "50 сообщений"},
-    "msg_75":         {"icon": "🧩",  "name": "Свой в доску",       "desc": "75 сообщений"},
-    "msg_100":        {"icon": "📢",  "name": "Болтун",             "desc": "100 сообщений"},
-    "msg_150":        {"icon": "📮",  "name": "Поток текста",       "desc": "150 сообщений"},
-    "msg_250":        {"icon": "📡",  "name": "Эфир открыт",        "desc": "250 сообщений"},
-    "msg_400":        {"icon": "🎛",  "name": "Частота занята",     "desc": "400 сообщений"},
-    "msg_500":        {"icon": "📣",  "name": "Оратор",             "desc": "500 сообщений"},
-    "msg_750":        {"icon": "🎚",  "name": "Громкая связь",      "desc": "750 сообщений"},
-    "msg_1000":       {"icon": "🎙",  "name": "Легенда чата",       "desc": "1000 сообщений"},
-    "msg_1500":       {"icon": "🧠",  "name": "Фабрика мыслей",     "desc": "1500 сообщений"},
-    "msg_2500":       {"icon": "🏟",  "name": "Голос канала",       "desc": "2500 сообщений"},
-    "msg_4000":       {"icon": "🛸",  "name": "Орбита чата",        "desc": "4000 сообщений"},
-    "msg_5000":       {"icon": "🌋",  "name": "Поток сознания",     "desc": "5000 сообщений"},
-    "msg_7500":       {"icon": "🚀",  "name": "Сверхзвук",          "desc": "7500 сообщений"},
-    "msg_10000":      {"icon": "🛰",  "name": "Архитектор чата",    "desc": "10000 сообщений"},
-    "msg_15000":      {"icon": "🌠",  "name": "Космический шум",    "desc": "15000 сообщений"},
-    "msg_25000":      {"icon": "🏛",  "name": "Хранитель архива",   "desc": "25000 сообщений"},
-    "msg_50000":      {"icon": "👁",  "name": "Вечный онлайн",      "desc": "50000 сообщений"},
-    # Секретные по сообщениям/комбо
-    "secret_monk_1k": {"icon": "🕯",  "name": "???",                "desc": "Секретная ачивка за редкую дисциплину"},
-    "secret_zero_3k": {"icon": "🧊",  "name": "???",                "desc": "Секретная ачивка за невозможную чистоту"},
-    "secret_exact_2048_64": {"icon": "🔐", "name": "???",           "desc": "Секретная ачивка за точный баланс"},
-    "secret_7777_777": {"icon": "🎰", "name": "???",                "desc": "Секретная ачивка для любителей семёрок"},
-    "secret_chaos_4096_1024": {"icon": "🧬", "name": "???",         "desc": "Секретная ачивка за экстремальный режим"},
-    "secret_order_4096_0": {"icon": "⚪", "name": "???",            "desc": "Секретная ачивка за идеальную чистоту"},
-    "secret_31337_1337": {"icon": "👾", "name": "???",              "desc": "Секретная ачивка для избранных"},
-    "secret_9000_900": {"icon": "💿", "name": "???",                "desc": "Секретная ачивка за громкий баланс"},
-    "secret_pi_3141_271": {"icon": "π", "name": "???",              "desc": "Секретная ачивка математического клуба"},
-    "secret_binary_8192_256": {"icon": "💾", "name": "???",         "desc": "Секретная ачивка двоичного уровня"},
-    "secret_mirror_1221_122": {"icon": "🪞", "name": "???",         "desc": "Секретная ачивка зеркального счёта"},
-    "secret_msg_65535": {"icon": "📟", "name": "???",               "desc": "Секретная ачивка 16-битной легенды"},
+    "first_msg": {"icon": "🗣", "name": "Первый шаг", "desc": "Написал первое сообщение в чате"},
+    "msg_10": {"icon": "💬", "name": "Разговорчивый", "desc": "10 сообщений"},
+    "msg_25": {"icon": "📝", "name": "На связи", "desc": "25 сообщений"},
+    "msg_50": {"icon": "📨", "name": "Постоянный гость", "desc": "50 сообщений"},
+    "msg_100": {"icon": "📢", "name": "Болтун", "desc": "100 сообщений"},
+    "msg_250": {"icon": "📡", "name": "Эфир открыт", "desc": "250 сообщений"},
+    "msg_500": {"icon": "📣", "name": "Оратор", "desc": "500 сообщений"},
+    "msg_1000": {"icon": "🎙", "name": "Легенда чата", "desc": "1000 сообщений"},
+    "msg_2500": {"icon": "🏟", "name": "Голос канала", "desc": "2500 сообщений"},
+    "msg_5000": {"icon": "🌋", "name": "Поток сознания", "desc": "5000 сообщений"},
+    "msg_10000": {"icon": "🛰", "name": "Архитектор чата", "desc": "10000 сообщений"},
     # Маты
-    "first_swear":     {"icon": "🤬",  "name": "Первый мат",         "desc": "Написал первый мат"},
-    "swear_5":         {"icon": "🌶",  "name": "С перчиком",         "desc": "5 матов"},
-    "swear_10":        {"icon": "😤",  "name": "Сквернослов",        "desc": "10 матов"},
-    "swear_25":        {"icon": "🧨",  "name": "На взводе",          "desc": "25 матов"},
-    "swear_50":        {"icon": "💀",  "name": "Матерщинник",        "desc": "50 матов"},
-    "swear_75":        {"icon": "⚡",  "name": "Короткий фитиль",    "desc": "75 матов"},
-    "swear_100":       {"icon": "⚠️",  "name": "Ругатель",           "desc": "100 матов"},
-    "swear_150":       {"icon": "🪓",  "name": "Острый язык",        "desc": "150 матов"},
-    "swear_200":       {"icon": "☠️",  "name": "Отец матершины",     "desc": "200 матов"},
-    "swear_300":       {"icon": "💥",  "name": "Критический тон",    "desc": "300 матов"},
-    "swear_500":       {"icon": "🧱",  "name": "Без фильтра",        "desc": "500 матов"},
-    "swear_750":       {"icon": "🪖",  "name": "Штурмовик чата",     "desc": "750 матов"},
-    "swear_1000":      {"icon": "🩸",  "name": "Грубая сила",        "desc": "1000 матов"},
-    "swear_1500":      {"icon": "🧯",  "name": "Пожар в чате",       "desc": "1500 матов"},
-    "swear_2500":      {"icon": "🧨",  "name": "Разносчик бури",     "desc": "2500 матов"},
-    "swear_5000":      {"icon": "🌪",  "name": "Катастрофа речи",    "desc": "5000 матов"},
-    "secret_swear":    {"icon": "🕳",  "name": "???",                "desc": "Секретная ачивка за предельную резкость"},
+    "first_swear": {"icon": "🤬", "name": "Первый мат", "desc": "Написал первый мат"},
+    "swear_10": {"icon": "😤", "name": "Сквернослов", "desc": "10 матов"},
+    "swear_25": {"icon": "🧨", "name": "На взводе", "desc": "25 матов"},
+    "swear_50": {"icon": "💀", "name": "Матерщинник", "desc": "50 матов"},
+    "swear_100": {"icon": "⚠️", "name": "Ругатель", "desc": "100 матов"},
+    "swear_200": {"icon": "☠️", "name": "Отец матершины", "desc": "200 матов"},
+    "swear_500": {"icon": "🧱", "name": "Без фильтра", "desc": "500 матов"},
     # Стрик активности
-    "streak_3":      {"icon": "🔥",  "name": "На волне",            "desc": "3 дня подряд в чате"},
-    "streak_7":      {"icon": "⚡",  "name": "Завсегдатай",         "desc": "7 дней подряд в чате"},
-    "streak_14":     {"icon": "📆",  "name": "Двухнедельник",       "desc": "14 дней подряд в чате"},
-    "streak_21":     {"icon": "⏳",  "name": "Привычка",            "desc": "21 день подряд в чате"},
-    "streak_30":     {"icon": "🌟",  "name": "Верный",              "desc": "30 дней подряд в чате"},
-    "streak_45":     {"icon": "🧱",  "name": "Режим",               "desc": "45 дней подряд в чате"},
-    "streak_60":     {"icon": "🛡",  "name": "Несгибаемый",         "desc": "60 дней подряд в чате"},
-    "streak_90":     {"icon": "🗿",  "name": "Монолит",             "desc": "90 дней подряд в чате"},
-    "streak_120":    {"icon": "🏯",  "name": "Железный график",     "desc": "120 дней подряд в чате"},
-    "streak_180":    {"icon": "🧿",  "name": "Полгода без пропуска","desc": "180 дней подряд в чате"},
-    "streak_365":    {"icon": "🏆",  "name": "Календарь закрыт",    "desc": "365 дней подряд в чате"},
-    "secret_streak": {"icon": "🌌",  "name": "???",                 "desc": "Секретная ачивка за почти невозможный стрик"},
-    "secret_streak_256": {"icon": "🧠", "name": "???",              "desc": "Секретная ачивка за машинный ритм"},
-    "secret_streak_512": {"icon": "🛰", "name": "???",              "desc": "Секретная ачивка запредельной дисциплины"},
-    # Корона
-    "first_king": {"icon": "👑",  "name": "Первый трон",        "desc": "Стал королём дня впервые"},
-    "king_5":     {"icon": "👸",  "name": "Постоянный король",  "desc": "5 раз становился королём дня"},
-    "king_10":    {"icon": "🤴",  "name": "Династия",           "desc": "10 раз становился королём дня"},
-    "king_25":    {"icon": "🦁",  "name": "Император чата",     "desc": "25 раз становился королём дня"},
-    "secret_king":{"icon": "♛",  "name": "???",               "desc": "Секретная ачивка за абсолютное доминирование"},
-    "secret_king_13": {"icon": "🜲", "name": "???",               "desc": "Секретная ачивка за чёртову дюжину корон"},
-    "secret_king_42": {"icon": "🧿", "name": "???",               "desc": "Секретная ачивка главного ответа"},
+    "streak_3": {"icon": "🔥", "name": "На волне", "desc": "3 дня подряд в чате"},
+    "streak_7": {"icon": "⚡", "name": "Завсегдатай", "desc": "7 дней подряд в чате"},
+    "streak_14": {"icon": "📆", "name": "Двухнедельник", "desc": "14 дней подряд в чате"},
+    "streak_30": {"icon": "🌟", "name": "Верный", "desc": "30 дней подряд в чате"},
+    "streak_60": {"icon": "🛡", "name": "Несгибаемый", "desc": "60 дней подряд в чате"},
+    "streak_100": {"icon": "🏔", "name": "Железная дисциплина", "desc": "100 дней подряд в чате"},
+    # Секретные за фразы/упоминания
+    "secret_unknown_cmd": {"icon": "❓", "name": "Заклинатель белиберды", "desc": "Впервые написал неизвестную команду"},
+    "secret_call_dad": {"icon": "🫡", "name": "Папочка, ты тут?", "desc": "Упомянул бота и позвал папочку"},
+    "secret_respect_bot": {"icon": "🤝", "name": "Респект машине", "desc": "Похвалил бота в сообщении с упоминанием"},
+    "secret_signal_check": {"icon": "📡", "name": "Проверка связи", "desc": "Проверил связь с ботом по тегу"},
+    "secret_night_ping": {"icon": "🌙", "name": "Ночной дозор", "desc": "Позвал бота ночью"},
+    "secret_caps_ping": {"icon": "🔊", "name": "Громкий вызов", "desc": "Позвал бота КАПСОМ"},
 }
 
 # Пороги по сообщениям: (порог, achievement_id)
 _MSG_THRESHOLDS = [
-    (1, "first_msg"), (5, "msg_5"), (10, "msg_10"),
-    (25, "msg_25"), (50, "msg_50"), (75, "msg_75"),
-    (100, "msg_100"), (150, "msg_150"), (250, "msg_250"),
-    (400, "msg_400"), (500, "msg_500"), (750, "msg_750"),
-    (1000, "msg_1000"), (1500, "msg_1500"), (2500, "msg_2500"),
-    (4000, "msg_4000"), (5000, "msg_5000"), (7500, "msg_7500"),
-    (10000, "msg_10000"), (15000, "msg_15000"),
-    (25000, "msg_25000"), (50000, "msg_50000"),
+    (1, "first_msg"), (10, "msg_10"), (25, "msg_25"),
+    (50, "msg_50"), (100, "msg_100"), (250, "msg_250"),
+    (500, "msg_500"), (1000, "msg_1000"), (2500, "msg_2500"),
+    (5000, "msg_5000"), (10000, "msg_10000"),
 ]
 
 # Пороги по матам
 _SWEAR_THRESHOLDS = [
-    (1, "first_swear"), (5, "swear_5"), (10, "swear_10"),
-    (25, "swear_25"), (50, "swear_50"), (75, "swear_75"),
-    (100, "swear_100"), (150, "swear_150"), (200, "swear_200"),
-    (300, "swear_300"), (500, "swear_500"), (750, "swear_750"),
-    (1000, "swear_1000"), (1500, "swear_1500"), (2500, "swear_2500"),
-    (5000, "swear_5000"),
+    (1, "first_swear"), (10, "swear_10"), (25, "swear_25"),
+    (50, "swear_50"), (100, "swear_100"), (200, "swear_200"),
+    (500, "swear_500"),
 ]
 
 # Пороги по стрику
 _STREAK_THRESHOLDS = [
     (3, "streak_3"), (7, "streak_7"), (14, "streak_14"),
-    (21, "streak_21"), (30, "streak_30"), (45, "streak_45"),
-    (60, "streak_60"), (90, "streak_90"), (120, "streak_120"),
-    (180, "streak_180"), (365, "streak_365"),
+    (30, "streak_30"), (60, "streak_60"), (100, "streak_100"),
 ]
 
 
-def _special_message_achievements(msg_count: int, swear_count: int) -> list[str]:
-    """Секретные достижения с жёсткими условиями."""
-    earned: list[str] = []
+def _normalize_text(text: str) -> str:
+    return (text or "").lower().replace("ё", "е").strip()
 
-    # 1000+ сообщений и почти без матов
-    if msg_count >= 1000 and swear_count <= 1:
-        earned.append("secret_monk_1k")
 
-    # 3000+ сообщений вообще без матов
-    if msg_count >= 3000 and swear_count == 0:
-        earned.append("secret_zero_3k")
+def _is_mention(text_norm: str, bot_username: str, bot_name: str) -> bool:
+    if not text_norm:
+        return False
+    uname = (bot_username or "").strip().lower()
+    bname = (bot_name or "").strip().lower()
+    return bool((uname and f"@{uname}" in text_norm) or (bname and bname in text_norm))
 
-    # Точный баланс
-    if msg_count >= 2048 and swear_count == 64:
-        earned.append("secret_exact_2048_64")
 
-    # Режим "семёрок"
-    if msg_count >= 7777 and swear_count == 777:
-        earned.append("secret_7777_777")
+def _phrase_secret_ids(text: str, bot_username: str, bot_name: str) -> list[str]:
+    text_norm = _normalize_text(text)
+    if not text_norm:
+        return []
 
-    # Экстремальный хаос
-    if msg_count >= 4096 and swear_count >= 1024:
-        earned.append("secret_chaos_4096_1024")
+    ids: list[str] = []
+    mention = _is_mention(text_norm, bot_username, bot_name)
 
-    # Идеальный порядок: много сообщений и абсолютный ноль матов
-    if msg_count >= 4096 and swear_count == 0:
-        earned.append("secret_order_4096_0")
+    if mention and "папочк" in text_norm:
+        ids.append("secret_call_dad")
 
-    # Хардкорные числовые комбо
-    if msg_count >= 31337 and swear_count == 1337:
-        earned.append("secret_31337_1337")
-    if msg_count >= 9000 and swear_count == 900:
-        earned.append("secret_9000_900")
-    if msg_count >= 3141 and swear_count == 271:
-        earned.append("secret_pi_3141_271")
-    if msg_count >= 8192 and swear_count == 256:
-        earned.append("secret_binary_8192_256")
-    if msg_count >= 1221 and swear_count == 122:
-        earned.append("secret_mirror_1221_122")
-    if msg_count >= 65535:
-        earned.append("secret_msg_65535")
+    if mention and (
+        "бот лучший" in text_norm
+        or "скаут лучший" in text_norm
+        or "респект боту" in text_norm
+    ):
+        ids.append("secret_respect_bot")
 
-    # Старый секрет по грубости речи
-    if swear_count >= 1000:
-        earned.append("secret_swear")
+    if mention and (
+        "проверка связи" in text_norm
+        or "ты жив" in text_norm
+        or "на связи?" in text_norm
+    ):
+        ids.append("secret_signal_check")
 
-    return earned
+    now_hour = datetime.datetime.now(_MSK).hour
+    if mention and now_hour < 6:
+        ids.append("secret_night_ping")
+
+    letters_only = re.sub(r"[^A-Za-zА-Яа-яЁё]", "", text or "")
+    if mention and len(letters_only) >= 8 and letters_only.isupper():
+        ids.append("secret_caps_ping")
+
+    return ids
 
 
 # ── Выдача и анонс ────────────────────────────────────────────────────────────
@@ -183,34 +134,40 @@ async def _announce(bot, chat_id: int, user_name: str, ach_id: str) -> None:
     )
     try:
         msg = await bot.send_message(chat_id=chat_id, text=text, parse_mode="HTML")
-        # Автоудаление через 10 секунд — не засоряем чат
+
         async def _delete():
             await asyncio.sleep(10)
             try:
                 await bot.delete_message(chat_id, msg.message_id)
             except Exception:
                 pass
+
         asyncio.create_task(_delete())
     except Exception as e:
         logger.warning("achievements: не удалось отправить анонс %s: %s", ach_id, e)
 
 
 async def check_message_achievements(
-    bot, chat_id: int, user_id: int, user_name: str,
-    msg_count: int, swear_count: int,
+    bot,
+    chat_id: int,
+    user_id: int,
+    user_name: str,
+    msg_count: int,
+    swear_count: int,
+    text: str = "",
+    bot_username: str = "",
+    bot_name: str = "",
 ) -> None:
-    """Проверяет ачивки по сообщениям и матам после каждого сообщения."""
+    """Проверяет ачивки по сообщениям, матам и секретным фразам."""
     for threshold, ach_id in _MSG_THRESHOLDS:
-        if msg_count >= threshold:
-            if grant_achievement(user_id, chat_id, ach_id):
-                await _announce(bot, chat_id, user_name, ach_id)
+        if msg_count >= threshold and grant_achievement(user_id, chat_id, ach_id):
+            await _announce(bot, chat_id, user_name, ach_id)
 
     for threshold, ach_id in _SWEAR_THRESHOLDS:
-        if swear_count >= threshold:
-            if grant_achievement(user_id, chat_id, ach_id):
-                await _announce(bot, chat_id, user_name, ach_id)
+        if swear_count >= threshold and grant_achievement(user_id, chat_id, ach_id):
+            await _announce(bot, chat_id, user_name, ach_id)
 
-    for ach_id in _special_message_achievements(msg_count, swear_count):
+    for ach_id in _phrase_secret_ids(text, bot_username, bot_name):
         if grant_achievement(user_id, chat_id, ach_id):
             await _announce(bot, chat_id, user_name, ach_id)
 
@@ -220,38 +177,30 @@ async def check_streak_achievements(
 ) -> None:
     """Проверяет ачивки по стрику активности."""
     for threshold, ach_id in _STREAK_THRESHOLDS:
-        if streak >= threshold:
-            if grant_achievement(user_id, chat_id, ach_id):
-                await _announce(bot, chat_id, user_name, ach_id)
-
-    if streak >= 180:
-        if grant_achievement(user_id, chat_id, "secret_streak"):
-            await _announce(bot, chat_id, user_name, "secret_streak")
-    if streak >= 256:
-        if grant_achievement(user_id, chat_id, "secret_streak_256"):
-            await _announce(bot, chat_id, user_name, "secret_streak_256")
-    if streak >= 512:
-        if grant_achievement(user_id, chat_id, "secret_streak_512"):
-            await _announce(bot, chat_id, user_name, "secret_streak_512")
+        if streak >= threshold and grant_achievement(user_id, chat_id, ach_id):
+            await _announce(bot, chat_id, user_name, ach_id)
 
 
-async def check_king_achievements(
-    bot, chat_id: int, user_id: int, user_name: str, king_count: int,
+async def check_unknown_command_achievement(
+    bot,
+    chat_id: int,
+    user_id: int,
+    user_name: str,
+    command_text: str,
 ) -> None:
-    """Проверяет ачивки за корону (вызывается при назначении короля)."""
-    thresholds = [
-        (1, "first_king"),
-        (5, "king_5"),
-        (10, "king_10"),
-        (25, "king_25"),
-        (50, "secret_king"),
-        (13, "secret_king_13"),
-        (42, "secret_king_42"),
-    ]
-    for threshold, ach_id in thresholds:
-        if king_count >= threshold:
-            if grant_achievement(user_id, chat_id, ach_id):
-                await _announce(bot, chat_id, user_name, ach_id)
+    """Секретная ачивка за неизвестную команду (/какая-то_белиберда)."""
+    cmd = (command_text or "").strip()
+    if not cmd.startswith("/"):
+        return
+    if len(cmd) < 3:
+        return
+    if grant_achievement(user_id, chat_id, "secret_unknown_cmd"):
+        await _announce(bot, chat_id, user_name, "secret_unknown_cmd")
+
+
+async def check_king_achievements(*args, **kwargs) -> None:
+    """Устарело: механика короля отключена."""
+    return
 
 
 # ── Форматирование для /stats ─────────────────────────────────────────────────
