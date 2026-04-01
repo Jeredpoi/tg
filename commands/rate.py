@@ -8,8 +8,6 @@ import os
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
 from database import save_photo, add_vote, get_photo, get_photo_by_key, close_photo, track_bot_message
-import config
-from config import VOTE_DURATION, WEBAPP_URL
 from chat_config import get_setting
 from chat_config import get_main_chat_id
 
@@ -262,9 +260,11 @@ async def _close_rate_voting(context) -> None:
 
     try:
         bot_username = context.bot.username
-        gallery_btn = InlineKeyboardMarkup([[
-            InlineKeyboardButton("🖼 Галерея", url=f"https://t.me/{bot_username}?start=gallery_{chat_id}")
-        ]])
+        gallery_btn = None
+        if bot_username:
+            gallery_btn = InlineKeyboardMarkup([[
+                InlineKeyboardButton("🖼 Галерея", url=f"https://t.me/{bot_username}?start=gallery_{chat_id}")
+            ]])
         await context.bot.edit_message_caption(
             chat_id=chat_id,
             message_id=message_id,
@@ -280,10 +280,10 @@ async def _close_rate_voting(context) -> None:
         try:
             bot_username = context.bot.username
             avg_text = f"{avg}" if votes > 0 else "—"
-            kb = InlineKeyboardMarkup([[
-                InlineKeyboardButton("✅ Закрыть", callback_data="dismiss"),
-                InlineKeyboardButton("🖼 Галерея", url=f"https://t.me/{bot_username}?start=gallery_{chat_id}"),
-            ]])
+            row = [InlineKeyboardButton("✅ Закрыть", callback_data="dismiss")]
+            if bot_username:
+                row.append(InlineKeyboardButton("🖼 Галерея", url=f"https://t.me/{bot_username}?start=gallery_{chat_id}"))
+            kb = InlineKeyboardMarkup([row])
             await context.bot.send_message(
                 chat_id=author_id,
                 text=(
@@ -305,6 +305,13 @@ async def rate_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     # ── Запрос подписи ────────────────────────────────────────────────────
     if data.startswith("comment_ask_"):
         key = data[12:]
+        if key not in _PENDING_PHOTOS:
+            await query.answer("⏰ Запрос устарел.", show_alert=True)
+            try:
+                await query.edit_message_text("❌ Фото не найдено. Отправь фото заново.")
+            except Exception:
+                pass
+            return
         _COMMENT_WAITING[query.from_user.id] = key
         await query.answer()
         await query.edit_message_text("✏️ Отправь текст подписи:")
@@ -313,6 +320,13 @@ async def rate_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     # ── Пропуск подписи ───────────────────────────────────────────────────
     if data.startswith("comment_skip_"):
         key = data[13:]
+        if key not in _PENDING_PHOTOS:
+            await query.answer("⏰ Запрос устарел.", show_alert=True)
+            try:
+                await query.edit_message_text("❌ Фото не найдено. Отправь фото заново.")
+            except Exception:
+                pass
+            return
         await query.answer()
         await query.edit_message_text(
             "🤔 Скрыть тебя как автора в группе?",
@@ -337,8 +351,8 @@ async def rate_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
         photo_id = photo_row["photo_id"]
 
-        # Используем основную группу; если не задана — fallback на config.CHAT_ID
-        target_chat_id = get_main_chat_id() or config.CHAT_ID
+        # Используем только основную группу из ролей чатов
+        target_chat_id = get_main_chat_id()
         if not target_chat_id:
             await query.answer()
             await query.edit_message_text(
@@ -394,7 +408,7 @@ async def rate_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
             await query.answer()
             await query.edit_message_text(
                 f"❌ Не удалось отправить {media_word} в группу.\n"
-                f"CHAT_ID: <code>{target_chat_id}</code>\n"
+                f"ID чата: <code>{target_chat_id}</code>\n"
                 f"Ошибка: <code>{_html.escape(str(e))}</code>\n\n"
                 f"Проверь: бот добавлен в группу? Напиши /debug в группе.",
                 parse_mode="HTML",
@@ -479,9 +493,11 @@ async def rate_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
                 caption = _build_active_caption(photo_row, key)
                 caption += f"\n\n🏁 Голосование завершено!\n⭐ Средняя оценка: {avg} ({votes} голос(ов))"
                 bot_username = context.bot.username
-                gallery_btn = InlineKeyboardMarkup([[
-                    InlineKeyboardButton("🖼 Галерея", url=f"https://t.me/{bot_username}?start=gallery_{query.message.chat_id}")
-                ]])
+                gallery_btn = None
+                if bot_username:
+                    gallery_btn = InlineKeyboardMarkup([[
+                        InlineKeyboardButton("🖼 Галерея", url=f"https://t.me/{bot_username}?start=gallery_{query.message.chat_id}")
+                    ]])
                 await query.edit_message_caption(caption=caption, reply_markup=gallery_btn)
             except Exception:
                 pass

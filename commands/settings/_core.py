@@ -111,7 +111,10 @@ async def _build_main_text(context) -> str:
     autodel_line = (
         f"/help {_fmt_del('autodel_help')} · "
         f"галерея {_fmt_del('autodel_gallery')} · "
-        f"/ownerhelp {_fmt_del('autodel_ownerhelp')}"
+        f"/ownerhelp {_fmt_del('autodel_ownerhelp')} · "
+        f"/top {_fmt_del('autodel_top')} · "
+        f"/stats {_fmt_del('autodel_stats')} · "
+        f"/debug {_fmt_del('autodel_debug')}"
     )
 
     # Кастомный контент
@@ -445,6 +448,24 @@ async def settings_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         value = int(data[9:])
         set_setting("autodel_ownerhelp", value)
         await query.answer("выкл" if value == 0 else f"/ownerhelp: {value} сек.")
+        await _show_autodel_settings(query)
+
+    elif data.startswith("stg:adt:"):
+        value = int(data[8:])
+        set_setting("autodel_top", value)
+        await query.answer("выкл" if value == 0 else f"/top: {value} сек.")
+        await _show_autodel_settings(query)
+
+    elif data.startswith("stg:ads:"):
+        value = int(data[8:])
+        set_setting("autodel_stats", value)
+        await query.answer("выкл" if value == 0 else f"/stats: {value} сек.")
+        await _show_autodel_settings(query)
+
+    elif data.startswith("stg:add:"):
+        value = int(data[8:])
+        set_setting("autodel_debug", value)
+        await query.answer("выкл" if value == 0 else f"/debug: {value} сек.")
         await _show_autodel_settings(query)
 
     # ── Управление командами ──
