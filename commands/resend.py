@@ -25,8 +25,8 @@ async def resend_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     if update.effective_user.id != config.OWNER_ID:
         return
 
-    # Определяем целевой чат: аргумент → основная группа → config.CHAT_ID
-    target_chat_id = get_main_chat_id() or config.CHAT_ID
+    # Определяем целевой чат: аргумент → основная группа
+    target_chat_id = get_main_chat_id()
     if context.args:
         try:
             target_chat_id = int(context.args[0])
@@ -35,7 +35,7 @@ async def resend_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
     if not target_chat_id:
         await update.message.reply_text(
-            "❌ CHAT_ID не настроен.\n"
+            "❌ Основная группа не настроена.\n"
             "Укажи ID чата вручную: <code>/resend -100xxxxxxxxxx</code>",
             parse_mode="HTML",
         )
@@ -101,7 +101,6 @@ async def handle_resend_message(update: Update, context: ContextTypes.DEFAULT_TY
         sent = await context.bot.send_message(
             chat_id=target_chat_id,
             text=text,
-            parse_mode="HTML",
         )
         track_bot_message(target_chat_id, sent.message_id, text[:80])
         logger.info("resend: отправлено в %s: %s", target_chat_id, text[:60])

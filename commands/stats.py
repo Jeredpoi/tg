@@ -7,6 +7,7 @@ from telegram import Update
 from telegram.ext import ContextTypes
 from database import get_user_stats, get_streak
 from commands.achievements import format_achievements
+from chat_config import get_setting
 
 
 async def stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -57,4 +58,19 @@ async def stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         lines.append("")
         lines.append(ach_line)
 
-    await update.message.reply_text("\n".join(lines), parse_mode="HTML")
+    msg = await update.message.reply_text("\n".join(lines), parse_mode="HTML")
+
+    delay = int(get_setting("autodel_stats") or 0)
+    if delay and update.effective_chat.type in ("group", "supergroup"):
+        chat_id = update.effective_chat.id
+        cmd_mid = update.message.message_id
+        bot_mid = msg.message_id
+
+        async def _del(ctx):
+            for mid in (cmd_mid, bot_mid):
+                try:
+                    await ctx.bot.delete_message(chat_id, mid)
+                except Exception:
+                    pass
+
+        context.job_queue.run_once(_del, delay)

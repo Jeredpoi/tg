@@ -7,6 +7,7 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.error import BadRequest
 from telegram.ext import ContextTypes
 from database import get_top_messages, get_top_swears, get_gallery, track_bot_message
+from chat_config import get_setting
 
 MEDALS = ["🥇", "🥈", "🥉"]
 
@@ -40,9 +41,11 @@ def _build_rating_text(rows: list) -> str:
         return "🏆 <b>Рейтинг /rate</b>\n\nПока нет оценённых фото или видео 😴"
     lines = ["🏆 <b>Рейтинг /rate</b>\n", "<b>Топ по средней оценке:</b>\n"]
     for i, row in enumerate(rows):
-        avg = round(row["total_score"] / row["vote_count"], 1) if row["vote_count"] > 0 else 0
+        vote_count = int((row["vote_count"] or 0))
+        total_score = float((row["total_score"] or 0))
+        avg = round(total_score / vote_count, 1) if vote_count > 0 else 0
         author = "Аноним" if row["anonymous"] else html.escape(row["author_name"] or "Аноним")
-        lines.append(f"{_medal(i)} {author} — ⭐ {avg} ({row['vote_count']} голос(ов))")
+        lines.append(f"{_medal(i)} {author} — ⭐ {avg} ({vote_count} голос(ов))")
     return "\n".join(lines)
 
 
@@ -66,6 +69,20 @@ async def top_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     keyboard = _get_keyboard("messages")
     msg = await update.message.reply_text(text, parse_mode="HTML", reply_markup=keyboard)
     track_bot_message(chat_id, msg.message_id, "📊 Топ участников")
+
+    delay = int(get_setting("autodel_top") or 0)
+    if delay:
+        cmd_mid = update.message.message_id
+        bot_mid = msg.message_id
+
+        async def _del(ctx):
+            for mid in (cmd_mid, bot_mid):
+                try:
+                    await ctx.bot.delete_message(chat_id, mid)
+                except Exception:
+                    pass
+
+        context.job_queue.run_once(_del, delay)
 
 
 async def top_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
