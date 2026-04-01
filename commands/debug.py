@@ -6,11 +6,10 @@ import asyncio
 import os
 import sqlite3
 import aiohttp
-from telegram import Update
+from telegram import Update, BotCommandScopeAllGroupChats
 from telegram.ext import ContextTypes
-from config import DATABASE_PATH, WEBAPP_URL
+from config import DATABASE_PATH, CHAT_ID, WEBAPP_URL, OWNER_ID
 from database import get_connection
-from chat_config import get_setup_chats, get_main_chat_id, get_setting
 
 
 async def _check_db() -> tuple[bool, str]:
@@ -63,6 +62,16 @@ def _get_chat_stats(chat_id: int) -> dict:
             conn.close()
 
 
+def _get_all_setup_chats() -> list[int]:
+    try:
+        import json, os as _os
+        path = _os.path.join(_os.path.dirname(__file__), "..", "setup_chats.json")
+        with open(path) as f:
+            return json.load(f)
+    except Exception:
+        return []
+
+
 async def debug_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     message = update.message
     chat    = update.effective_chat
@@ -94,17 +103,12 @@ async def debug_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     stats = _get_chat_stats(chat.id)
 
     # Все инициализированные чаты
-    setup_chats = sorted(get_setup_chats())
+    setup_chats = _get_all_setup_chats()
     setup_chats_str = ", ".join(f"<code>{c}</code>" for c in setup_chats) or "нет"
 
     # Является ли этот чат целевым для /rate
-    main_chat_id = get_main_chat_id()
-    if not main_chat_id:
-        rate_target = "⚠️ Основная группа не назначена"
-    elif main_chat_id == chat.id:
-        rate_target = "✅ Да (сюда идут фото из /rate)"
-    else:
-        rate_target = f"❌ Нет → <code>{main_chat_id}</code>"
+    import config as cfg
+    rate_target = "✅ Да (сюда идут фото из /rate)" if cfg.CHAT_ID == chat.id else f"❌ Нет → <code>{cfg.CHAT_ID}</code>"
 
     # Размер БД на диске
     try:
@@ -115,6 +119,8 @@ async def debug_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
     # Команды бота
     bot_commands = await context.bot.get_my_commands()
+    if not bot_commands:
+        bot_commands = await context.bot.get_my_commands(scope=BotCommandScopeAllGroupChats())
     cmds_text = "\n".join(f"  /{cmd.command} — {cmd.description}" for cmd in bot_commands)
 
     import html as _html
@@ -156,17 +162,19 @@ async def debug_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
     msg = await message.reply_text(text, parse_mode="HTML")
 
-    delay = int(get_setting("autodel_debug") or 20)
-    if delay:
+    if chat.type == "private" and user.id == OWNER_ID:
+        # Владелец в личке — закрепляем
+        try:
+            await context.bot.pin_chat_message(chat.id, msg.message_id, disable_notification=True)
+        except Exception:
+            pass
+    else:
+        # В группе — авто-удаление через 10 секунд
         cid = chat.id
-        cmd_mid = message.message_id
-        info_mid = msg.message_id
-
+        mid = msg.message_id
         async def _del_debug(ctx):
-            for mid in (cmd_mid, info_mid):
-                try:
-                    await ctx.bot.delete_message(cid, mid)
-                except Exception:
-                    pass
-
-        context.job_queue.run_once(_del_debug, delay)
+            try:
+                await ctx.bot.delete_message(cid, mid)
+            except Exception:
+                pass
+        context.job_queue.run_once(_del_debug, 10)

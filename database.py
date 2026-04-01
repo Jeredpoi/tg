@@ -187,12 +187,13 @@ def grant_achievement(user_id: int, chat_id: int, achievement_id: str) -> bool:
     """Выдаёт ачивку. Возвращает True если выдана впервые (не дубль)."""
     conn = get_connection()
     try:
-        cur = conn.execute("""
+        conn.execute("""
             INSERT OR IGNORE INTO achievements (user_id, chat_id, achievement_id, earned_at)
             VALUES (?, ?, ?, ?)
         """, (user_id, chat_id, achievement_id, datetime.datetime.now(_MSK).isoformat()))
+        changed = conn.total_changes
         conn.commit()
-        return cur.rowcount > 0
+        return changed > 0
     finally:
         conn.close()
 

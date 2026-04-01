@@ -197,12 +197,8 @@ async def delmsg_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             await query.answer("❌ Неверный номер страницы.", show_alert=True)
             return
 
-        total = get_all_bot_messages_count()
-        max_page = max((total - 1) // PAGE_SIZE, 0) if total else 0
-        if page > max_page:
-            page = max_page
-
         rows = get_all_bot_messages_recent(offset=page * PAGE_SIZE, limit=PAGE_SIZE)
+        total = get_all_bot_messages_count()
 
         if not rows:
             await query.answer("Больше нет сообщений.", show_alert=True)

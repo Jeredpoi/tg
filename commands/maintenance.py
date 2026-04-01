@@ -5,21 +5,17 @@
 from telegram import Update
 from telegram.ext import ContextTypes
 from config import OWNER_ID
-from threading import RLock
 
 _MAINTENANCE = False
-_MAINTENANCE_LOCK = RLock()
 
 
 def is_maintenance() -> bool:
-    with _MAINTENANCE_LOCK:
-        return _MAINTENANCE
+    return _MAINTENANCE
 
 
 def set_maintenance(value: bool) -> None:
     global _MAINTENANCE
-    with _MAINTENANCE_LOCK:
-        _MAINTENANCE = value
+    _MAINTENANCE = value
 
 
 async def maintenance_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -36,7 +32,7 @@ async def maintenance_command(update: Update, context: ContextTypes.DEFAULT_TYPE
 
     args = context.args
     if not args or args[0].lower() not in ("on", "off"):
-        status = "🔴 включён" if is_maintenance() else "🟢 выключен"
+        status = "🔴 включён" if _MAINTENANCE else "🟢 выключен"
         await update.message.reply_text(
             f"🔧 <b>Режим обслуживания</b>\n\n"
             f"Статус: {status}\n\n"
