@@ -40,6 +40,13 @@ ACHIEVEMENTS: dict[str, dict] = {
     "secret_exact_2048_64": {"icon": "🔐", "name": "???",           "desc": "Секретная ачивка за точный баланс"},
     "secret_7777_777": {"icon": "🎰", "name": "???",                "desc": "Секретная ачивка для любителей семёрок"},
     "secret_chaos_4096_1024": {"icon": "🧬", "name": "???",         "desc": "Секретная ачивка за экстремальный режим"},
+    "secret_order_4096_0": {"icon": "⚪", "name": "???",            "desc": "Секретная ачивка за идеальную чистоту"},
+    "secret_31337_1337": {"icon": "👾", "name": "???",              "desc": "Секретная ачивка для избранных"},
+    "secret_9000_900": {"icon": "💿", "name": "???",                "desc": "Секретная ачивка за громкий баланс"},
+    "secret_pi_3141_271": {"icon": "π", "name": "???",              "desc": "Секретная ачивка математического клуба"},
+    "secret_binary_8192_256": {"icon": "💾", "name": "???",         "desc": "Секретная ачивка двоичного уровня"},
+    "secret_mirror_1221_122": {"icon": "🪞", "name": "???",         "desc": "Секретная ачивка зеркального счёта"},
+    "secret_msg_65535": {"icon": "📟", "name": "???",               "desc": "Секретная ачивка 16-битной легенды"},
     # Маты
     "first_swear":     {"icon": "🤬",  "name": "Первый мат",         "desc": "Написал первый мат"},
     "swear_5":         {"icon": "🌶",  "name": "С перчиком",         "desc": "5 матов"},
@@ -71,12 +78,16 @@ ACHIEVEMENTS: dict[str, dict] = {
     "streak_180":    {"icon": "🧿",  "name": "Полгода без пропуска","desc": "180 дней подряд в чате"},
     "streak_365":    {"icon": "🏆",  "name": "Календарь закрыт",    "desc": "365 дней подряд в чате"},
     "secret_streak": {"icon": "🌌",  "name": "???",                 "desc": "Секретная ачивка за почти невозможный стрик"},
+    "secret_streak_256": {"icon": "🧠", "name": "???",              "desc": "Секретная ачивка за машинный ритм"},
+    "secret_streak_512": {"icon": "🛰", "name": "???",              "desc": "Секретная ачивка запредельной дисциплины"},
     # Корона
     "first_king": {"icon": "👑",  "name": "Первый трон",        "desc": "Стал королём дня впервые"},
     "king_5":     {"icon": "👸",  "name": "Постоянный король",  "desc": "5 раз становился королём дня"},
     "king_10":    {"icon": "🤴",  "name": "Династия",           "desc": "10 раз становился королём дня"},
     "king_25":    {"icon": "🦁",  "name": "Император чата",     "desc": "25 раз становился королём дня"},
     "secret_king":{"icon": "♛",  "name": "???",               "desc": "Секретная ачивка за абсолютное доминирование"},
+    "secret_king_13": {"icon": "🜲", "name": "???",               "desc": "Секретная ачивка за чёртову дюжину корон"},
+    "secret_king_42": {"icon": "🧿", "name": "???",               "desc": "Секретная ачивка главного ответа"},
 }
 
 # Пороги по сообщениям: (порог, achievement_id)
@@ -133,6 +144,24 @@ def _special_message_achievements(msg_count: int, swear_count: int) -> list[str]
     # Экстремальный хаос
     if msg_count >= 4096 and swear_count >= 1024:
         earned.append("secret_chaos_4096_1024")
+
+    # Идеальный порядок: много сообщений и абсолютный ноль матов
+    if msg_count >= 4096 and swear_count == 0:
+        earned.append("secret_order_4096_0")
+
+    # Хардкорные числовые комбо
+    if msg_count >= 31337 and swear_count == 1337:
+        earned.append("secret_31337_1337")
+    if msg_count >= 9000 and swear_count == 900:
+        earned.append("secret_9000_900")
+    if msg_count >= 3141 and swear_count == 271:
+        earned.append("secret_pi_3141_271")
+    if msg_count >= 8192 and swear_count == 256:
+        earned.append("secret_binary_8192_256")
+    if msg_count >= 1221 and swear_count == 122:
+        earned.append("secret_mirror_1221_122")
+    if msg_count >= 65535:
+        earned.append("secret_msg_65535")
 
     # Старый секрет по грубости речи
     if swear_count >= 1000:
@@ -198,6 +227,12 @@ async def check_streak_achievements(
     if streak >= 180:
         if grant_achievement(user_id, chat_id, "secret_streak"):
             await _announce(bot, chat_id, user_name, "secret_streak")
+    if streak >= 256:
+        if grant_achievement(user_id, chat_id, "secret_streak_256"):
+            await _announce(bot, chat_id, user_name, "secret_streak_256")
+    if streak >= 512:
+        if grant_achievement(user_id, chat_id, "secret_streak_512"):
+            await _announce(bot, chat_id, user_name, "secret_streak_512")
 
 
 async def check_king_achievements(
@@ -210,6 +245,8 @@ async def check_king_achievements(
         (10, "king_10"),
         (25, "king_25"),
         (50, "secret_king"),
+        (13, "secret_king_13"),
+        (42, "secret_king_42"),
     ]
     for threshold, ach_id in thresholds:
         if king_count >= threshold:
