@@ -42,8 +42,9 @@ def _pct(earned: int, total: int) -> str:
     return f"{round(earned / total * 100)}%"
 
 
-def _build_near_text(user_id: int, src_chat_id: int, user_name: str = "") -> str:
-    counts = get_category_counts(user_id, src_chat_id)
+def _build_near_text(user_id: int, src_chat_id: int, user_name: str = "", counts: dict | None = None) -> str:
+    if counts is None:
+        counts = get_category_counts(user_id, src_chat_id)
     items  = get_user_close_achievements(user_id, src_chat_id)
 
     name_str = f" · {user_name}" if user_name else ""
@@ -60,7 +61,13 @@ def _build_near_text(user_id: int, src_chat_id: int, user_name: str = "") -> str
     section = f"\n{sep}\n🎯 <b>Ты близко</b>\n{sep}"
 
     if not items:
-        body = "\n\n<i>Нет данных — начни использовать бота!</i>"
+        body = (
+            "\n\n<i>Пока нечего отслеживать.</i>\n\n"
+            "С чего начать:\n"
+            "💬 Напиши первые сообщения в чате\n"
+            "🎲 Попробуй /dice или /anon\n"
+            "📸 Загрузи фото через /rate"
+        )
     else:
         lines = []
         for item in items:
@@ -81,9 +88,13 @@ def _build_page_text(
     user_id: int, src_chat_id: int,
     category: str, page: int,
     user_name: str = "",
+    counts: dict | None = None,
+    data: dict | None = None,
 ) -> str:
-    data    = get_achievements_page(user_id, src_chat_id, category, page, _PER_PAGE)
-    counts  = get_category_counts(user_id, src_chat_id)
+    if data is None:
+        data = get_achievements_page(user_id, src_chat_id, category, page, _PER_PAGE)
+    if counts is None:
+        counts = get_category_counts(user_id, src_chat_id)
     items   = data["items"]
     cur     = data["page"]
     total_p = data["total_pages"]
@@ -195,7 +206,7 @@ async def achievements_command(update: Update, context: ContextTypes.DEFAULT_TYP
 
     # ── В группе — показываем подсказку с кнопкой в личку ─────────────────────
     if in_group:
-        bot_username = (await context.bot.get_me()).username
+        bot_username = context.bot.username
         # Embed group chat_id in the deep link so private menu shows correct achievements
         bot_msg = await context.bot.send_message(
             chat_id=chat.id,
@@ -254,7 +265,7 @@ async def _send_achievements_menu(
 
     counts = get_category_counts(user_id, src_chat_id)
     data   = get_achievements_page(user_id, src_chat_id, category, page, _PER_PAGE)
-    text   = _build_page_text(user_id, src_chat_id, category, page, user_name)
+    text   = _build_page_text(user_id, src_chat_id, category, page, user_name, counts=counts, data=data)
     kb     = _build_keyboard(category, page, data["total_pages"], counts, src_chat_id)
 
     await context.bot.send_message(
@@ -301,7 +312,7 @@ async def achievements_callback(update: Update, context: ContextTypes.DEFAULT_TY
 
     # ── «Ты близко» — специальная вкладка ────────────────────────────────────
     if category == CAT_NEAR:
-        text = _build_near_text(user.id, src_chat_id, user_name)
+        text = _build_near_text(user.id, src_chat_id, user_name, counts=counts)
         kb   = _build_keyboard(CAT_NEAR, 0, 1, counts, src_chat_id)
         try:
             await query.edit_message_text(text=text, parse_mode="HTML", reply_markup=kb)
@@ -311,7 +322,7 @@ async def achievements_callback(update: Update, context: ContextTypes.DEFAULT_TY
 
     # ── Обычная категория ────────────────────────────────────────────────────
     data = get_achievements_page(user.id, src_chat_id, category, page, _PER_PAGE)
-    text = _build_page_text(user.id, src_chat_id, category, page, user_name)
+    text = _build_page_text(user.id, src_chat_id, category, page, user_name, counts=counts, data=data)
     kb   = _build_keyboard(category, data["page"], data["total_pages"], counts, src_chat_id)
 
     try:

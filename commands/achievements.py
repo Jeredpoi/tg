@@ -166,7 +166,7 @@ ACHIEVEMENTS: dict[str, dict] = {
         "hint": "Тебя оценили.", "cat": CAT_HARD,
     },
     "streak_14": {
-        "icon": "⚡", "name": "Две недели",
+        "icon": "🔆", "name": "Две недели",
         "desc": "14 дней подряд в чате",
         "hint": "Привычка формируется за 21 день.", "cat": CAT_HARD,
     },
@@ -176,7 +176,7 @@ ACHIEVEMENTS: dict[str, dict] = {
         "hint": "Месяц без пропусков.", "cat": CAT_HARD,
     },
     "streak_60": {
-        "icon": "🌟", "name": "Два месяца",
+        "icon": "💫", "name": "Два месяца",
         "desc": "60 дней подряд в чате",
         "hint": "Настойчивость вознаграждается.", "cat": CAT_HARD,
     },
@@ -593,8 +593,8 @@ async def check_secret_text_achievements(
     if reply_delta_secs is not None and reply_delta_secs < 3.0:
         await _grant_if_new(bot, chat_id, user_id, user_name, "bullseye")
 
-    # rare_plus — 0.25% случайно
-    if random.random() < 0.0025:
+    # rare_plus — 0.1% случайно
+    if random.random() < 0.001:
         await _grant_if_new(bot, chat_id, user_id, user_name, "rare_plus")
 
     # deja_vu — написал то, что писал давно (не в последних 3 сообщениях, но в истории)

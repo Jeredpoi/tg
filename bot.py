@@ -29,15 +29,13 @@ from config import (BOT_TOKEN, PROXY_URL, WEBAPP_URL, OWNER_ID,
                     SWEAR_RESPONSE_DELAY, SWEAR_RESPONSE_CHANCE,
                     DATABASE_PATH)
 
-from database import (init_db, track_message, track_daily_swear, get_daily_swear_report,
-                       get_best_photo_since, get_and_delete_old_photos, track_bot_message,
-                       get_user_stats, update_streak, get_streak,
-                       get_chat_total_msg_count, get_days_since_last_activity)
-from commands.achievements import (
-    check_message_achievements, check_streak_achievements,
-    check_time_achievements, check_single_message_achievements,
-    check_activity_achievements, check_secret_text_achievements,
-    check_simple_achievements,
+from database import (init_db, get_daily_swear_report,
+                       get_best_photo_since, get_and_delete_old_photos,
+                       get_streak, track_bot_message)
+from commands.achievements import check_simple_achievements
+from commands.message_tracker import (
+    track_message_handler, cleanup_state, clear_avatar_cache,
+    _send_swear_response,  # нужен для _handle_edited_message
 )
 from commands.achievements_cmd import achievements_command, achievements_callback, _send_achievements_menu
 
@@ -84,38 +82,7 @@ logging.getLogger().addHandler(_file_handler)
 
 logger = logging.getLogger(__name__)
 
-from swear_detector import (
-    SWEAR_WORDS, _count_swears,
-    FORWARD_RESPONSES, NAME_RESPONSES, SWEAR_RESPONSES,
-)
-
-
-# Cooldown для реакций на форварды и упоминания (по chat_id)
-_forward_last: dict[int, float] = {}
-_mention_last: dict[int, float] = {}
-_FORWARD_COOLDOWN = 30   # сек между ответами на форварды в одном чате
-_MENTION_COOLDOWN = 20   # сек между ответами на упоминания
-_FORWARD_CHANCE   = 0.4  # шанс реагировать на пересланное
-_MENTION_CHANCE   = 0.7  # шанс ответить на упоминание имени
-
-# Cooldown: последнее время ответа на мат по chat_id
-_swear_last_response: dict[int, float] = {}
-# Минимальная пауза между ответами на маты (секунды)
-
-# ── In-memory state для секретных ачивок ──────────────────────────────────────
-# chat_id → (user_id, text, timestamp) — последнее сообщение другого юзера
-_last_chat_msg: dict[int, tuple[int, str, float]] = {}
-# (user_id, chat_id) → text — предыдущее сообщение этого юзера
-_user_last_msg: dict[tuple[int, int], str] = {}
-# chat_id → list[(text, timestamp)] — сообщения других за последние 5 мин
-_recent_chat_texts: dict[int, list[tuple[str, float]]] = {}
-# (user_id, chat_id) → (text, count) — подряд одинаковых сообщений
-_user_consecutive: dict[tuple[int, int], tuple[str, int]] = {}
-# (user_id, chat_id) → list[timestamp] — отметки времени за последние 10 сек
-_user_recent_times: dict[tuple[int, int], list[float]] = {}
-# (user_id, chat_id) → list[str] — история сообщений (до 50, НЕ чистим каждый час)
-_user_msg_history: dict[tuple[int, int], list[str]] = {}
-_SWEAR_COOLDOWN = SWEAR_COOLDOWN
+from swear_detector import SWEAR_WORDS, _count_swears
 
 # ==============================================================================
 # Rate limiter — кулдаун команд на юзера
@@ -303,271 +270,8 @@ async def _group_start_command(update, context):
     )
 
 
-async def _send_swear_response(context) -> None:
-    """Job: отправляет ответ на мат после дебаунс-паузы."""
-    d = context.job.data
-    chat_id = d["chat_id"]
-
-    # Проверяем глобальный cooldown для чата
-    last = _swear_last_response.get(chat_id, 0)
-    if time.time() - last < _SWEAR_COOLDOWN:
-        return
-
-    try:
-        custom_response = d.get("custom_response")
-        if custom_response:
-            template = custom_response
-        else:
-            all_responses = SWEAR_RESPONSES + get_custom_swear_responses()
-            template = random.choice(all_responses)
-        try:
-            text = template.format(name=d["name"])
-        except (KeyError, IndexError):
-            # Кастомный ответ с лишними {плейсхолдерами} — подставляем имя вручную
-            text = template.replace("{name}", d["name"])
-        msg = await context.bot.send_message(
-            chat_id=chat_id,
-            text=text,
-            reply_to_message_id=d["message_id"],
-        )
-        _swear_last_response[chat_id] = time.time()
-        track_bot_message(chat_id, msg.message_id, msg.text)
-    except Exception as e:
-        logger.warning("_send_swear_response: chat=%s err=%s", chat_id, e)
 
 
-_avatar_cache_set: set[int] = set()   # user_id уже закэшированных за эту сессию
-_AVATARS_DIR = os.path.join(os.path.dirname(__file__), "photos", "avatars")
-_AVATAR_TTL = 24 * 3600
-
-
-async def _cache_avatar(context, user_id: int) -> None:
-    """Фоновая задача: скачивает и сохраняет аватар пользователя на диск."""
-    os.makedirs(_AVATARS_DIR, exist_ok=True)
-    cache_path = os.path.join(_AVATARS_DIR, f"{user_id}.jpg")
-    # Не обновляем если файл свежий
-    if os.path.exists(cache_path):
-        if (time.time() - os.path.getmtime(cache_path)) < _AVATAR_TTL:
-            return
-    try:
-        photos = await context.bot.get_user_profile_photos(user_id=user_id, limit=1)
-        if not photos.total_count:
-            return
-        file_obj = await context.bot.get_file(photos.photos[0][-1].file_id)
-        await file_obj.download_to_drive(cache_path)
-    except Exception:
-        pass
-
-
-async def _track_message(update, context):
-    """Считает сообщения и маты всех участников (раздельно по чатам)."""
-    if not update.message:
-        return
-    user = update.effective_user
-    if not user or user.is_bot:
-        return
-
-    # Монитор-группа — не трекаем активность и не реагируем на маты
-    if update.effective_chat and is_monitor_chat(update.effective_chat.id):
-        return
-
-    # Кэшируем аватар один раз за сессию (в фоне, не блокируем)
-    if user.id not in _avatar_cache_set:
-        _avatar_cache_set.add(user.id)
-        uid = user.id
-
-        async def _do_cache_avatar(ctx):
-            await _cache_avatar(ctx, uid)
-
-        context.job_queue.run_once(
-            _do_cache_avatar,
-            0,
-            name=f"avatar_{uid}",
-        )
-
-    chat_id = update.effective_chat.id
-    chat_type = update.effective_chat.type
-    is_group = chat_type in ("group", "supergroup")
-
-    text = update.message.text or update.message.caption or ""
-    swear_count = _count_swears(text)
-
-    # ── Capture in-memory state for secret achievements (before updating) ────
-    _now_ts = time.time()
-    _uid_cid = (user.id, chat_id)
-
-    _prev_chat_entry = _last_chat_msg.get(chat_id)
-    _prev_chat_text = (
-        _prev_chat_entry[1]
-        if (_prev_chat_entry and _prev_chat_entry[0] != user.id)
-        else None
-    )
-
-    _reply_delta: float | None = None
-    if update.message.reply_to_message:
-        orig_ts = update.message.reply_to_message.date
-        curr_ts = update.message.date
-        if orig_ts and curr_ts:
-            _reply_delta = (curr_ts - orig_ts).total_seconds()
-
-    # История сообщений юзера (до 50, для deja_vu)
-    _hist = _user_msg_history.setdefault(_uid_cid, [])
-    _snap_hist = list(_hist)  # снапшот до добавления текущего
-
-    _u_times = _user_recent_times.setdefault(_uid_cid, [])
-    _u_times.append(_now_ts)
-    _u_times[:] = [t for t in _u_times if _now_ts - t <= 10]
-    _recent_msg_count = len(_u_times)
-
-    # Update state for future messages
-    if text:
-        _user_last_msg[_uid_cid] = text
-        _last_chat_msg[chat_id] = (user.id, text, _now_ts)
-        _hist.append(text)
-        if len(_hist) > 50:
-            _hist.pop(0)
-
-    track_message(user.id, user.username, user.first_name, swear_count, chat_id)
-
-    if swear_count and is_group:
-        track_daily_swear(chat_id, user.id, user.first_name or user.username or "Аноним", swear_count)
-
-    # ── Стрики и ачивки ──────────────────────────────────────────────────────
-    if is_group:
-        try:
-            _user_name = user.first_name or user.username or "Участник"
-            _uid, _cid = user.id, chat_id
-
-            # Дни с последней активности (для comeback) — до обновления стрика
-            _days_absent = get_days_since_last_activity(_uid, _cid)
-
-            streak, is_new_day = update_streak(_uid, _cid)
-
-            if is_new_day:
-                _streak = streak
-                _absent = _days_absent
-                async def _run_streak_check(ctx):
-                    await check_streak_achievements(ctx.bot, _cid, _uid, _user_name, _streak)
-                    await check_activity_achievements(ctx.bot, _cid, _uid, _user_name,
-                                                      daily_count=0, days_since_last=_absent)
-                context.job_queue.run_once(_run_streak_check, 1)
-
-            stats = get_user_stats(_uid, _cid)
-            _mc, _sc = stats["msg_count"], stats["swear_count"]
-            _swear_in_msg = swear_count
-            _total_msgs = get_chat_total_msg_count(_cid)
-            _msg_text = text
-
-            _silence_hrs = _days_absent * 24.0
-            _pct  = _prev_chat_text
-            _hist = _snap_hist
-            _rmc  = _recent_msg_count
-            _rd   = _reply_delta
-
-            async def _run_msg_check(ctx):
-                await check_message_achievements(ctx.bot, _cid, _uid, _user_name, _mc, _sc)
-                await check_single_message_achievements(ctx.bot, _cid, _uid, _user_name,
-                                                        _swear_in_msg, _total_msgs)
-                await check_secret_text_achievements(
-                    ctx.bot, _cid, _uid, _user_name,
-                    text=_msg_text,
-                    reply_delta_secs=_rd,
-                    prev_chat_text=_pct,
-                    user_msg_history=_hist,
-                    user_recent_count=_rmc,
-                    silence_hours=_silence_hrs,
-                )
-            context.job_queue.run_once(_run_msg_check, 1)
-
-            # Временны́е ачивки — на каждое сообщение (grant_achievement идемпотентно)
-            _now_dt = datetime.datetime.now(datetime.timezone(datetime.timedelta(hours=3)))
-            _dt = _now_dt
-            async def _run_time_check(ctx):
-                await check_time_achievements(ctx.bot, _cid, _uid, _user_name, _dt)
-            context.job_queue.run_once(_run_time_check, 2)
-
-        except Exception as e:
-            logger.warning("streak/achievement check failed: %s", e)
-
-    # ── Реакция на пересланные сообщения ─────────────────────────────────────
-    if is_group and update.message.forward_origin is not None:
-        now = time.time()
-        if now - _forward_last.get(chat_id, 0) > _FORWARD_COOLDOWN:
-            if random.random() < _FORWARD_CHANCE:
-                name = user.first_name or user.username or "кто-то"
-                resp = random.choice(FORWARD_RESPONSES).format(name=name)
-                try:
-                    await update.message.reply_text(resp)
-                    _forward_last[chat_id] = now
-                except Exception:
-                    pass
-
-    # ── Реакция на упоминание имени бота ─────────────────────────────────────
-    if is_group and text:
-        bot_name = (context.bot.first_name or "").lower()
-        bot_username = (context.bot.username or "").lower()
-        text_lower = text.lower()
-        # Проверяем что имя/юзернейм упомянуты но нет команды
-        name_mentioned = (
-            (bot_name and bot_name in text_lower) or
-            (bot_username and f"@{bot_username}" in text_lower)
-        )
-        if name_mentioned and not text.startswith("/"):
-            now = time.time()
-            if now - _mention_last.get(chat_id, 0) > _MENTION_COOLDOWN:
-                if random.random() < _MENTION_CHANCE:
-                    try:
-                        await update.message.reply_text(random.choice(NAME_RESPONSES))
-                        _mention_last[chat_id] = now
-                    except Exception:
-                        pass
-
-    # Проверяем кастомные слова-триггеры
-    custom_triggers = get_custom_swear_triggers() if get_setting("swear_detect") else []
-    matched_trigger = None
-    if custom_triggers and text:
-        text_lower = text.lower()
-        for trigger in custom_triggers:
-            if trigger["word"] in text_lower:
-                matched_trigger = trigger
-                break
-
-    if matched_trigger and update.effective_chat.type in ("group", "supergroup"):
-        name = user.first_name or user.username or "дружок"
-        for job in context.job_queue.get_jobs_by_name(f"swear_{chat_id}"):
-            job.schedule_removal()
-        if random.random() < get_setting("swear_response_chance"):
-            context.job_queue.run_once(
-                _send_swear_response,
-                SWEAR_RESPONSE_DELAY,
-                data={
-                    "chat_id": chat_id,
-                    "name": name,
-                    "message_id": update.message.message_id,
-                    "custom_response": matched_trigger.get("response"),
-                },
-                name=f"swear_{chat_id}",
-            )
-
-    if swear_count and not matched_trigger and update.effective_chat.type != "private" and get_setting("swear_detect"):
-        name = user.first_name or user.username or "дружок"
-
-        # Дебаунсинг: отменяем предыдущий отложенный ответ для этого чата
-        for job in context.job_queue.get_jobs_by_name(f"swear_{chat_id}"):
-            job.schedule_removal()
-
-        # Случайно решаем отвечать ли — но с учётом cooldown в _send_swear_response
-        if random.random() < get_setting("swear_response_chance"):
-            context.job_queue.run_once(
-                _send_swear_response,
-                SWEAR_RESPONSE_DELAY,
-                data={
-                    "chat_id": chat_id,
-                    "name": name,
-                    "message_id": update.message.message_id,
-                },
-                name=f"swear_{chat_id}",
-            )
 
 
 def _save_chat_id_to_config(new_id: int) -> None:
@@ -996,7 +700,7 @@ def main():
                 return
             await handle_anon_message(update, context)
         else:
-            await _track_message(update, context)
+            await track_message_handler(update, context)
 
     # Трекинг текстовых сообщений (без команд)
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, _maybe_token_reply))
@@ -1064,24 +768,16 @@ def main():
             stale = [k for k, v in _cmd_last_used.items() if v < cutoff]
             for k in stale:
                 _cmd_last_used.pop(k, None)
-            # Чистим cooldown-словари для реакций (forward/mention/swear)
-            for d in (_forward_last, _mention_last, _swear_last_response):
-                old = [k for k, v in d.items() if v < cutoff]
-                for k in old:
-                    d.pop(k, None)
-            # Чистим краткосрочный in-memory state (speedrun, mirror)
-            _user_recent_times.clear()
-            _last_chat_msg.clear()
-            # _user_msg_history НЕ чистим — нужен для deja_vu
             if stale:
                 logger.debug("_cmd_last_used: удалено %d устаревших записей", len(stale))
+            # Чистим in-memory состояние message_tracker (speedrun, реакции и т.д.)
+            cleanup_state()
 
         app.job_queue.run_repeating(_cleanup_cmd_cooldown, interval=3600, first=3600, name="cleanup_cmd_cooldown")
 
         # Сброс кэша аватаров раз в 24 ч — чтобы обновлять фото профиля
         async def _clear_avatar_cache(ctx):
-            _avatar_cache_set.clear()
-            logger.debug("_avatar_cache_set: сброшен")
+            clear_avatar_cache()
 
         app.job_queue.run_repeating(_clear_avatar_cache, interval=86400, first=86400, name="clear_avatar_cache")
 
