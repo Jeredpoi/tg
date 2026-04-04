@@ -80,9 +80,9 @@ async def stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     else:
         lines.append("🏆 Ачивок пока нет")
 
-    # Кнопка «Ачивки» открывает список для кликнувшего
+    # Кнопка «Ачивки» — открывает список ачивок для кликнувшего в этом чате
     kb = InlineKeyboardMarkup([[
-        InlineKeyboardButton("🏆 Мои ачивки", callback_data="ach:easy:0"),
+        InlineKeyboardButton("🏆 Мои ачивки", callback_data=f"ach:{chat_id}:easy:0"),
     ]])
 
     msg = await update.message.reply_text("\n".join(lines), parse_mode="HTML", reply_markup=kb)

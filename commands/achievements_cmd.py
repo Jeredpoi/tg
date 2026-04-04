@@ -2,12 +2,13 @@
 # commands/achievements_cmd.py — /achievements: красивый просмотр ачивок
 # ==============================================================================
 
+import asyncio
 import logging
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
 
 from commands.achievements import (
-    ACHIEVEMENTS, CAT_EASY, CAT_HARD, CAT_SECRET,
+    CAT_EASY, CAT_HARD, CAT_SECRET,
     get_achievements_page, get_category_counts, get_user_close_achievements,
 )
 
@@ -41,9 +42,9 @@ def _pct(earned: int, total: int) -> str:
     return f"{round(earned / total * 100)}%"
 
 
-def _build_near_text(user_id: int, chat_id: int, user_name: str = "") -> str:
-    counts = get_category_counts(user_id, chat_id)
-    items  = get_user_close_achievements(user_id, chat_id)
+def _build_near_text(user_id: int, src_chat_id: int, user_name: str = "") -> str:
+    counts = get_category_counts(user_id, src_chat_id)
+    items  = get_user_close_achievements(user_id, src_chat_id)
 
     name_str = f" · {user_name}" if user_name else ""
     header = f"🏅 <b>Ачивки{name_str}</b>\n"
@@ -77,12 +78,12 @@ def _build_near_text(user_id: int, chat_id: int, user_name: str = "") -> str:
 
 
 def _build_page_text(
-    user_id: int, chat_id: int,
+    user_id: int, src_chat_id: int,
     category: str, page: int,
     user_name: str = "",
 ) -> str:
-    data    = get_achievements_page(user_id, chat_id, category, page, _PER_PAGE)
-    counts  = get_category_counts(user_id, chat_id)
+    data    = get_achievements_page(user_id, src_chat_id, category, page, _PER_PAGE)
+    counts  = get_category_counts(user_id, src_chat_id)
     items   = data["items"]
     cur     = data["page"]
     total_p = data["total_pages"]
@@ -143,11 +144,17 @@ def _build_page_text(
 
 def _build_keyboard(
     category: str, page: int, total_pages: int,
-    counts: dict,
+    counts: dict, src_chat_id: int,
 ) -> InlineKeyboardMarkup:
+    """
+    Строит клавиатуру для меню ачивок.
+    src_chat_id — чат, из которого берутся ачивки (группа), встраивается в callback_data.
+    Формат callback: ach:{src_chat_id}:{category}:{page}
+    """
     rows = []
+    cid = src_chat_id
 
-    # Ряд категорий — у каждой счётчик earned/total (кроме «Близко»)
+    # Ряд категорий
     cat_row = []
     for cat in _CAT_ORDER:
         emoji, label = _CAT_META[cat]
@@ -158,20 +165,20 @@ def _build_keyboard(
             btn_label = f"{emoji} {e}/{t}"
         if cat == category:
             btn_label = "✅ " + btn_label
-        cat_row.append(InlineKeyboardButton(btn_label, callback_data=f"ach:{cat}:0"))
+        cat_row.append(InlineKeyboardButton(btn_label, callback_data=f"ach:{cid}:{cat}:0"))
     rows.append(cat_row)
 
     # Ряд навигации (только для реальных категорий и если > 1 страницы)
     if category in _REAL_CATS and total_pages > 1:
         nav_row = []
         if page > 0:
-            nav_row.append(InlineKeyboardButton("◀", callback_data=f"ach:{category}:{page - 1}"))
+            nav_row.append(InlineKeyboardButton("◀", callback_data=f"ach:{cid}:{category}:{page - 1}"))
         nav_row.append(InlineKeyboardButton(
             f"· {page + 1} / {total_pages} ·",
             callback_data="ach_page",
         ))
         if page < total_pages - 1:
-            nav_row.append(InlineKeyboardButton("▶", callback_data=f"ach:{category}:{page + 1}"))
+            nav_row.append(InlineKeyboardButton("▶", callback_data=f"ach:{cid}:{category}:{page + 1}"))
         rows.append(nav_row)
 
     return InlineKeyboardMarkup(rows)
@@ -189,13 +196,14 @@ async def achievements_command(update: Update, context: ContextTypes.DEFAULT_TYP
     # ── В группе — показываем подсказку с кнопкой в личку ─────────────────────
     if in_group:
         bot_username = (await context.bot.get_me()).username
+        # Embed group chat_id in the deep link so private menu shows correct achievements
         bot_msg = await context.bot.send_message(
             chat_id=chat.id,
             text="🏆 Ачивки доступны только в личке с ботом.",
             reply_markup=InlineKeyboardMarkup([[
                 InlineKeyboardButton(
                     "📱 Открыть в личке",
-                    url=f"https://t.me/{bot_username}?start=achievements",
+                    url=f"https://t.me/{bot_username}?start=ach_{chat.id}",
                 ),
             ]]),
         )
@@ -204,7 +212,6 @@ async def achievements_command(update: Update, context: ContextTypes.DEFAULT_TYP
         except Exception:
             pass
         # Авто-удалить подсказку через 20 сек
-        import asyncio
         async def _del():
             await asyncio.sleep(20)
             try:
@@ -214,24 +221,44 @@ async def achievements_command(update: Update, context: ContextTypes.DEFAULT_TYP
         asyncio.create_task(_del())
         return
 
-    # ── В личке — показываем меню ──────────────────────────────────────────────
-    _send_achievements_menu(update, context, user.id, chat.id,
-                            user.first_name or user.username or "")
+    # ── В личке — показываем меню (ачивки берём из основного чата по умолчанию) ──
+    from chat_config import get_main_chat_id
+    src_chat_id = get_main_chat_id() or chat.id
+    await _send_achievements_menu(
+        context,
+        pm_chat_id=chat.id,
+        user_id=user.id,
+        src_chat_id=src_chat_id,
+        user_name=user.first_name or user.username or "",
+    )
+    try:
+        await update.message.delete()
+    except Exception:
+        pass
 
 
-async def _send_achievements_menu(update, context, user_id: int, chat_id: int,
-                                  user_name: str) -> None:
-    """Отправляет меню ачивок пользователю."""
+async def _send_achievements_menu(
+    context,
+    pm_chat_id: int,
+    user_id: int,
+    src_chat_id: int,
+    user_name: str,
+) -> None:
+    """
+    Отправляет меню ачивок.
+    pm_chat_id  — куда отправить сообщение (личка пользователя или группа).
+    src_chat_id — из какого чата брать ачивки (группа).
+    """
     category = CAT_EASY
     page     = 0
 
-    counts = get_category_counts(user_id, chat_id)
-    data   = get_achievements_page(user_id, chat_id, category, page, _PER_PAGE)
-    text   = _build_page_text(user_id, chat_id, category, page, user_name)
-    kb     = _build_keyboard(category, page, data["total_pages"], counts)
+    counts = get_category_counts(user_id, src_chat_id)
+    data   = get_achievements_page(user_id, src_chat_id, category, page, _PER_PAGE)
+    text   = _build_page_text(user_id, src_chat_id, category, page, user_name)
+    kb     = _build_keyboard(category, page, data["total_pages"], counts, src_chat_id)
 
     await context.bot.send_message(
-        chat_id=chat_id,
+        chat_id=pm_chat_id,
         text=text,
         parse_mode="HTML",
         reply_markup=kb,
@@ -239,7 +266,10 @@ async def _send_achievements_menu(update, context, user_id: int, chat_id: int,
 
 
 async def achievements_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Обработчик кнопок: ach:<category>:<page>  или  ach_page (заглушка)."""
+    """
+    Обработчик кнопок ачивок.
+    Форматы: ach:{src_chat_id}:{category}:{page}  |  ach_page (заглушка)
+    """
     query = update.callback_query
     if not query:
         return
@@ -252,26 +282,27 @@ async def achievements_callback(update: Update, context: ContextTypes.DEFAULT_TY
     await query.answer()
 
     parts = query.data.split(":")
-    if len(parts) != 3 or parts[0] != "ach":
+    # Поддерживаем формат ach:{src_chat_id}:{cat}:{page} (4 части)
+    if len(parts) != 4 or parts[0] != "ach":
         return
 
-    _, category, page_str = parts
+    _, src_chat_id_str, category, page_str = parts
     if category not in _CAT_META:
         return
     try:
-        page = int(page_str)
+        src_chat_id = int(src_chat_id_str)
+        page        = int(page_str)
     except ValueError:
         return
 
     user      = query.from_user
-    chat      = query.message.chat
     user_name = user.first_name or user.username or ""
-    counts    = get_category_counts(user.id, chat.id)
+    counts    = get_category_counts(user.id, src_chat_id)
 
     # ── «Ты близко» — специальная вкладка ────────────────────────────────────
     if category == CAT_NEAR:
-        text = _build_near_text(user.id, chat.id, user_name)
-        kb   = _build_keyboard(CAT_NEAR, 0, 1, counts)
+        text = _build_near_text(user.id, src_chat_id, user_name)
+        kb   = _build_keyboard(CAT_NEAR, 0, 1, counts, src_chat_id)
         try:
             await query.edit_message_text(text=text, parse_mode="HTML", reply_markup=kb)
         except Exception as e:
@@ -279,9 +310,9 @@ async def achievements_callback(update: Update, context: ContextTypes.DEFAULT_TY
         return
 
     # ── Обычная категория ────────────────────────────────────────────────────
-    data = get_achievements_page(user.id, chat.id, category, page, _PER_PAGE)
-    text = _build_page_text(user.id, chat.id, category, page, user_name)
-    kb   = _build_keyboard(category, data["page"], data["total_pages"], counts)
+    data = get_achievements_page(user.id, src_chat_id, category, page, _PER_PAGE)
+    text = _build_page_text(user.id, src_chat_id, category, page, user_name)
+    kb   = _build_keyboard(category, data["page"], data["total_pages"], counts, src_chat_id)
 
     try:
         await query.edit_message_text(text=text, parse_mode="HTML", reply_markup=kb)

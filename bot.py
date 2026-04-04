@@ -759,13 +759,18 @@ async def _private_start(update, context):
             context.job_queue.run_once(_del_gallery, delay)
         return
 
-    # Deep link: ?start=achievements → открыть меню ачивок в личке
-    if context.args and context.args[0] == "achievements":
+    # Deep link: ?start=ach_{group_chat_id} → открыть меню ачивок для конкретной группы
+    if context.args and context.args[0].startswith("ach_"):
         user = update.effective_user
+        try:
+            src_chat_id = int(context.args[0][4:])
+        except ValueError:
+            src_chat_id = get_main_chat_id() or update.effective_chat.id
         await _send_achievements_menu(
-            update, context,
+            context,
+            pm_chat_id=update.effective_chat.id,
             user_id=user.id,
-            chat_id=update.effective_chat.id,
+            src_chat_id=src_chat_id,
             user_name=user.first_name or user.username or "",
         )
         try:

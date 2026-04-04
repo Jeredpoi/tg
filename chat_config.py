@@ -134,8 +134,8 @@ _DEFAULT_SETTINGS = {
     "autodel_help": 25,            # Автоудаление ответа /help (сек, 0 = выкл)
     "autodel_gallery": 25,         # Автоудаление ссылки галереи (сек, 0 = выкл)
     "autodel_ownerhelp": 20,       # Автоудаление ответа /ownerhelp (сек, 0 = выкл)
-    "autodel_top":   3600,         # /top response — 1 hour
-    "autodel_stats": 1800,         # /stats response — 30 min
+    "autodel_top":   300,          # /top response — 5 min
+    "autodel_stats": 300,          # /stats response — 5 min
     "autodel_dice":  30,           # /dice response — 30 sec
     "autodel_roast": 60,           # /roast response — 60 sec
     "autodel_mge":   0,            # /mge — off by default
