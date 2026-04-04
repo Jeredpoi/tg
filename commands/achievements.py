@@ -1,6 +1,7 @@
 # ==============================================================================
 # commands/achievements.py — Система ачивок и достижений (60 штук, 3 категории)
 # ==============================================================================
+# REVISED: removed boring msg-count achivements, added bot-interaction ones
 
 import asyncio
 import logging
@@ -20,20 +21,20 @@ ACHIEVEMENTS: dict[str, dict] = {
 
     # ── ЛЁГКИЕ (20) ──────────────────────────────────────────────────────────
 
-    "first_msg": {
-        "icon": "🗣", "name": "Первый шаг",
-        "desc": "Написал первое сообщение в чате",
-        "hint": "Начни разговор.", "cat": CAT_EASY,
+    "dice_user": {
+        "icon": "🎲", "name": "Игрок",
+        "desc": "Бросил кубик через /dice",
+        "hint": "Попробуй удачу.", "cat": CAT_EASY,
     },
-    "msg_10": {
-        "icon": "💬", "name": "Разговорчивый",
-        "desc": "10 сообщений в чате",
-        "hint": "Слова сами собой льются.", "cat": CAT_EASY,
+    "rate_voter": {
+        "icon": "🗳", "name": "Судья",
+        "desc": "Проголосовал за чужое фото в /rate",
+        "hint": "Чужое мнение тоже важно.", "cat": CAT_EASY,
     },
-    "msg_100": {
-        "icon": "📢", "name": "Болтун",
-        "desc": "100 сообщений",
-        "hint": "Три цифры — солидно.", "cat": CAT_EASY,
+    "stats_check": {
+        "icon": "📊", "name": "Любопытный",
+        "desc": "Открыл свою статистику через /stats",
+        "hint": "Интересно знать, кто ты есть.", "cat": CAT_EASY,
     },
     "first_swear": {
         "icon": "🤬", "name": "Первый мат",
@@ -123,50 +124,40 @@ ACHIEVEMENTS: dict[str, dict] = {
 
     # ── СЛОЖНЫЕ (20) ─────────────────────────────────────────────────────────
 
-    "msg_500": {
-        "icon": "📣", "name": "Оратор",
-        "desc": "500 сообщений в чате",
-        "hint": "Полтысячи — не шутки.", "cat": CAT_HARD,
-    },
-    "msg_1000": {
-        "icon": "🎙", "name": "Легенда чата",
-        "desc": "1000 сообщений",
-        "hint": "Четыре цифры.", "cat": CAT_HARD,
-    },
-    "msg_2500": {
-        "icon": "🗣", "name": "Трибун",
-        "desc": "2500 сообщений в чате",
-        "hint": "Ты никогда не молчишь.", "cat": CAT_HARD,
-    },
-    "msg_5000": {
-        "icon": "📻", "name": "Вещатель",
-        "desc": "5000 сообщений в чате",
-        "hint": "Слов больше, чем у словаря.", "cat": CAT_HARD,
-    },
-    "msg_10000": {
-        "icon": "🎤", "name": "Икона чата",
-        "desc": "10 000 сообщений — легенда",
-        "hint": "Пять цифр. Это серьёзно.", "cat": CAT_HARD,
-    },
     "swear_50": {
         "icon": "💀", "name": "Матерщинник",
         "desc": "50 матов в чате",
         "hint": "Полсотни — уже привычка.", "cat": CAT_HARD,
-    },
-    "swear_200": {
-        "icon": "☠️", "name": "Отец матершины",
-        "desc": "200 матов в чате",
-        "hint": "Двести — это талант.", "cat": CAT_HARD,
     },
     "swear_500": {
         "icon": "💢", "name": "Эксперт по матам",
         "desc": "500 матов — профессионал",
         "hint": "Это уже мастерство.", "cat": CAT_HARD,
     },
-    "swear_1000": {
-        "icon": "🔥", "name": "Мат-чемпион",
-        "desc": "1000 матов. Просто... зачем?",
-        "hint": "Тысяча. Это рекорд.", "cat": CAT_HARD,
+    "dice_30": {
+        "icon": "🎰", "name": "Лудоман",
+        "desc": "Бросил кубик 30 раз",
+        "hint": "Удача любит настойчивых.", "cat": CAT_HARD,
+    },
+    "roasted": {
+        "icon": "🤡", "name": "Насмешник",
+        "desc": "Применил /roast на ком-то",
+        "hint": "Слово — тоже оружие.", "cat": CAT_HARD,
+    },
+    "anon_5": {
+        "icon": "👻", "name": "Призрак",
+        "desc": "Отправил 5 анонимных сообщений через /anon",
+        "hint": "Никто не знает, кто ты.", "cat": CAT_HARD,
+    },
+    "rate_voter_10": {
+        "icon": "🗳", "name": "Критик",
+        "desc": "Проголосовал за 10 фото в /rate",
+        "hint": "Твоё мнение формирует рейтинг.", "cat": CAT_HARD,
+    },
+    "rate_votes_50": {
+        "icon": "⭐", "name": "Звезда",
+        "desc": "Твои фото набрали 50 голосов суммарно",
+        "hint": "Тебя оценили.", "cat": CAT_HARD,
     },
     "streak_14": {
         "icon": "⚡", "name": "Две недели",
@@ -218,6 +209,16 @@ ACHIEVEMENTS: dict[str, dict] = {
         "desc": "Фото набрало средний рейтинг 9.0+",
         "hint": "Идеал существует.", "cat": CAT_HARD,
     },
+    "top_member": {
+        "icon": "👑", "name": "В топе",
+        "desc": "Оказался в топ-3 чата по сообщениям",
+        "hint": "Лидеры не рождаются — они пишут.", "cat": CAT_HARD,
+    },
+    "top_member_5": {
+        "icon": "🏅", "name": "Постоянный лидер",
+        "desc": "Попал в топ-3 чата 5 раз",
+        "hint": "Раз в топе — случайность. Пять — закономерность.", "cat": CAT_HARD,
+    },
     "all_easy": {
         "icon": "✨", "name": "Полный набор",
         "desc": "Получил все лёгкие ачивки",
@@ -236,10 +237,10 @@ ACHIEVEMENTS: dict[str, dict] = {
         "desc": "Написал точно такое же сообщение, как предыдущее в чате",
         "hint": "Ты уверен, что это не отражение?", "cat": CAT_SECRET, "secret": True,
     },
-    "minds_meet": {
-        "icon": "🧠", "name": "Мысли сходятся",
-        "desc": "Твоё сообщение совпало с чужим из последних 5 минут",
-        "hint": "Кто-то думает так же, как ты.", "cat": CAT_SECRET, "secret": True,
+    "all_caps": {
+        "icon": "📢", "name": "Крикун",
+        "desc": "Написал сообщение заглавными буквами длиннее 10 символов",
+        "hint": "Иногда надо просто КРИЧАТЬ.", "cat": CAT_SECRET, "secret": True,
     },
     "bullseye": {
         "icon": "🎯", "name": "Попал",
@@ -271,10 +272,10 @@ ACHIEVEMENTS: dict[str, dict] = {
         "desc": "Написал первое сообщение дня после 23:59",
         "hint": "Ты вспомнил… но поздно.", "cat": CAT_SECRET, "secret": True,
     },
-    "no_words": {
-        "icon": "🧠", "name": "Без слов",
-        "desc": "Отправил сообщение без единой буквы",
-        "hint": "Слова лишние.", "cat": CAT_SECRET, "secret": True,
+    "philosopher": {
+        "icon": "📜", "name": "Философ",
+        "desc": "Написал сообщение длиннее 300 символов",
+        "hint": "Краткость — не всегда сестра таланта.", "cat": CAT_SECRET, "secret": True,
     },
     "pon": {
         "icon": "🐸", "name": "пон",
@@ -286,20 +287,20 @@ ACHIEVEMENTS: dict[str, dict] = {
         "desc": "Написал «лол» (и только «лол»)",
         "hint": "Очень смешно.", "cat": CAT_SECRET, "secret": True,
     },
-    "moai": {
-        "icon": "🗿", "name": "🗿",
-        "desc": "Написал только 🗿",
-        "hint": "🗿", "cat": CAT_SECRET, "secret": True,
+    "just_number": {
+        "icon": "🔢", "name": "Счётчик",
+        "desc": "Написал только число",
+        "hint": "Цифры тоже говорят.", "cat": CAT_SECRET, "secret": True,
     },
-    "thrice": {
-        "icon": "🔄", "name": "Трижды",
-        "desc": "Написал одно и то же три раза подряд",
-        "hint": "Повтори ещё раз.", "cat": CAT_SECRET, "secret": True,
+    "question_only": {
+        "icon": "❓", "name": "Вопрошающий",
+        "desc": "Написал только «?»",
+        "hint": "Самый важный знак.", "cat": CAT_SECRET, "secret": True,
     },
-    "glitch": {
-        "icon": "🧬", "name": "Глюк",
-        "desc": "Отправил палиндром длиннее 5 символов",
-        "hint": "Система дала сбой.", "cat": CAT_SECRET, "secret": True,
+    "repeating": {
+        "icon": "💤", "name": "Монотонность",
+        "desc": "Отправил сообщение из одного символа, повторённого 7+ раз",
+        "hint": "Аааааааа…", "cat": CAT_SECRET, "secret": True,
     },
     "speedrun": {
         "icon": "🚀", "name": "Speedrun",
@@ -341,24 +342,13 @@ _SECRET_COUNT = len(_SECRET_IDS)
 
 # ── Пороги ────────────────────────────────────────────────────────────────────
 
-_MSG_THRESHOLDS = [
-    (1,     "first_msg"),
-    (10,    "msg_10"),
-    (100,   "msg_100"),
-    (500,   "msg_500"),
-    (1000,  "msg_1000"),
-    (2500,  "msg_2500"),
-    (5000,  "msg_5000"),
-    (10000, "msg_10000"),
-]
+_MSG_THRESHOLDS: list[tuple[int, str]] = []  # ачивки за кол-во сообщений удалены
 
 _SWEAR_THRESHOLDS = [
-    (1,    "first_swear"),
-    (10,   "swear_10"),
-    (50,   "swear_50"),
-    (200,  "swear_200"),
-    (500,  "swear_500"),
-    (1000, "swear_1000"),
+    (1,   "first_swear"),
+    (10,  "swear_10"),
+    (50,  "swear_50"),
+    (500, "swear_500"),
 ]
 
 _STREAK_THRESHOLDS = [
@@ -546,9 +536,7 @@ async def check_secret_text_achievements(
     text: str,
     reply_delta_secs: float | None,
     prev_chat_text: str | None,
-    prev_user_text: str | None,
-    recent_chat_texts: list[str],
-    user_consecutive_count: int,
+    user_msg_history: list[str],   # последние N сообщений юзера (без текущего)
     user_recent_count: int,
     silence_hours: float,
 ) -> None:
@@ -559,9 +547,7 @@ async def check_secret_text_achievements(
     - text: текст текущего сообщения
     - reply_delta_secs: секунды от исходного сообщения до ответа (None если не реплай)
     - prev_chat_text: последнее сообщение другого пользователя в чате (до этого)
-    - prev_user_text: предыдущее сообщение этого пользователя
-    - recent_chat_texts: тексты сообщений других пользователей за последние 5 минут
-    - user_consecutive_count: сколько раз подряд пользователь пишет один и тот же текст
+    - user_msg_history: список предыдущих сообщений пользователя (без текущего)
     - user_recent_count: кол-во сообщений за последние 10 сек
     - silence_hours: часов прошло с последнего сообщения пользователя в чате
     """
@@ -571,13 +557,9 @@ async def check_secret_text_achievements(
     t = text.strip() if text else ""
     t_lower = t.lower()
 
-    # mirror — то же, что предыдущее сообщение в чате
+    # mirror — то же, что предыдущее сообщение в чате (от другого юзера)
     if prev_chat_text and t == prev_chat_text:
         await _grant_if_new(bot, chat_id, user_id, user_name, "mirror")
-
-    # minds_meet — текст совпадает с любым из последних 5 мин в чате
-    if t and any(t == rt for rt in recent_chat_texts):
-        await _grant_if_new(bot, chat_id, user_id, user_name, "minds_meet")
 
     # bullseye — ответ быстрее 3 сек
     if reply_delta_secs is not None and reply_delta_secs < 3.0:
@@ -587,17 +569,13 @@ async def check_secret_text_achievements(
     if random.random() < 0.0025:
         await _grant_if_new(bot, chat_id, user_id, user_name, "rare_plus")
 
-    # deja_vu — пользователь раньше писал то же самое
-    if prev_user_text and t and t == prev_user_text:
+    # deja_vu — написал то, что писал давно (не в последних 3 сообщениях, но в истории)
+    if t and len(user_msg_history) > 3 and t in user_msg_history[:-3]:
         await _grant_if_new(bot, chat_id, user_id, user_name, "deja_vu")
 
     # void — только пробелы / невидимые символы
-    if t_lower == "" and text and not text.strip():
+    if text and not text.strip():
         await _grant_if_new(bot, chat_id, user_id, user_name, "void")
-
-    # no_words — нет ни одной буквы
-    if text and not re.search(r'[a-zA-Zа-яёА-ЯЁ]', text):
-        await _grant_if_new(bot, chat_id, user_id, user_name, "no_words")
 
     # emoji_only — только эмодзи
     if text:
@@ -616,22 +594,29 @@ async def check_secret_text_achievements(
     if t_lower == "лол":
         await _grant_if_new(bot, chat_id, user_id, user_name, "lol_ach")
 
-    # moai
-    if t == "🗿":
-        await _grant_if_new(bot, chat_id, user_id, user_name, "moai")
-
-    # thrice — три раза подряд одно и то же
-    if user_consecutive_count >= 3:
-        await _grant_if_new(bot, chat_id, user_id, user_name, "thrice")
-
-    # glitch — палиндром >= 5 символов
-    clean = re.sub(r'[^а-яёА-ЯЁa-zA-Z0-9]', '', t.lower())
-    if len(clean) >= 5 and clean == clean[::-1]:
-        await _grant_if_new(bot, chat_id, user_id, user_name, "glitch")
-
     # speedrun — 5 сообщений за 10 сек
     if user_recent_count >= 5:
         await _grant_if_new(bot, chat_id, user_id, user_name, "speedrun")
+
+    # all_caps — заглавными > 10 символов, содержит буквы
+    if t and len(t) > 10 and re.search(r'[А-ЯЁA-Z]', t) and t == t.upper() and re.search(r'[a-zA-Zа-яёА-ЯЁ]', t):
+        await _grant_if_new(bot, chat_id, user_id, user_name, "all_caps")
+
+    # philosopher — сообщение > 300 символов
+    if len(text) > 300:
+        await _grant_if_new(bot, chat_id, user_id, user_name, "philosopher")
+
+    # just_number — только число (не 42)
+    if t and re.fullmatch(r'-?\d+', t) and t.lstrip("-") != "42":
+        await _grant_if_new(bot, chat_id, user_id, user_name, "just_number")
+
+    # question_only — только «?»
+    if t == "?":
+        await _grant_if_new(bot, chat_id, user_id, user_name, "question_only")
+
+    # repeating — один символ повторён 7+ раз
+    if t and len(t) >= 7 and len(set(t)) == 1:
+        await _grant_if_new(bot, chat_id, user_id, user_name, "repeating")
 
     # i_see_all
     if re.search(r'я\s+вижу\s+всё', t_lower) or re.search(r'я\s+всё\s+вижу', t_lower):
@@ -641,7 +626,7 @@ async def check_secret_text_achievements(
     if re.search(r'я\s+(знаю|понял|разгадал)\s+(правила|систему|всё)', t_lower):
         await _grant_if_new(bot, chat_id, user_id, user_name, "decoded")
 
-    # ultra_hidden — сообщение является числом 42
+    # ultra_hidden — число 42
     if t.strip() == "42":
         await _grant_if_new(bot, chat_id, user_id, user_name, "ultra_hidden")
 

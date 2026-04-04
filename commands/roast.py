@@ -127,6 +127,19 @@ async def roast_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     msg = await update.message.reply_text(phrase, parse_mode="HTML")
     track_bot_message(update.effective_chat.id, msg.message_id, phrase[:80])
 
+    # Ачивка «Насмешник» тому, кто запустил /roast
+    caller = update.effective_user
+    if caller and not caller.is_bot:
+        _uid  = caller.id
+        _cid  = update.effective_chat.id
+        _name = caller.first_name or caller.username or "Участник"
+
+        async def _check_roast_ach(ctx):
+            from commands.achievements import check_simple_achievements
+            await check_simple_achievements(ctx.bot, _cid, _uid, _name, "roasted")
+
+        context.job_queue.run_once(_check_roast_ach, 1)
+
     try:
         await update.message.delete()
     except Exception:

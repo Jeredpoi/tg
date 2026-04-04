@@ -22,6 +22,17 @@ async def stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         return
 
     chat_id = update.effective_chat.id
+
+    # Ачивка «Любопытный» — тому, кто вызвал команду (не цели)
+    requester = update.effective_user
+    if requester and not requester.is_bot:
+        _uid, _name = requester.id, requester.first_name or requester.username or "Участник"
+
+        async def _check_stats_ach(ctx):
+            from commands.achievements import check_simple_achievements
+            await check_simple_achievements(ctx.bot, chat_id, _uid, _name, "stats_check")
+
+        context.job_queue.run_once(_check_stats_ach, 1)
     s = get_user_stats(target.id, chat_id)
 
     name = html.escape(target.first_name or "User")

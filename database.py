@@ -166,6 +166,17 @@ def init_db() -> None:
             )
         """)
 
+        # ── user_events ──────────────────────────────────────────────────────────
+        c.execute("""
+            CREATE TABLE IF NOT EXISTS user_events (
+                user_id    INTEGER,
+                chat_id    INTEGER,
+                event_type TEXT,
+                count      INTEGER DEFAULT 0,
+                PRIMARY KEY (user_id, chat_id, event_type)
+            )
+        """)
+
         c.execute("CREATE INDEX IF NOT EXISTS idx_bot_messages_chat    ON bot_messages(chat_id, sent_at DESC)")
         c.execute("CREATE INDEX IF NOT EXISTS idx_photo_ratings_key    ON photo_ratings(key)")
         c.execute("CREATE INDEX IF NOT EXISTS idx_photo_ratings_chat   ON photo_ratings(chat_id)")
@@ -873,3 +884,70 @@ def get_days_since_last_activity(user_id: int, chat_id: int) -> int:
         return (today_d - last_d).days
     finally:
         conn.close()
+
+
+# ── user_events ────────────────────────────────────────────────────────────
+
+def increment_user_event(user_id: int, chat_id: int, event_type: str, amount: int = 1) -> int:
+    """Увеличивает счётчик события для пользователя. Возвращает новый счётчик."""
+    conn = get_connection()
+    try:
+        conn.execute("""
+            INSERT INTO user_events (user_id, chat_id, event_type, count)
+            VALUES (?, ?, ?, ?)
+            ON CONFLICT(user_id, chat_id, event_type)
+            DO UPDATE SET count = count + ?
+        """, (user_id, chat_id, event_type, amount, amount))
+        conn.commit()
+        row = conn.execute(
+            "SELECT count FROM user_events WHERE user_id=? AND chat_id=? AND event_type=?",
+            (user_id, chat_id, event_type)
+        ).fetchone()
+        return row["count"] if row else amount
+    finally:
+        conn.close()
+
+
+def get_user_event_count(user_id: int, chat_id: int, event_type: str) -> int:
+    """Возвращает счётчик события для пользователя."""
+    conn = get_connection()
+    try:
+        row = conn.execute(
+            "SELECT count FROM user_events WHERE user_id=? AND chat_id=? AND event_type=?",
+            (user_id, chat_id, event_type)
+        ).fetchone()
+        return row["count"] if row else 0
+    finally:
+        conn.close()
+
+
+def get_user_votes_given_count(user_id: int, chat_id: int) -> int:
+    """Количество голосов, которые пользователь отдал за фото в данном чате."""
+    conn = get_connection()
+    try:
+        row = conn.execute("""
+            SELECT COUNT(*) FROM photo_votes v
+            JOIN photo_ratings r ON r.photo_id = v.photo_id
+            WHERE v.voter_id = ? AND r.chat_id = ?
+        """, (user_id, chat_id)).fetchone()
+        return row[0] if row else 0
+    finally:
+        conn.close()
+
+
+def get_user_votes_received_count(user_id: int, chat_id: int) -> int:
+    """Суммарное количество голосов, которые получили фото пользователя в чате."""
+    conn = get_connection()
+    try:
+        row = conn.execute("""
+            SELECT COALESCE(SUM(vote_count), 0) FROM photo_ratings
+            WHERE author_id = ? AND chat_id = ?
+        """, (user_id, chat_id)).fetchone()
+        return int(row[0]) if row else 0
+    finally:
+        conn.close()
+
+
+def get_user_top3_count(user_id: int, chat_id: int) -> int:
+    """Сколько раз пользователь попадал в топ-3 (через user_events)."""
+    return get_user_event_count(user_id, chat_id, "top3")

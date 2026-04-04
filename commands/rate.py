@@ -275,15 +275,21 @@ async def _close_rate_voting(context) -> None:
     except Exception as e:
         logger.error("Не удалось закрыть голосование chat=%s msg=%s: %s", chat_id, message_id, e)
 
-    # Ачивка «Победитель» — средний рейтинг ≥ 8.0
+    # Ачивки автора: Победитель (8.0+), Перфекционист (9.0+), Звезда (50 голосов)
     _winner_author_id = photo_row.get("author_id")
     _winner_author_name = photo_row.get("author_name", "")
     if _winner_author_id and votes > 0:
         _avg = avg
         _w_cid = chat_id
+        _w_aid = _winner_author_id
+        _w_aname = _winner_author_name
         async def _check_rate_winner(ctx):
-            await check_rate_achievements(ctx.bot, _w_cid, _winner_author_id, _winner_author_name,
-                                          avg_rating=_avg)
+            from database import get_user_votes_received_count
+            await check_rate_achievements(ctx.bot, _w_cid, _w_aid, _w_aname, avg_rating=_avg)
+            _total_votes = get_user_votes_received_count(_w_aid, _w_cid)
+            if _total_votes >= 50:
+                from commands.achievements import check_simple_achievements
+                await check_simple_achievements(ctx.bot, _w_cid, _w_aid, _w_aname, "rate_votes_50")
         context.job_queue.run_once(_check_rate_winner, 2)
 
     # Уведомление автору в личку
@@ -524,6 +530,22 @@ async def rate_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         )
 
         await query.answer(f"Вы поставили {score} ⭐")
+
+        # Ачивки за голосование
+        _voter_name = query.from_user.first_name or query.from_user.username or "Участник"
+        _vcid = query.message.chat_id
+        _vuid = voter_id
+        _vname = _voter_name
+
+        async def _check_voter_ach(ctx):
+            from commands.achievements import check_simple_achievements
+            from database import get_user_votes_given_count
+            await check_simple_achievements(ctx.bot, _vcid, _vuid, _vname, "rate_voter")
+            _votes_given = get_user_votes_given_count(_vuid, _vcid)
+            if _votes_given >= 10:
+                await check_simple_achievements(ctx.bot, _vcid, _vuid, _vname, "rate_voter_10")
+
+        context.job_queue.run_once(_check_voter_ach, 1)
         try:
             await query.edit_message_caption(
                 caption=caption,

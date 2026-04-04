@@ -112,6 +112,8 @@ _recent_chat_texts: dict[int, list[tuple[str, float]]] = {}
 _user_consecutive: dict[tuple[int, int], tuple[str, int]] = {}
 # (user_id, chat_id) → list[timestamp] — отметки времени за последние 10 сек
 _user_recent_times: dict[tuple[int, int], list[float]] = {}
+# (user_id, chat_id) → list[str] — история сообщений (до 50, НЕ чистим каждый час)
+_user_msg_history: dict[tuple[int, int], list[str]] = {}
 _SWEAR_COOLDOWN = SWEAR_COOLDOWN
 
 # ==============================================================================
@@ -399,11 +401,6 @@ async def _track_message(update, context):
         if (_prev_chat_entry and _prev_chat_entry[0] != user.id)
         else None
     )
-    _cid_recent = _recent_chat_texts.setdefault(chat_id, [])
-    _cid_recent[:] = [(t, ts) for t, ts in _cid_recent if _now_ts - ts < 300]
-    _prev_recent_texts = [t for t, ts in _cid_recent]
-
-    _prev_user_text = _user_last_msg.get(_uid_cid)
 
     _reply_delta: float | None = None
     if update.message.reply_to_message:
@@ -412,9 +409,9 @@ async def _track_message(update, context):
         if orig_ts and curr_ts:
             _reply_delta = (curr_ts - orig_ts).total_seconds()
 
-    _prev_consec_text, _prev_consec_count = _user_consecutive.get(_uid_cid, ("", 0))
-    _consec_count = (_prev_consec_count + 1) if (text and text == _prev_consec_text) else (1 if text else 0)
-    _user_consecutive[_uid_cid] = (text, _consec_count)
+    # История сообщений юзера (до 50, для deja_vu)
+    _hist = _user_msg_history.setdefault(_uid_cid, [])
+    _snap_hist = list(_hist)  # снапшот до добавления текущего
 
     _u_times = _user_recent_times.setdefault(_uid_cid, [])
     _u_times.append(_now_ts)
@@ -425,7 +422,9 @@ async def _track_message(update, context):
     if text:
         _user_last_msg[_uid_cid] = text
         _last_chat_msg[chat_id] = (user.id, text, _now_ts)
-        _cid_recent.append((text, _now_ts))
+        _hist.append(text)
+        if len(_hist) > 50:
+            _hist.pop(0)
 
     track_message(user.id, user.username, user.first_name, swear_count, chat_id)
 
@@ -459,12 +458,10 @@ async def _track_message(update, context):
             _msg_text = text
 
             _silence_hrs = _days_absent * 24.0
-            _pct = _prev_chat_text
-            _put = _prev_user_text
-            _prt = list(_prev_recent_texts)
-            _cc  = _consec_count
-            _rmc = _recent_msg_count
-            _rd  = _reply_delta
+            _pct  = _prev_chat_text
+            _hist = _snap_hist
+            _rmc  = _recent_msg_count
+            _rd   = _reply_delta
 
             async def _run_msg_check(ctx):
                 await check_message_achievements(ctx.bot, _cid, _uid, _user_name, _mc, _sc)
@@ -475,9 +472,7 @@ async def _track_message(update, context):
                     text=_msg_text,
                     reply_delta_secs=_rd,
                     prev_chat_text=_pct,
-                    prev_user_text=_put,
-                    recent_chat_texts=_prt,
-                    user_consecutive_count=_cc,
+                    user_msg_history=_hist,
                     user_recent_count=_rmc,
                     silence_hours=_silence_hrs,
                 )
@@ -1047,11 +1042,10 @@ def main():
                 old = [k for k, v in d.items() if v < cutoff]
                 for k in old:
                     d.pop(k, None)
-            # Чистим in-memory state для секретных ачивок
-            for d2 in (_user_last_msg, _user_consecutive, _user_recent_times):
-                d2.clear()
-            _recent_chat_texts.clear()
+            # Чистим краткосрочный in-memory state (speedrun, mirror)
+            _user_recent_times.clear()
             _last_chat_msg.clear()
+            # _user_msg_history НЕ чистим — нужен для deja_vu
             if stale:
                 logger.debug("_cmd_last_used: удалено %d устаревших записей", len(stale))
 

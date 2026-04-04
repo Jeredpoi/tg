@@ -6,7 +6,7 @@ import html
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.error import BadRequest
 from telegram.ext import ContextTypes
-from database import get_top_messages, get_top_swears, get_gallery, track_bot_message
+from database import get_top_messages, get_top_swears, get_gallery, track_bot_message, increment_user_event
 from chat_config import get_setting
 
 MEDALS = ["🥇", "🥈", "🥉"]
@@ -73,6 +73,24 @@ async def top_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     keyboard = _get_keyboard("messages")
     msg = await context.bot.send_message(chat_id, text, parse_mode="HTML", reply_markup=keyboard)
     track_bot_message(chat_id, msg.message_id, "📊 Топ участников")
+
+    # Ачивка «В топе» — если тот, кто вызвал /top, сам в топ-3
+    requester = update.effective_user
+    if requester and rows:
+        top3_ids = [r["user_id"] for r in rows[:3]]
+        if requester.id in top3_ids:
+            _uid   = requester.id
+            _cid   = chat_id
+            _name  = requester.first_name or requester.username or "Участник"
+            _count = increment_user_event(_uid, _cid, "top3")
+
+            async def _check_top_ach(ctx):
+                from commands.achievements import check_simple_achievements
+                await check_simple_achievements(ctx.bot, _cid, _uid, _name, "top_member")
+                if _count >= 5:
+                    await check_simple_achievements(ctx.bot, _cid, _uid, _name, "top_member_5")
+
+            context.job_queue.run_once(_check_top_ach, 1)
 
     delay = get_setting("autodel_top")
     if delay:

@@ -145,11 +145,15 @@ async def handle_anon_message(update: Update, context: ContextTypes.DEFAULT_TYPE
             parse_mode="HTML",
         )
         await update.message.reply_text("✅ Сообщение отправлено анонимно!")
-        # Ачивка за первое анонимное сообщение
+        # Ачивки за анонимные сообщения
         try:
             from commands.achievements import check_simple_achievements
+            from database import increment_user_event
             _name = user.first_name or user.username or "Участник"
             await check_simple_achievements(context.bot, chat_id, user.id, _name, "first_anon")
+            _anon_count = increment_user_event(user.id, chat_id, "anon")
+            if _anon_count >= 5:
+                await check_simple_achievements(context.bot, chat_id, user.id, _name, "anon_5")
         except Exception:
             pass
     except Exception as e:
