@@ -61,6 +61,10 @@ from commands.restart import restart_command, send_restart_done
 from commands.dashboard import dashboard_callback, dashboard_update_job, DASHBOARD_UPDATE_INTERVAL, dashboard_command
 from commands.clearstats import clearstats_command, clearstats_callback
 from commands.botset import botset_command, handle_botset_photo, apply_identity
+from commands.modtools import (
+    ban_command, kick_command, mute_command, unmute_command,
+    pin_command, unpin_command, synccmds_command, giveach_command, announce_command,
+)
 from chat_config import (get_main_chat_id, add_setup_chat, is_setup_chat, get_setting,
                           is_command_enabled, get_custom_swear_responses, get_custom_swear_triggers,
                           sync_bot_commands, is_monitor_chat)
@@ -912,6 +916,19 @@ def main():
     app.add_handler(CommandHandler("dashboard",    dashboard_command))
     app.add_handler(CommandHandler("ownerhelp",    ownerhelp_command))
     app.add_handler(CommandHandler("botset",       botset_command,       filters=filters.ChatType.PRIVATE))
+
+    # Модерация (работают в группах через reply, только владелец)
+    app.add_handler(CommandHandler("ban",     ban_command,     filters=filters.ChatType.GROUPS))
+    app.add_handler(CommandHandler("kick",    kick_command,    filters=filters.ChatType.GROUPS))
+    app.add_handler(CommandHandler("mute",    mute_command,    filters=filters.ChatType.GROUPS))
+    app.add_handler(CommandHandler("unmute",  unmute_command,  filters=filters.ChatType.GROUPS))
+    app.add_handler(CommandHandler("pin",     pin_command,     filters=filters.ChatType.GROUPS))
+    app.add_handler(CommandHandler("unpin",   unpin_command,   filters=filters.ChatType.GROUPS))
+
+    # Утилиты владельца (только в личке)
+    app.add_handler(CommandHandler("synccmds", synccmds_command, filters=filters.ChatType.PRIVATE))
+    app.add_handler(CommandHandler("giveach",  giveach_command,  filters=filters.ChatType.PRIVATE))
+    app.add_handler(CommandHandler("announce", announce_command, filters=filters.ChatType.PRIVATE))
 
     # Ловим любые другие команды в личке и вежливо отказываем
     app.add_handler(MessageHandler(

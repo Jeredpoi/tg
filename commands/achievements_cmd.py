@@ -185,11 +185,6 @@ async def achievements_command(update: Update, context: ContextTypes.DEFAULT_TYP
     if not user or not update.message:
         return
 
-    try:
-        await update.message.delete()
-    except Exception:
-        pass
-
     category  = CAT_EASY
     page      = 0
     user_name = user.first_name or user.username or ""
@@ -199,12 +194,18 @@ async def achievements_command(update: Update, context: ContextTypes.DEFAULT_TYP
     text   = _build_page_text(user.id, chat.id, category, page, user_name)
     kb     = _build_keyboard(category, page, data["total_pages"], counts)
 
+    # Сначала отправляем ответ, потом удаляем команду
     await context.bot.send_message(
         chat_id=chat.id,
         text=text,
         parse_mode="HTML",
         reply_markup=kb,
     )
+
+    try:
+        await update.message.delete()
+    except Exception:
+        pass
 
 
 async def achievements_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:

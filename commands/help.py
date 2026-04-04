@@ -36,21 +36,34 @@ OWNER_HELP_TEXT = """
 
 ⚙️ <b>Управление ботом</b>
 /settings — панель настроек бота (только в личке)
-/maintenance on|off — режим обслуживания: блокирует команды пользователей
+/synccmds — синхронизировать команды с Bot Father (только в личке)
+/maintenance on|off — режим обслуживания
 /restart — перезапустить бота (только в личке)
 /delmsg — удалить сообщения бота из истории (только в личке)
 /resend — отправить сообщение от имени бота в группу (только в личке)
+/announce &lt;текст&gt; — объявление в основной чат (только в личке)
 /clearmedia — очистить все фото/видео из галереи
-/exportstats — выгрузить всю статистику в ZIP (CSV-файлы, только в личке)
-/backup — получить резервную копию базы данных (только в личке)
-/clearstats — очистить статистику чата (сообщения, маты, ачивки, стрики)
-/dashboard — отправить панели мониторинга в монитор-группу (команда удаляется)
+/exportstats — выгрузить статистику в ZIP (только в личке)
+/backup — резервная копия базы данных (только в личке)
+/clearstats — очистить статистику чата
+/dashboard — панели мониторинга в монитор-группу
 
 🤖 <b>Кастомизация</b>
 /botset — установить аватар, описание, имя бота
 
 🛠 <b>Диагностика</b>
 /debug — статус систем, чат-ID, права бота (удаляется через 20с)
+
+🔨 <b>Модерация</b> <i>(в группе, ответом на сообщение)</i>
+/ban [причина] — забанить участника
+/kick — выгнать без бана
+/mute [время] — замутить (10m, 2h, 1d)
+/unmute — снять мут
+/pin — закрепить сообщение
+/unpin — открепить закреплённое
+
+🏆 <b>Ачивки</b>
+/giveach &lt;user_id&gt; &lt;chat_id&gt; &lt;ach_id&gt; — выдать ачивку вручную (личка)
 
 ━━━━━━━━━━━━━━━━━━━━━━━
 👥 <b>Публичные команды</b>
@@ -69,26 +82,32 @@ _pinned_ownerhelp: dict[int, int] = {}
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Обработчик команд /help и /start. Автоудаляется если autodel_help > 0."""
     user_msg = update.message
-    # В группах удаляем команду сразу, чтобы не засорять чат
-    if update.effective_chat and update.effective_chat.type in ("group", "supergroup"):
+    chat     = update.effective_chat
+    in_group = chat and chat.type in ("group", "supergroup")
+
+    # Сначала отправляем ответ, потом удаляем команду
+    bot_msg = await context.bot.send_message(
+        chat_id=user_msg.chat_id,
+        text=HELP_TEXT,
+        parse_mode="HTML",
+    )
+
+    if in_group:
         try:
             await user_msg.delete()
         except Exception:
             pass
-    bot_msg  = await user_msg.reply_text(HELP_TEXT, parse_mode="HTML")
 
     delay = get_setting("autodel_help")
     if delay:
-        chat_id  = user_msg.chat_id
-        user_mid = user_msg.message_id
-        bot_mid  = bot_msg.message_id
+        chat_id = user_msg.chat_id
+        bot_mid = bot_msg.message_id
 
         async def _delete(ctx):
-            for mid in [user_mid, bot_mid]:
-                try:
-                    await ctx.bot.delete_message(chat_id, mid)
-                except Exception:
-                    pass
+            try:
+                await ctx.bot.delete_message(chat_id, bot_mid)
+            except Exception:
+                pass
 
         context.job_queue.run_once(_delete, delay)
 
