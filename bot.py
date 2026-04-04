@@ -955,7 +955,7 @@ def main():
     app.add_handler(CallbackQueryHandler(clearmedia_callback,    pattern=r"^clearmedia_"))
     app.add_handler(CallbackQueryHandler(clearstats_callback,    pattern=r"^clrstats:"))
     app.add_handler(CallbackQueryHandler(dashboard_callback,     pattern=r"^dash:"))
-    app.add_handler(CallbackQueryHandler(achievements_callback,  pattern=r"^ach:"))
+    app.add_handler(CallbackQueryHandler(achievements_callback,  pattern=r"^ach"))
 
     # Анонимные сообщения / подпись /rate / resend в личке + трекинг в группах
     async def _maybe_token_reply(update, context):

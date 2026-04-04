@@ -5,7 +5,13 @@
 
 import asyncio
 import logging
-from database import grant_achievement, get_user_achievements
+from database import (
+    grant_achievement, get_user_achievements,
+    get_first_earners, get_achievement_rarities,
+    get_streak, get_user_event_count,
+    get_user_votes_given_count, get_user_votes_received_count,
+    get_user_stats,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -378,6 +384,22 @@ async def _announce(bot, chat_id: int, user_name: str, ach_id: str) -> None:
     ach = ACHIEVEMENTS.get(ach_id)
     if not ach:
         return
+
+    # ── Абсолют — особое эпик-объявление (не удаляется) ──────────────────────
+    if ach_id == "absolute":
+        text = (
+            "👑✨🎉 <b>ЛЕГЕНДА ЧАТА!</b> 🎉✨👑\n\n"
+            f"<b>{user_name}</b> получил <b>ВСЕ ачивки</b>!\n\n"
+            f"👑 <b>Абсолют</b> — казалось, это невозможно…\n"
+            f"<i>Но {user_name} сделал это.</i>\n\n"
+            "🏆 Поздравим легенду!"
+        )
+        try:
+            await bot.send_message(chat_id=chat_id, text=text, parse_mode="HTML")
+        except Exception as e:
+            logger.warning("achievements: не удалось отправить анонс absolute: %s", e)
+        return
+
     is_secret = ach.get("secret", False)
     if is_secret:
         text = (
@@ -658,16 +680,19 @@ def get_achievements_page(
     """
     Возвращает словарь с данными страницы ачивок.
     {
-        "items": [...],  # список ачивок на странице
+        "items": [...],
         "page": int,
         "total_pages": int,
         "earned_count": int,
         "total_count": int,
     }
-    Каждый item: {"id": str, "earned": bool, "icon": str, "name": str, "desc": str, "hint": str}
+    Каждый item: {id, earned, icon, name, desc, hint, secret, is_first, rarity}
     """
     rows = get_user_achievements(user_id, chat_id)
     earned_ids = {r["achievement_id"] for r in rows}
+
+    first_earners = get_first_earners(chat_id)    # {ach_id: user_id}
+    rarities      = get_achievement_rarities(chat_id)  # {ach_id: pct}
 
     cat_ids = [
         ach_id for ach_id, ach in ACHIEVEMENTS.items()
@@ -688,13 +713,15 @@ def get_achievements_page(
         ach = ACHIEVEMENTS[ach_id]
         earned = ach_id in earned_ids
         items.append({
-            "id":     ach_id,
-            "earned": earned,
-            "icon":   ach["icon"],
-            "name":   ach["name"] if (earned or not ach.get("secret")) else "???",
-            "desc":   ach["desc"],
-            "hint":   ach.get("hint", ""),
-            "secret": ach.get("secret", False),
+            "id":       ach_id,
+            "earned":   earned,
+            "icon":     ach["icon"],
+            "name":     ach["name"] if (earned or not ach.get("secret")) else "???",
+            "desc":     ach["desc"],
+            "hint":     ach.get("hint", ""),
+            "secret":   ach.get("secret", False),
+            "is_first": first_earners.get(ach_id) == user_id,
+            "rarity":   rarities.get(ach_id),  # None если никто не получил
         })
 
     return {
@@ -704,6 +731,72 @@ def get_achievements_page(
         "earned_count": earned_in_cat,
         "total_count":  total_in_cat,
     }
+
+
+# ── «Ты близко» — прогресс по незаработанным ачивкам ─────────────────────────
+
+def get_user_close_achievements(user_id: int, chat_id: int) -> list:
+    """
+    Возвращает список ещё не полученных ачивок, к которым пользователь ближе всего.
+    Каждый элемент: {id, name, icon, current, total, pct}
+    Отсортировано по убыванию % (ближайшие первые). Не более 5.
+    """
+    rows = get_user_achievements(user_id, chat_id)
+    earned_ids = {r["achievement_id"] for r in rows}
+
+    stats       = get_user_stats(user_id, chat_id)
+    swear       = stats.get("swear_count", 0) or 0
+    streak, _   = get_streak(user_id, chat_id)
+    dice        = get_user_event_count(user_id, chat_id, "dice")
+    anon        = get_user_event_count(user_id, chat_id, "anon")
+    votes_given = get_user_votes_given_count(user_id, chat_id)
+    votes_recv  = get_user_votes_received_count(user_id, chat_id)
+    rate_photos = get_user_event_count(user_id, chat_id, "rate_published")
+    total_ach   = len(earned_ids)
+
+    # (ach_id, текущее_значение, порог)
+    candidates = [
+        ("swear_10",      swear,       10),
+        ("swear_50",      swear,       50),
+        ("swear_500",     swear,      500),
+        ("streak_3",      streak,       3),
+        ("streak_7",      streak,       7),
+        ("streak_14",     streak,      14),
+        ("streak_30",     streak,      30),
+        ("streak_60",     streak,      60),
+        ("streak_100",    streak,     100),
+        ("dice_30",       dice,        30),
+        ("anon_5",        anon,         5),
+        ("rate_voter_10", votes_given, 10),
+        ("rate_votes_50", votes_recv,  50),
+        ("rate_5",        rate_photos,  5),
+        ("ach_10",        total_ach,   10),
+        ("ach_25",        total_ach,   25),
+        ("ach_40",        total_ach,   40),
+        ("ach_50",        total_ach,   50),
+    ]
+
+    result = []
+    for ach_id, current, total in candidates:
+        if ach_id in earned_ids:
+            continue
+        if current <= 0:
+            continue
+        ach = ACHIEVEMENTS.get(ach_id)
+        if not ach:
+            continue
+        pct = min(100.0, current / total * 100)
+        result.append({
+            "id":      ach_id,
+            "name":    ach["name"],
+            "icon":    ach["icon"],
+            "current": min(current, total),
+            "total":   total,
+            "pct":     pct,
+        })
+
+    result.sort(key=lambda x: x["pct"], reverse=True)
+    return result[:5]
 
 
 # ── Форматирование для /stats ─────────────────────────────────────────────────

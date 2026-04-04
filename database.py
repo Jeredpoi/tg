@@ -951,3 +951,49 @@ def get_user_votes_received_count(user_id: int, chat_id: int) -> int:
 def get_user_top3_count(user_id: int, chat_id: int) -> int:
     """Сколько раз пользователь попадал в топ-3 (через user_events)."""
     return get_user_event_count(user_id, chat_id, "top3")
+
+
+# ── achievements helpers ───────────────────────────────────────────────────
+
+def get_first_earners(chat_id: int) -> dict:
+    """
+    Возвращает {achievement_id: user_id} — кто первым получил каждую ачивку в чате.
+    """
+    conn = get_connection()
+    try:
+        rows = conn.execute("""
+            SELECT a.achievement_id, a.user_id
+            FROM achievements a
+            INNER JOIN (
+                SELECT achievement_id, MIN(earned_at) AS min_at
+                FROM achievements WHERE chat_id = ?
+                GROUP BY achievement_id
+            ) m ON a.achievement_id = m.achievement_id
+              AND a.earned_at = m.min_at
+              AND a.chat_id = ?
+        """, (chat_id, chat_id)).fetchall()
+        return {r["achievement_id"]: r["user_id"] for r in rows}
+    finally:
+        conn.close()
+
+
+def get_achievement_rarities(chat_id: int) -> dict:
+    """
+    Возвращает {achievement_id: percent} — какой % участников чата получил каждую ачивку.
+    """
+    conn = get_connection()
+    try:
+        total_row = conn.execute(
+            "SELECT COUNT(*) AS cnt FROM user_stats WHERE chat_id = ?", (chat_id,)
+        ).fetchone()
+        total = int(total_row["cnt"] or 0) if total_row else 0
+        if not total:
+            return {}
+        rows = conn.execute("""
+            SELECT achievement_id, COUNT(DISTINCT user_id) AS cnt
+            FROM achievements WHERE chat_id = ?
+            GROUP BY achievement_id
+        """, (chat_id,)).fetchall()
+        return {r["achievement_id"]: round(r["cnt"] / total * 100) for r in rows}
+    finally:
+        conn.close()

@@ -18,6 +18,7 @@ HELP_TEXT = """
 📊 <b>Статистика</b>
 /top — топ активности, матов и рейтинга /rate
 /stats — личная статистика (или ответом — чужая)
+/achievements — твои достижения и прогресс
 
 📸 <b>Медиа</b>
 /rate — отправить фото или видео на оценку группы (в личке боту)
@@ -55,7 +56,7 @@ OWNER_HELP_TEXT = """
 👥 <b>Публичные команды</b>
 
 🎲 /dice · /roast · /mge
-📊 /top · /stats
+📊 /top · /stats · /achievements
 📸 /rate · /gallery
 🎭 /anon
 ❓ /help
