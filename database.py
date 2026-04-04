@@ -840,3 +840,36 @@ def get_and_delete_old_photos(days: int) -> list:
         return [(r["key"], r["media_type"] or "photo") for r in rows]
     finally:
         conn.close()
+
+
+def get_chat_total_msg_count(chat_id: int) -> int:
+    """Возвращает суммарное количество сообщений в чате (для lucky_number ачивки)."""
+    conn = get_connection()
+    try:
+        row = conn.execute(
+            "SELECT COALESCE(SUM(msg_count), 0) FROM user_stats WHERE chat_id = ?",
+            (chat_id,)
+        ).fetchone()
+        return int(row[0]) if row else 0
+    finally:
+        conn.close()
+
+
+def get_days_since_last_activity(user_id: int, chat_id: int) -> int:
+    """
+    Возвращает количество дней с последней активности пользователя в чате.
+    Возвращает 0 если пользователь активен сегодня или записи нет.
+    """
+    conn = get_connection()
+    try:
+        row = conn.execute(
+            "SELECT last_date FROM activity_streaks WHERE user_id=? AND chat_id=?",
+            (user_id, chat_id)
+        ).fetchone()
+        if not row:
+            return 0
+        today_d = datetime.datetime.now(_MSK).date()
+        last_d = datetime.date.fromisoformat(row[0])
+        return (today_d - last_d).days
+    finally:
+        conn.close()

@@ -31,8 +31,13 @@ from config import (BOT_TOKEN, PROXY_URL, WEBAPP_URL, OWNER_ID,
 
 from database import (init_db, track_message, track_daily_swear, get_daily_swear_report,
                        get_best_photo_since, get_and_delete_old_photos, track_bot_message,
-                       get_user_stats, update_streak, get_streak)
-from commands.achievements import check_message_achievements, check_streak_achievements
+                       get_user_stats, update_streak, get_streak,
+                       get_chat_total_msg_count, get_days_since_last_activity)
+from commands.achievements import (
+    check_message_achievements, check_streak_achievements,
+    check_time_achievements, check_single_message_achievements,
+    check_activity_achievements,
+)
 
 from commands.debug import debug_command
 from commands.dice import dice_command
@@ -378,21 +383,42 @@ async def _track_message(update, context):
     # ── Стрики и ачивки ──────────────────────────────────────────────────────
     if is_group:
         try:
-            streak, is_new_day = update_streak(user.id, chat_id)
             _user_name = user.first_name or user.username or "Участник"
             _uid, _cid = user.id, chat_id
 
+            # Дни с последней активности (для comeback) — до обновления стрика
+            _days_absent = get_days_since_last_activity(_uid, _cid)
+
+            streak, is_new_day = update_streak(_uid, _cid)
+
             if is_new_day:
                 _streak = streak
+                _absent = _days_absent
                 async def _run_streak_check(ctx):
                     await check_streak_achievements(ctx.bot, _cid, _uid, _user_name, _streak)
+                    await check_activity_achievements(ctx.bot, _cid, _uid, _user_name,
+                                                      daily_count=0, days_since_last=_absent)
                 context.job_queue.run_once(_run_streak_check, 1)
 
-            stats = get_user_stats(user.id, chat_id)
+            stats = get_user_stats(_uid, _cid)
             _mc, _sc = stats["msg_count"], stats["swear_count"]
+            _swear_in_msg = swear_count
+            _total_msgs = get_chat_total_msg_count(_cid)
+
             async def _run_msg_check(ctx):
                 await check_message_achievements(ctx.bot, _cid, _uid, _user_name, _mc, _sc)
+                await check_single_message_achievements(ctx.bot, _cid, _uid, _user_name,
+                                                        _swear_in_msg, _total_msgs)
             context.job_queue.run_once(_run_msg_check, 1)
+
+            # Временны́е ачивки (сова, пташка и т.д.) — проверяем раз в день
+            if is_new_day:
+                _now_dt = datetime.datetime.now(datetime.timezone(datetime.timedelta(hours=3)))
+                _dt = _now_dt
+                async def _run_time_check(ctx):
+                    await check_time_achievements(ctx.bot, _cid, _uid, _user_name, _dt)
+                context.job_queue.run_once(_run_time_check, 2)
+
         except Exception as e:
             logger.warning("streak/achievement check failed: %s", e)
 

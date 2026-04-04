@@ -12,6 +12,7 @@ import config
 from config import VOTE_DURATION, WEBAPP_URL
 from chat_config import get_setting
 from chat_config import get_main_chat_id
+from commands.achievements import check_rate_achievements
 
 logger = logging.getLogger(__name__)
 PHOTOS_DIR = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "photos"))
@@ -274,6 +275,17 @@ async def _close_rate_voting(context) -> None:
     except Exception as e:
         logger.error("Не удалось закрыть голосование chat=%s msg=%s: %s", chat_id, message_id, e)
 
+    # Ачивка «Победитель» — средний рейтинг ≥ 8.0
+    _winner_author_id = photo_row.get("author_id")
+    _winner_author_name = photo_row.get("author_name", "")
+    if _winner_author_id and votes > 0:
+        _avg = avg
+        _w_cid = chat_id
+        async def _check_rate_winner(ctx):
+            await check_rate_achievements(ctx.bot, _w_cid, _winner_author_id, _winner_author_name,
+                                          avg_rating=_avg)
+        context.job_queue.run_once(_check_rate_winner, 2)
+
     # Уведомление автору в личку
     author_id = photo_row.get("author_id")
     if author_id and not photo_row["anonymous"]:
@@ -433,6 +445,15 @@ async def rate_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
             key=key,
             media_type=media_type,
         )
+
+        # Ачивка «Фотограф» — первое фото в /rate
+        _rate_author_id = photo_row["author_id"]
+        _rate_author_name = photo_row["author_name"]
+        _rate_cid = target_chat_id
+        async def _check_rate_first(ctx):
+            await check_rate_achievements(ctx.bot, _rate_cid, _rate_author_id, _rate_author_name,
+                                          is_first=True)
+        context.job_queue.run_once(_check_rate_first, 2)
 
         vote_duration = get_setting("vote_duration") * 60  # минуты → секунды
         context.job_queue.run_once(
