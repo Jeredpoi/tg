@@ -74,12 +74,21 @@ def _get_all_setup_chats() -> list[int]:
 
 
 async def debug_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    from commands.achievements import check_simple_achievements
     message = update.message
     chat    = update.effective_chat
     user    = update.effective_user
 
     if not message or not chat or not user:
         return
+
+    # Ачивка за использование /debug
+    if chat.type in ("group", "supergroup"):
+        _name = user.first_name or user.username or "Участник"
+        try:
+            await check_simple_achievements(context.bot, chat.id, user.id, _name, "debug_user")
+        except Exception:
+            pass
 
     (db_ok, db_txt), (s_ok, s_txt), (wa_ok, wa_txt) = await asyncio.gather(
         _check_db(), _check_steam(), _check_webapp()
