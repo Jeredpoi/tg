@@ -4,77 +4,130 @@
 
 import logging
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import ContextTypes, CallbackQueryHandler
+from telegram.ext import ContextTypes
 
 from commands.achievements import (
     ACHIEVEMENTS, CAT_EASY, CAT_HARD, CAT_SECRET,
-    get_achievements_page,
+    get_achievements_page, get_category_counts,
 )
-from database import get_user_achievements
 
 logger = logging.getLogger(__name__)
 
 _PER_PAGE = 5
 
-_CAT_LABELS = {
-    CAT_EASY:   "🟢 Лёгкие",
-    CAT_HARD:   "🔴 Сложные",
-    CAT_SECRET: "🔒 Секретные",
+_CAT_META = {
+    CAT_EASY:   ("🟢", "Лёгкие"),
+    CAT_HARD:   ("🔴", "Сложные"),
+    CAT_SECRET: ("🔒", "Секретные"),
 }
 _CAT_ORDER = [CAT_EASY, CAT_HARD, CAT_SECRET]
 
 
-def _build_page_text(user_id: int, chat_id: int, category: str, page: int) -> str:
-    data = get_achievements_page(user_id, chat_id, category, page, _PER_PAGE)
-    items       = data["items"]
-    cur_page    = data["page"]
-    total_pages = data["total_pages"]
-    earned      = data["earned_count"]
-    total       = data["total_count"]
+def _progress_bar(earned: int, total: int, width: int = 10) -> str:
+    if total == 0:
+        return "░" * width
+    filled = round(earned / total * width)
+    return "▓" * filled + "░" * (width - filled)
 
-    label = _CAT_LABELS.get(category, category)
-    lines = [f"<b>{label}</b>  ({earned}/{total})"]
-    lines.append(f"Страница {cur_page + 1} из {total_pages}\n")
 
+def _pct(earned: int, total: int) -> str:
+    if total == 0:
+        return "0%"
+    return f"{round(earned / total * 100)}%"
+
+
+def _build_page_text(
+    user_id: int, chat_id: int,
+    category: str, page: int,
+    user_name: str = "",
+) -> str:
+    data    = get_achievements_page(user_id, chat_id, category, page, _PER_PAGE)
+    counts  = get_category_counts(user_id, chat_id)
+    items   = data["items"]
+    cur     = data["page"]
+    total_p = data["total_pages"]
+    earned  = data["earned_count"]
+    total   = data["total_count"]
+
+    emoji, cat_label = _CAT_META[category]
+
+    # ── Шапка ────────────────────────────────────────────────────────────────
+    name_str = f" · {user_name}" if user_name else ""
+    header = f"🏅 <b>Ачивки{name_str}</b>\n"
+
+    # Прогресс по всем категориям — одна строка
+    parts = []
+    for cat in _CAT_ORDER:
+        e, t = counts[cat]
+        em, _ = _CAT_META[cat]
+        parts.append(f"{em} <b>{e}</b>/{t}")
+    header += "  ·  ".join(parts)
+
+    # ── Раздел ───────────────────────────────────────────────────────────────
+    bar  = _progress_bar(earned, total)
+    pct  = _pct(earned, total)
+    page_str = f"стр. {cur + 1}/{total_p}" if total_p > 1 else ""
+
+    sep = "―" * 18
+    section = (
+        f"\n{sep}\n"
+        f"{emoji} <b>{cat_label}</b>"
+        + (f"  ·  {page_str}" if page_str else "")
+        + f"\n<code>{bar}</code>  {earned} из {total}  <i>({pct})</i>\n"
+        f"{sep}"
+    )
+
+    # ── Список ачивок ────────────────────────────────────────────────────────
+    ach_lines = []
     for item in items:
         if item["earned"]:
-            lines.append(
-                f"{item['icon']} <b>{item['name']}</b>\n"
-                f"  <i>{item['desc']}</i>"
+            ach_lines.append(
+                f"\n✅ {item['icon']} <b>{item['name']}</b>\n"
+                f"    <i>{item['desc']}</i>"
             )
         elif item["secret"]:
-            lines.append(
-                f"🔒 <b>???</b>\n"
-                f"  <i>{item['hint']}</i>"
+            ach_lines.append(
+                f"\n🔒 <b>???</b>\n"
+                f"    <i>{item['hint']}</i>"
             )
         else:
-            lines.append(
-                f"{item['icon']} {item['name']}\n"
-                f"  <i>{item['hint']}</i>"
+            ach_lines.append(
+                f"\n⬜ {item['icon']} <b>{item['name']}</b>\n"
+                f"    <i>{item['hint']}</i>"
             )
 
-    return "\n\n".join(lines)
+    return header + section + "".join(ach_lines)
 
 
-def _build_keyboard(category: str, page: int, total_pages: int) -> InlineKeyboardMarkup:
+def _build_keyboard(
+    category: str, page: int, total_pages: int,
+    counts: dict,
+) -> InlineKeyboardMarkup:
     rows = []
 
-    # Кнопки категорий — активная помечается ✅
+    # Ряд категорий — у каждой счётчик earned/total
     cat_row = []
     for cat in _CAT_ORDER:
-        label = _CAT_LABELS[cat]
+        emoji, label = _CAT_META[cat]
+        e, t = counts.get(cat, (0, 0))
+        btn_label = f"{emoji} {e}/{t}"
         if cat == category:
-            label = "✅ " + label
-        cat_row.append(InlineKeyboardButton(label, callback_data=f"ach:{cat}:0"))
+            btn_label = "✅ " + btn_label
+        cat_row.append(InlineKeyboardButton(btn_label, callback_data=f"ach:{cat}:0"))
     rows.append(cat_row)
 
-    # Навигация по страницам
-    nav_row = []
-    if page > 0:
-        nav_row.append(InlineKeyboardButton("◀ Назад", callback_data=f"ach:{category}:{page - 1}"))
-    if page < total_pages - 1:
-        nav_row.append(InlineKeyboardButton("Вперёд ▶", callback_data=f"ach:{category}:{page + 1}"))
-    if nav_row:
+    # Ряд навигации (только если несколько страниц)
+    if total_pages > 1:
+        nav_row = []
+        if page > 0:
+            nav_row.append(InlineKeyboardButton("◀", callback_data=f"ach:{category}:{page - 1}"))
+        # Индикатор страницы — кнопка-заглушка
+        nav_row.append(InlineKeyboardButton(
+            f"· {page + 1} / {total_pages} ·",
+            callback_data="ach_page",
+        ))
+        if page < total_pages - 1:
+            nav_row.append(InlineKeyboardButton("▶", callback_data=f"ach:{category}:{page + 1}"))
         rows.append(nav_row)
 
     return InlineKeyboardMarkup(rows)
@@ -87,17 +140,19 @@ async def achievements_command(update: Update, context: ContextTypes.DEFAULT_TYP
     if not user or not update.message:
         return
 
-    category = CAT_EASY
-    page = 0
-
-    data = get_achievements_page(user.id, chat.id, category, page, _PER_PAGE)
-    text = _build_page_text(user.id, chat.id, category, page)
-    kb   = _build_keyboard(category, page, data["total_pages"])
-
     try:
         await update.message.delete()
     except Exception:
         pass
+
+    category = CAT_EASY
+    page = 0
+    user_name = user.first_name or user.username or ""
+
+    counts  = get_category_counts(user.id, chat.id)
+    data    = get_achievements_page(user.id, chat.id, category, page, _PER_PAGE)
+    text    = _build_page_text(user.id, chat.id, category, page, user_name)
+    kb      = _build_keyboard(category, page, data["total_pages"], counts)
 
     await context.bot.send_message(
         chat_id=chat.id,
@@ -108,10 +163,16 @@ async def achievements_command(update: Update, context: ContextTypes.DEFAULT_TYP
 
 
 async def achievements_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Обработчик нажатий кнопок ачивок: ach:<category>:<page>"""
+    """Обработчик кнопок: ach:<category>:<page>  или  ach_page (заглушка)."""
     query = update.callback_query
     if not query:
         return
+
+    # Заглушка — индикатор страницы, ничего не делаем
+    if query.data == "ach_page":
+        await query.answer()
+        return
+
     await query.answer()
 
     parts = query.data.split(":")
@@ -119,7 +180,7 @@ async def achievements_callback(update: Update, context: ContextTypes.DEFAULT_TY
         return
 
     _, category, page_str = parts
-    if category not in _CAT_LABELS:
+    if category not in _CAT_META:
         return
     try:
         page = int(page_str)
@@ -128,10 +189,12 @@ async def achievements_callback(update: Update, context: ContextTypes.DEFAULT_TY
 
     user = query.from_user
     chat = query.message.chat
+    user_name = user.first_name or user.username or ""
 
-    data = get_achievements_page(user.id, chat.id, category, page, _PER_PAGE)
-    text = _build_page_text(user.id, chat.id, category, page)
-    kb   = _build_keyboard(category, data["page"], data["total_pages"])
+    counts  = get_category_counts(user.id, chat.id)
+    data    = get_achievements_page(user.id, chat.id, category, page, _PER_PAGE)
+    text    = _build_page_text(user.id, chat.id, category, page, user_name)
+    kb      = _build_keyboard(category, data["page"], data["total_pages"], counts)
 
     try:
         await query.edit_message_text(text=text, parse_mode="HTML", reply_markup=kb)

@@ -637,6 +637,19 @@ async def check_secret_text_achievements(
         await _grant_if_new(bot, chat_id, user_id, user_name, "ultra_hidden")
 
 
+# ── Счётчики по категориям ────────────────────────────────────────────────────
+
+def get_category_counts(user_id: int, chat_id: int) -> dict[str, tuple[int, int]]:
+    """Возвращает {category: (earned, total)} для всех трёх категорий."""
+    rows = get_user_achievements(user_id, chat_id)
+    earned_ids = {r["achievement_id"] for r in rows if r["achievement_id"] in ACHIEVEMENTS}
+    result = {}
+    for cat in [CAT_EASY, CAT_HARD, CAT_SECRET]:
+        cat_ids = [aid for aid, a in ACHIEVEMENTS.items() if a["cat"] == cat]
+        result[cat] = (sum(1 for aid in cat_ids if aid in earned_ids), len(cat_ids))
+    return result
+
+
 # ── Пагинация для /achievements ───────────────────────────────────────────────
 
 def get_achievements_page(
