@@ -376,6 +376,7 @@ async def _private_command_guard(update, context):
     await update.message.reply_text(
         "❌ В личке доступны только:\n"
         "/rate — отправить фото на оценку группы\n"
+        "/achievements — твои ачивки\n"
         "/help — список команд группы"
     )
 
