@@ -378,11 +378,17 @@ async def _announce(bot, chat_id: int, user_name: str, ach_id: str) -> None:
     ach = ACHIEVEMENTS.get(ach_id)
     if not ach:
         return
-    text = (
-        f"🏆 <b>{user_name}</b> получил ачивку "
-        f"{ach['icon']} <b>{ach['name']}</b>!\n"
-        f"<i>{ach['desc']}</i>"
-    )
+    is_secret = ach.get("secret", False)
+    if is_secret:
+        text = (
+            f"🔓 <b>{user_name}</b> раскрыл секрет!\n"
+            f"{ach['icon']} <b>{ach['name']}</b>"
+        )
+    else:
+        text = (
+            f"🏆 <b>{user_name}</b> получил ачивку!\n"
+            f"{ach['icon']} <b>{ach['name']}</b>"
+        )
     try:
         msg = await bot.send_message(chat_id=chat_id, text=text, parse_mode="HTML")
         async def _delete():

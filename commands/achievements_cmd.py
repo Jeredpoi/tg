@@ -59,21 +59,21 @@ def _build_page_text(user_id: int, chat_id: int, category: str, page: int) -> st
 def _build_keyboard(category: str, page: int, total_pages: int) -> InlineKeyboardMarkup:
     rows = []
 
-    # Кнопки категорий
+    # Кнопки категорий — активная помечается ✅
     cat_row = []
     for cat in _CAT_ORDER:
         label = _CAT_LABELS[cat]
         if cat == category:
-            label = f"[ {label} ]"
+            label = "✅ " + label
         cat_row.append(InlineKeyboardButton(label, callback_data=f"ach:{cat}:0"))
     rows.append(cat_row)
 
     # Навигация по страницам
     nav_row = []
     if page > 0:
-        nav_row.append(InlineKeyboardButton("◀", callback_data=f"ach:{category}:{page - 1}"))
+        nav_row.append(InlineKeyboardButton("◀ Назад", callback_data=f"ach:{category}:{page - 1}"))
     if page < total_pages - 1:
-        nav_row.append(InlineKeyboardButton("▶", callback_data=f"ach:{category}:{page + 1}"))
+        nav_row.append(InlineKeyboardButton("Вперёд ▶", callback_data=f"ach:{category}:{page + 1}"))
     if nav_row:
         rows.append(nav_row)
 

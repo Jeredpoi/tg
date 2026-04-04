@@ -3,10 +3,10 @@
 # ==============================================================================
 
 import html
-from telegram import Update
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
-from database import get_user_stats, get_streak
-from commands.achievements import format_achievements
+from database import get_user_stats, get_streak, get_user_achievements
+from commands.achievements import ACHIEVEMENTS, CAT_EASY, CAT_HARD, CAT_SECRET
 from chat_config import get_setting
 
 
@@ -63,13 +63,29 @@ async def stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     else:
         lines.append("📸 В рейтинге пока не участвовал")
 
-    # Ачивки
-    ach_line = format_achievements(target.id, chat_id)
-    if ach_line:
-        lines.append("")
-        lines.append(ach_line)
+    # Краткий итог ачивок
+    rows = get_user_achievements(target.id, chat_id)
+    earned_ids = {r["achievement_id"] for r in rows if r["achievement_id"] in ACHIEVEMENTS}
+    total_ach  = len(ACHIEVEMENTS)
+    earned_ach = len(earned_ids)
+    secrets_earned = sum(1 for aid in earned_ids if ACHIEVEMENTS[aid].get("secret"))
+    secrets_total  = sum(1 for a in ACHIEVEMENTS.values() if a.get("secret"))
 
-    msg = await update.message.reply_text("\n".join(lines), parse_mode="HTML")
+    lines.append("")
+    if earned_ach:
+        lines.append(
+            f"🏆 Ачивок: <b>{earned_ach}/{total_ach}</b> "
+            f"<i>(секретных: {secrets_earned}/{secrets_total})</i>"
+        )
+    else:
+        lines.append("🏆 Ачивок пока нет")
+
+    # Кнопка «Ачивки» открывает список для кликнувшего
+    kb = InlineKeyboardMarkup([[
+        InlineKeyboardButton("🏆 Мои ачивки", callback_data="ach:easy:0"),
+    ]])
+
+    msg = await update.message.reply_text("\n".join(lines), parse_mode="HTML", reply_markup=kb)
 
     try:
         await update.message.delete()

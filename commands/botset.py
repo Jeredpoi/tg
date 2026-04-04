@@ -16,6 +16,7 @@ logger = logging.getLogger(__name__)
 
 _IDENTITY_FILE = os.path.join(os.path.dirname(__file__), "..", "bot_identity.json")
 _BOTSET_PHOTO_STATE = "botset_photo"  # ключ в context.user_data
+_AUTODEL = 90  # сек — автоудаление ответов в личке
 
 
 def _load_identity() -> dict:
@@ -45,7 +46,7 @@ def render_template(template: str, online: bool = True) -> str:
 
 
 async def apply_identity(bot, online: bool = True) -> None:
-    """Применяет сохранённые шаблоны описания/имени к боту. Вызывается при старте и остановке."""
+    """Применяет сохранённые шаблоны описания/имени к боту."""
     identity = _load_identity()
     if not identity:
         return
@@ -69,6 +70,15 @@ async def apply_identity(bot, online: bool = True) -> None:
             logger.warning("botset: не удалось установить имя: %s", e)
 
 
+def _schedule_delete(context, chat_id: int, msg_id: int, delay: int = _AUTODEL) -> None:
+    async def _del(ctx):
+        try:
+            await ctx.bot.delete_message(chat_id, msg_id)
+        except Exception:
+            pass
+    context.job_queue.run_once(_del, delay)
+
+
 async def botset_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """/botset — кастомизация бота. Только владелец, только личка."""
     if update.effective_user.id != OWNER_ID:
@@ -80,7 +90,18 @@ async def botset_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             pass
         return
 
+    # Удаляем команду сразу
+    try:
+        await update.message.delete()
+    except Exception:
+        pass
+
     args = context.args or []
+    chat_id = update.effective_chat.id
+
+    async def _reply(text: str, **kwargs) -> None:
+        msg = await context.bot.send_message(chat_id=chat_id, text=text, **kwargs)
+        _schedule_delete(context, chat_id, msg.message_id)
 
     # /botset без аргументов — показать меню
     if not args:
@@ -88,7 +109,7 @@ async def botset_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         desc       = identity.get("desc", "—")
         short_desc = identity.get("short_desc", "—")
         name       = identity.get("name", "—")
-        await update.message.reply_text(
+        await _reply(
             "🤖 <b>Кастомизация бота</b>\n\n"
             f"<b>Имя:</b> {name}\n"
             f"<b>Описание:</b> {desc}\n"
@@ -112,32 +133,32 @@ async def botset_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     # /botset name <текст>
     if sub == "name":
         if len(args) < 2:
-            await update.message.reply_text("❌ Укажи имя: /botset name Скаут")
+            await _reply("❌ Укажи имя: /botset name Скаут")
             return
         new_name = " ".join(args[1:])
         if len(new_name) > 64:
-            await update.message.reply_text("❌ Имя слишком длинное (макс. 64 символа).")
+            await _reply("❌ Имя слишком длинное (макс. 64 символа).")
             return
         try:
             await context.bot.set_my_name(new_name)
             identity = _load_identity()
             identity["name"] = new_name
             _save_identity(identity)
-            await update.message.reply_text(f"✅ Имя бота изменено на: <b>{new_name}</b>", parse_mode="HTML")
+            await _reply(f"✅ Имя бота изменено на: <b>{new_name}</b>", parse_mode="HTML")
         except Exception as e:
-            await update.message.reply_text(f"❌ Ошибка: {e}")
+            await _reply(f"❌ Ошибка: {e}")
 
     # /botset desc <текст>
     elif sub == "desc":
         if len(args) < 2:
-            await update.message.reply_text(
+            await _reply(
                 "❌ Укажи описание: /botset desc Бот онлайн: {status}\n\n"
                 "Переменные: {status}, {version}, {date}"
             )
             return
         template = " ".join(args[1:])
         if len(template) > 512:
-            await update.message.reply_text("❌ Описание слишком длинное (макс. 512 символов).")
+            await _reply("❌ Описание слишком длинное (макс. 512 символов).")
             return
         rendered = render_template(template, online=True)
         try:
@@ -145,23 +166,21 @@ async def botset_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             identity = _load_identity()
             identity["desc"] = template
             _save_identity(identity)
-            await update.message.reply_text(
-                f"✅ Описание обновлено.\n\n<b>Шаблон:</b> {template}\n<b>Сейчас выглядит:</b> {rendered}",
+            await _reply(
+                f"✅ Описание обновлено.\n\n<b>Шаблон:</b> {template}\n<b>Сейчас:</b> {rendered}",
                 parse_mode="HTML",
             )
         except Exception as e:
-            await update.message.reply_text(f"❌ Ошибка: {e}")
+            await _reply(f"❌ Ошибка: {e}")
 
     # /botset shortdesc <текст>
     elif sub == "shortdesc":
         if len(args) < 2:
-            await update.message.reply_text(
-                "❌ Укажи короткое описание: /botset shortdesc Скаут на связи {status}"
-            )
+            await _reply("❌ Укажи короткое описание: /botset shortdesc Скаут на связи {status}")
             return
         template = " ".join(args[1:])
         if len(template) > 120:
-            await update.message.reply_text("❌ Слишком длинное (макс. 120 символов).")
+            await _reply("❌ Слишком длинное (макс. 120 символов).")
             return
         rendered = render_template(template, online=True)
         try:
@@ -169,17 +188,17 @@ async def botset_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             identity = _load_identity()
             identity["short_desc"] = template
             _save_identity(identity)
-            await update.message.reply_text(
+            await _reply(
                 f"✅ Короткое описание обновлено.\n<b>Сейчас:</b> {rendered}",
                 parse_mode="HTML",
             )
         except Exception as e:
-            await update.message.reply_text(f"❌ Ошибка: {e}")
+            await _reply(f"❌ Ошибка: {e}")
 
     # /botset photo — ждём следующее фото
     elif sub == "photo":
         context.user_data[_BOTSET_PHOTO_STATE] = True
-        await update.message.reply_text(
+        await _reply(
             "📸 Жду фото для аватара бота.\n"
             "Отправь фотографию следующим сообщением."
         )
@@ -187,10 +206,10 @@ async def botset_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     # /botset apply — применить шаблоны
     elif sub == "apply":
         await apply_identity(context.bot, online=True)
-        await update.message.reply_text("✅ Шаблоны применены.")
+        await _reply("✅ Шаблоны применены.")
 
     else:
-        await update.message.reply_text(
+        await _reply(
             f"❌ Неизвестная подкоманда: <code>{sub}</code>\n"
             "Доступные: name, desc, shortdesc, photo, apply",
             parse_mode="HTML",
@@ -211,6 +230,7 @@ async def handle_botset_photo(update: Update, context: ContextTypes.DEFAULT_TYPE
         return False
 
     context.user_data.pop(_BOTSET_PHOTO_STATE, None)
+    chat_id = update.effective_chat.id
 
     photo = update.message.photo[-1]  # наибольшее разрешение
     try:
@@ -218,7 +238,9 @@ async def handle_botset_photo(update: Update, context: ContextTypes.DEFAULT_TYPE
         photo_bytes = await file.download_as_bytearray()
         import io
         await context.bot.set_my_profile_photo(io.BytesIO(bytes(photo_bytes)))
-        await update.message.reply_text("✅ Аватар бота обновлён!")
+        msg = await update.message.reply_text("✅ Аватар бота обновлён!")
     except Exception as e:
-        await update.message.reply_text(f"❌ Не удалось установить аватар: {e}")
+        msg = await update.message.reply_text(f"❌ Не удалось установить аватар: {e}")
+
+    _schedule_delete(context, chat_id, msg.message_id)
     return True
