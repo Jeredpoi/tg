@@ -125,8 +125,7 @@ def _build_page_text(
         if item["earned"]:
             first_str = " ⭐" if item.get("is_first") else ""
             ach_lines.append(
-                f"\n✅ {item['icon']} <b>{item['name']}</b>{first_str}{rarity_str}\n"
-                f"    <i>{item['desc']}</i>"
+                f"\n✅ {item['icon']} <b>{item['name']}</b>{first_str}{rarity_str}"
             )
         elif item["secret"]:
             ach_lines.append(
@@ -179,33 +178,64 @@ def _build_keyboard(
 
 
 async def achievements_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """/achievements — просмотр ачивок с пагинацией."""
+    """/achievements — просмотр ачивок. В группах перенаправляет в личку."""
     user = update.effective_user
     chat = update.effective_chat
     if not user or not update.message:
         return
 
-    category  = CAT_EASY
-    page      = 0
-    user_name = user.first_name or user.username or ""
+    in_group = chat and chat.type in ("group", "supergroup")
 
-    counts = get_category_counts(user.id, chat.id)
-    data   = get_achievements_page(user.id, chat.id, category, page, _PER_PAGE)
-    text   = _build_page_text(user.id, chat.id, category, page, user_name)
+    # ── В группе — показываем подсказку с кнопкой в личку ─────────────────────
+    if in_group:
+        bot_username = (await context.bot.get_me()).username
+        bot_msg = await context.bot.send_message(
+            chat_id=chat.id,
+            text="🏆 Ачивки доступны только в личке с ботом.",
+            reply_markup=InlineKeyboardMarkup([[
+                InlineKeyboardButton(
+                    "📱 Открыть в личке",
+                    url=f"https://t.me/{bot_username}?start=achievements",
+                ),
+            ]]),
+        )
+        try:
+            await update.message.delete()
+        except Exception:
+            pass
+        # Авто-удалить подсказку через 20 сек
+        import asyncio
+        async def _del():
+            await asyncio.sleep(20)
+            try:
+                await bot_msg.delete()
+            except Exception:
+                pass
+        asyncio.create_task(_del())
+        return
+
+    # ── В личке — показываем меню ──────────────────────────────────────────────
+    _send_achievements_menu(update, context, user.id, chat.id,
+                            user.first_name or user.username or "")
+
+
+async def _send_achievements_menu(update, context, user_id: int, chat_id: int,
+                                  user_name: str) -> None:
+    """Отправляет меню ачивок пользователю."""
+    category = CAT_EASY
+    page     = 0
+
+    counts = get_category_counts(user_id, chat_id)
+    data   = get_achievements_page(user_id, chat_id, category, page, _PER_PAGE)
+    text   = _build_page_text(user_id, chat_id, category, page, user_name)
     kb     = _build_keyboard(category, page, data["total_pages"], counts)
 
-    # Сначала отправляем ответ, потом удаляем команду
     await context.bot.send_message(
-        chat_id=chat.id,
+        chat_id=chat_id,
         text=text,
         parse_mode="HTML",
         reply_markup=kb,
     )
-
-    try:
-        await update.message.delete()
-    except Exception:
-        pass
 
 
 async def achievements_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:

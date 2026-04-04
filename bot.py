@@ -39,7 +39,7 @@ from commands.achievements import (
     check_activity_achievements, check_secret_text_achievements,
     check_simple_achievements,
 )
-from commands.achievements_cmd import achievements_command, achievements_callback
+from commands.achievements_cmd import achievements_command, achievements_callback, _send_achievements_menu
 
 from commands.debug import debug_command
 from commands.dice import dice_command
@@ -61,10 +61,7 @@ from commands.restart import restart_command, send_restart_done
 from commands.dashboard import dashboard_callback, dashboard_update_job, DASHBOARD_UPDATE_INTERVAL, dashboard_command
 from commands.clearstats import clearstats_command, clearstats_callback
 from commands.botset import botset_command, handle_botset_photo, apply_identity
-from commands.modtools import (
-    ban_command, kick_command, mute_command, unmute_command,
-    pin_command, unpin_command, synccmds_command, giveach_command, announce_command,
-)
+from commands.modtools import synccmds_command, giveach_command, announce_command
 from chat_config import (get_main_chat_id, add_setup_chat, is_setup_chat, get_setting,
                           is_command_enabled, get_custom_swear_responses, get_custom_swear_triggers,
                           sync_bot_commands, is_monitor_chat)
@@ -761,6 +758,22 @@ async def _private_start(update, context):
 
             context.job_queue.run_once(_del_gallery, delay)
         return
+
+    # Deep link: ?start=achievements → открыть меню ачивок в личке
+    if context.args and context.args[0] == "achievements":
+        user = update.effective_user
+        await _send_achievements_menu(
+            update, context,
+            user_id=user.id,
+            chat_id=update.effective_chat.id,
+            user_name=user.first_name or user.username or "",
+        )
+        try:
+            await update.message.delete()
+        except Exception:
+            pass
+        return
+
     await help_command(update, context)
 
 
@@ -886,8 +899,8 @@ def main():
     # Личная статистика
     app.add_handler(CommandHandler("stats",         stats_command,         filters=filters.ChatType.GROUPS))
 
-    # Ачивки
-    app.add_handler(CommandHandler("achievements",  achievements_command,  filters=filters.ChatType.GROUPS))
+    # Ачивки — работает в группах (показывает редирект) и в личке (меню)
+    app.add_handler(CommandHandler("achievements",  achievements_command))
 
     # Анонимные сообщения в группу
     app.add_handler(CommandHandler("anon",   anon_command,   filters=filters.ChatType.GROUPS))
@@ -916,14 +929,6 @@ def main():
     app.add_handler(CommandHandler("dashboard",    dashboard_command))
     app.add_handler(CommandHandler("ownerhelp",    ownerhelp_command))
     app.add_handler(CommandHandler("botset",       botset_command,       filters=filters.ChatType.PRIVATE))
-
-    # Модерация (работают в группах через reply, только владелец)
-    app.add_handler(CommandHandler("ban",     ban_command,     filters=filters.ChatType.GROUPS))
-    app.add_handler(CommandHandler("kick",    kick_command,    filters=filters.ChatType.GROUPS))
-    app.add_handler(CommandHandler("mute",    mute_command,    filters=filters.ChatType.GROUPS))
-    app.add_handler(CommandHandler("unmute",  unmute_command,  filters=filters.ChatType.GROUPS))
-    app.add_handler(CommandHandler("pin",     pin_command,     filters=filters.ChatType.GROUPS))
-    app.add_handler(CommandHandler("unpin",   unpin_command,   filters=filters.ChatType.GROUPS))
 
     # Утилиты владельца (только в личке)
     app.add_handler(CommandHandler("synccmds", synccmds_command, filters=filters.ChatType.PRIVATE))
