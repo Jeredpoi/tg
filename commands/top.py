@@ -7,6 +7,7 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.error import BadRequest
 from telegram.ext import ContextTypes
 from database import get_top_messages, get_top_swears, get_gallery, track_bot_message
+from chat_config import get_setting
 
 MEDALS = ["🥇", "🥈", "🥉"]
 
@@ -61,11 +62,29 @@ def _get_keyboard(active: str) -> InlineKeyboardMarkup:
 async def top_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Показывает топ по сообщениям для текущего чата."""
     chat_id = update.effective_chat.id
+
+    try:
+        await update.message.delete()
+    except Exception:
+        pass
+
     rows = get_top_messages(chat_id)
     text = _build_messages_text(rows)
     keyboard = _get_keyboard("messages")
-    msg = await update.message.reply_text(text, parse_mode="HTML", reply_markup=keyboard)
+    msg = await context.bot.send_message(chat_id, text, parse_mode="HTML", reply_markup=keyboard)
     track_bot_message(chat_id, msg.message_id, "📊 Топ участников")
+
+    delay = get_setting("autodel_top")
+    if delay:
+        _cid, _mid = chat_id, msg.message_id
+
+        async def _del_top(ctx):
+            try:
+                await ctx.bot.delete_message(_cid, _mid)
+            except Exception:
+                pass
+
+        context.job_queue.run_once(_del_top, delay)
 
 
 async def top_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:

@@ -53,6 +53,7 @@ from commands.backup import backup_command
 from commands.restart import restart_command, send_restart_done
 from commands.dashboard import dashboard_callback, dashboard_update_job, DASHBOARD_UPDATE_INTERVAL, dashboard_command
 from commands.clearstats import clearstats_command, clearstats_callback
+from commands.botset import botset_command, handle_botset_photo, apply_identity
 from chat_config import (get_main_chat_id, add_setup_chat, is_setup_chat, get_setting,
                           is_command_enabled, get_custom_swear_responses, get_custom_swear_triggers,
                           sync_bot_commands, is_monitor_chat)
@@ -815,6 +816,7 @@ def main():
     app.add_handler(CommandHandler("restart",      restart_command,      filters=filters.ChatType.PRIVATE))
     app.add_handler(CommandHandler("dashboard",    dashboard_command))
     app.add_handler(CommandHandler("ownerhelp",    ownerhelp_command))
+    app.add_handler(CommandHandler("botset",       botset_command,       filters=filters.ChatType.PRIVATE))
 
     # Ловим любые другие команды в личке и вежливо отказываем
     app.add_handler(MessageHandler(
@@ -834,11 +836,7 @@ def main():
     # Автоопределение CHAT_ID при добавлении бота в группу
     app.add_handler(ChatMemberHandler(_on_bot_added, ChatMemberHandler.MY_CHAT_MEMBER))
 
-    # Приём фото/видео в личке для /rate
-    app.add_handler(MessageHandler(
-        filters.PHOTO & filters.ChatType.PRIVATE,
-        handle_rate_photo,
-    ))
+    # Видео в личке для /rate
     app.add_handler(MessageHandler(
         filters.VIDEO & filters.ChatType.PRIVATE,
         handle_rate_video,
@@ -880,12 +878,27 @@ def main():
     # Трекинг текстовых сообщений (без команд)
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, _maybe_token_reply))
 
+    # Фото в личке: сначала смена аватара (/botset photo), потом /rate
+    async def _private_photo_handler(update, context):
+        if await handle_botset_photo(update, context):
+            return
+        await handle_rate_photo(update, context)
+
+    app.add_handler(MessageHandler(
+        filters.PHOTO & filters.ChatType.PRIVATE,
+        _private_photo_handler,
+    ))
+
     # Отмена swear-job при редактировании сообщений (убрали мат → не отвечаем)
     app.add_handler(MessageHandler(filters.UpdateType.EDITED_MESSAGE, _handle_edited_message))
 
     async def on_startup(app):
-        await app.bot.set_my_description("Скаут на связи 🟢")
-        await app.bot.set_my_short_description("Скаут на связи 🟢")
+        # Применяем шаблоны описания из bot_identity.json (если есть), иначе дефолт
+        try:
+            await apply_identity(app.bot, online=True)
+        except Exception:
+            await app.bot.set_my_description("Скаут на связи 🟢")
+            await app.bot.set_my_short_description("Скаут на связи 🟢")
         await send_restart_done(app)
         await sync_bot_commands(app.bot)  # синхронизирует список команд с текущими настройками
 
@@ -995,10 +1008,13 @@ def main():
 
     async def on_shutdown(app):
         try:
-            await app.bot.set_my_description("Скаут недоступен 🔴")
-            await app.bot.set_my_short_description("Скаут недоступен 🔴")
+            await apply_identity(app.bot, online=False)
         except Exception:
-            pass
+            try:
+                await app.bot.set_my_description("Скаут недоступен 🔴")
+                await app.bot.set_my_short_description("Скаут недоступен 🔴")
+            except Exception:
+                pass
 
     app.post_init = on_startup
     app.post_shutdown = on_shutdown

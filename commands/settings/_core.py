@@ -35,10 +35,19 @@ from ._screens import (
 )
 
 
+# ── Вспомогательные функции ───────────────────────────────────────────────────
+
+def _fmt_dur(v: int) -> str:
+    if v == 0:    return "выкл"
+    if v < 60:    return f"{v}с"
+    if v < 3600:  return f"{v // 60}м"
+    return f"{v // 3600}ч"
+
+
 # ── Клавиатуры ────────────────────────────────────────────────────────────────
 
 def _main_menu_kb() -> InlineKeyboardMarkup:
-    disabled = get_disabled_commands()
+    disabled = get_disabled_commands() & set(MANAGEABLE_COMMANDS.keys())
     cmd_icon = "🔴" if disabled else "🟢"
     custom_mge   = len(get_custom_mge_phrases())
     custom_swear = len(get_custom_swear_responses())
@@ -76,7 +85,7 @@ async def _build_main_text(context) -> str:
         main_line = "⚠️ не назначена"
 
     # Команды
-    disabled = get_disabled_commands()
+    disabled = get_disabled_commands() & set(MANAGEABLE_COMMANDS.keys())
     total_cmds = len(MANAGEABLE_COMMANDS)
     if disabled:
         cmds_line = f"🔴 Отключено {len(disabled)} из {total_cmds}"
@@ -445,6 +454,36 @@ async def settings_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         value = int(data[9:])
         set_setting("autodel_ownerhelp", value)
         await query.answer("выкл" if value == 0 else f"/ownerhelp: {value} сек.")
+        await _show_autodel_settings(query)
+
+    elif data.startswith("stg:adtop:"):
+        value = int(data[10:])
+        set_setting("autodel_top", value)
+        await query.answer("выкл" if value == 0 else f"/top: {_fmt_dur(value)}")
+        await _show_autodel_settings(query)
+
+    elif data.startswith("stg:adst:"):
+        value = int(data[9:])
+        set_setting("autodel_stats", value)
+        await query.answer("выкл" if value == 0 else f"/stats: {_fmt_dur(value)}")
+        await _show_autodel_settings(query)
+
+    elif data.startswith("stg:addc:"):
+        value = int(data[9:])
+        set_setting("autodel_dice", value)
+        await query.answer("выкл" if value == 0 else f"/dice: {_fmt_dur(value)}")
+        await _show_autodel_settings(query)
+
+    elif data.startswith("stg:adro:"):
+        value = int(data[9:])
+        set_setting("autodel_roast", value)
+        await query.answer("выкл" if value == 0 else f"/roast: {_fmt_dur(value)}")
+        await _show_autodel_settings(query)
+
+    elif data.startswith("stg:admge:"):
+        value = int(data[10:])
+        set_setting("autodel_mge", value)
+        await query.answer("выкл" if value == 0 else f"/mge: {_fmt_dur(value)}")
         await _show_autodel_settings(query)
 
     # ── Управление командами ──

@@ -3,7 +3,7 @@ from ._shared import (
     get_main_chat_id, get_monitor_chat_id,
     get_setup_chats, get_setting,
     MANAGEABLE_COMMANDS, get_disabled_commands,
-    is_command_enabled,
+    is_command_enabled, enable_command,
     MGE_CHARACTERS,
     get_custom_mge_phrases,
     get_custom_swear_responses,
@@ -335,6 +335,10 @@ async def _show_cooldown_settings(query) -> None:
 
 async def _show_commands_settings(query) -> None:
     """Список команд с кнопками вкл/выкл."""
+    # Clean up stale entries (commands removed from MANAGEABLE_COMMANDS)
+    for stale in get_disabled_commands() - set(MANAGEABLE_COMMANDS.keys()):
+        enable_command(stale)
+
     rows = []
     for cmd, desc in MANAGEABLE_COMMANDS.items():
         enabled = is_command_enabled(cmd)
@@ -344,7 +348,7 @@ async def _show_commands_settings(query) -> None:
             callback_data=f"stg:cmd_toggle:{cmd}",
         )])
 
-    disabled_count = len(get_disabled_commands())
+    disabled_count = len(get_disabled_commands() & set(MANAGEABLE_COMMANDS.keys()))
     status_line = (
         "Все команды включены" if disabled_count == 0
         else f"Отключено: {disabled_count}"
@@ -496,25 +500,46 @@ async def _show_swear_resp_list(query) -> None:
 
 # ── Экран автоудаления ────────────────────────────────────────────────────────
 
-_AUTODEL_OPTIONS = [0, 10, 15, 20, 25, 30, 60]  # 0 = выкл
+_AUTODEL_OPTIONS      = [0, 10, 15, 20, 25, 30, 60]          # 0 = выкл
+_AUTODEL_OPTIONS_LONG = [0, 300, 600, 1800, 3600, 7200]       # для /top, /stats
 
-def _autodel_row(setting_key: str, cb_prefix: str, label: str) -> list:
+
+def _autodel_row(setting_key: str, cb_prefix: str, label: str,
+                 options: list = None) -> list:
     """Строка кнопок для одной настройки автоудаления."""
+    if options is None:
+        options = _AUTODEL_OPTIONS
     current = get_setting(setting_key)
     btns = []
-    for val in _AUTODEL_OPTIONS:
+    for val in options:
         tick = "✅ " if current == val else ""
-        txt  = "выкл" if val == 0 else f"{val}с"
+        if val == 0:
+            txt = "выкл"
+        elif val < 60:
+            txt = f"{val}с"
+        elif val < 3600:
+            txt = f"{val // 60}м"
+        else:
+            txt = f"{val // 3600}ч"
         btns.append(InlineKeyboardButton(f"{tick}{txt}", callback_data=f"{cb_prefix}{val}"))
     return btns
 
 
 async def _show_autodel_settings(query) -> None:
-    h  = get_setting("autodel_help")
-    g  = get_setting("autodel_gallery")
-    ow = get_setting("autodel_ownerhelp")
+    h   = get_setting("autodel_help")
+    g   = get_setting("autodel_gallery")
+    ow  = get_setting("autodel_ownerhelp")
+    top = get_setting("autodel_top")
+    st  = get_setting("autodel_stats")
+    dc  = get_setting("autodel_dice")
+    ro  = get_setting("autodel_roast")
+    mge = get_setting("autodel_mge")
 
-    def fmt(v): return "выкл" if v == 0 else f"{v} сек."
+    def fmt(v):
+        if v == 0:    return "выкл"
+        if v <= 60:   return f"{v}с"
+        if v <= 3600: return f"{v // 60}м"
+        return f"{v // 3600}ч"
 
     kb = InlineKeyboardMarkup([
         [InlineKeyboardButton("📖 /help", callback_data="stg:noop")],
@@ -523,6 +548,16 @@ async def _show_autodel_settings(query) -> None:
         _autodel_row("autodel_gallery",   "stg:adg:",  "галерея"),
         [InlineKeyboardButton("👑 /ownerhelp", callback_data="stg:noop")],
         _autodel_row("autodel_ownerhelp", "stg:adow:", "/ownerhelp"),
+        [InlineKeyboardButton("📊 /top", callback_data="stg:noop")],
+        _autodel_row("autodel_top",   "stg:adtop:", "/top",   _AUTODEL_OPTIONS_LONG),
+        [InlineKeyboardButton("📈 /stats", callback_data="stg:noop")],
+        _autodel_row("autodel_stats", "stg:adst:",  "/stats", _AUTODEL_OPTIONS_LONG),
+        [InlineKeyboardButton("🎲 /dice", callback_data="stg:noop")],
+        _autodel_row("autodel_dice",  "stg:addc:",  "/dice"),
+        [InlineKeyboardButton("🔥 /roast", callback_data="stg:noop")],
+        _autodel_row("autodel_roast", "stg:adro:",  "/roast"),
+        [InlineKeyboardButton("🎭 /mge", callback_data="stg:noop")],
+        _autodel_row("autodel_mge",   "stg:admge:", "/mge"),
         [_back_to_menu_btn()],
     ])
 
@@ -530,8 +565,13 @@ async def _show_autodel_settings(query) -> None:
         "🗑 <b>Автоудаление сообщений</b>\n\n"
         f"📖 /help: <b>{fmt(h)}</b>\n"
         f"🖼 Галерея (личка): <b>{fmt(g)}</b>\n"
-        f"👑 /ownerhelp: <b>{fmt(ow)}</b>\n\n"
-        "<i>Сколько секунд показывается сообщение перед удалением.\n"
+        f"👑 /ownerhelp: <b>{fmt(ow)}</b>\n"
+        f"📊 /top: <b>{fmt(top)}</b>\n"
+        f"📈 /stats: <b>{fmt(st)}</b>\n"
+        f"🎲 /dice: <b>{fmt(dc)}</b>\n"
+        f"🔥 /roast: <b>{fmt(ro)}</b>\n"
+        f"🎭 /mge: <b>{fmt(mge)}</b>\n\n"
+        "<i>Сколько времени показывается сообщение перед удалением.\n"
         "«выкл» — сообщение не удаляется.</i>",
         parse_mode="HTML",
         reply_markup=kb,

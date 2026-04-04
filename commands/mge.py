@@ -7,7 +7,7 @@ import random
 from telegram import Update
 from telegram.ext import ContextTypes
 from config import MGE_PHRASES
-from chat_config import get_custom_mge_phrases
+from chat_config import get_custom_mge_phrases, get_setting
 from database import track_bot_message
 
 
@@ -34,3 +34,20 @@ async def mge_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
 
     msg = await update.message.reply_text(text, parse_mode="HTML")
     track_bot_message(update.effective_chat.id, msg.message_id, f"🎭 {speaker}: «{phrase[:40]}»")
+
+    try:
+        await update.message.delete()
+    except Exception:
+        pass
+
+    delay = get_setting("autodel_mge")
+    if delay:
+        _cid, _mid = update.effective_chat.id, msg.message_id
+
+        async def _del_mge(ctx):
+            try:
+                await ctx.bot.delete_message(_cid, _mid)
+            except Exception:
+                pass
+
+        context.job_queue.run_once(_del_mge, delay)
