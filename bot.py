@@ -61,7 +61,7 @@ from commands.restart import restart_command, send_restart_done
 from commands.dashboard import dashboard_callback, dashboard_update_job, DASHBOARD_UPDATE_INTERVAL, dashboard_command
 from commands.clearstats import clearstats_command, clearstats_callback
 from commands.botset import botset_command, handle_botset_photo, apply_identity
-from commands.modtools import synccmds_command, giveach_command, announce_command
+from commands.modtools import synccmds_command, giveach_command, revokeach_command, announce_command
 from chat_config import (get_main_chat_id, add_setup_chat, is_setup_chat, get_setting,
                           is_command_enabled, get_custom_swear_responses, get_custom_swear_triggers,
                           sync_bot_commands, is_monitor_chat)
@@ -682,8 +682,9 @@ def main():
 
     # Утилиты владельца (только в личке)
     app.add_handler(CommandHandler("synccmds", synccmds_command, filters=filters.ChatType.PRIVATE))
-    app.add_handler(CommandHandler("giveach",  giveach_command,  filters=filters.ChatType.PRIVATE))
-    app.add_handler(CommandHandler("announce", announce_command, filters=filters.ChatType.PRIVATE))
+    app.add_handler(CommandHandler("giveach",   giveach_command,   filters=filters.ChatType.PRIVATE))
+    app.add_handler(CommandHandler("revokeach", revokeach_command, filters=filters.ChatType.PRIVATE))
+    app.add_handler(CommandHandler("announce",  announce_command,  filters=filters.ChatType.PRIVATE))
 
     # Ловим любые другие команды в личке и вежливо отказываем
     app.add_handler(MessageHandler(

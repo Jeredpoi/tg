@@ -235,20 +235,33 @@ def is_command_enabled(cmd: str) -> bool:
     return cmd not in get_disabled_commands()
 
 
-async def sync_bot_commands(bot) -> None:
-    """Синхронизирует список команд бота с текущими настройками (включены/выключены)."""
-    from telegram import BotCommand, BotCommandScopeAllGroupChats, BotCommandScopeDefault
-    enabled = [
+async def sync_bot_commands(bot) -> list:
+    """
+    Синхронизирует список команд бота с текущими настройками.
+    Возвращает список включённых команд.
+    Бросает исключение если Telegram API вернул ошибку.
+    """
+    from telegram import (
+        BotCommand,
+        BotCommandScopeAllGroupChats,
+        BotCommandScopeAllPrivateChats,
+        BotCommandScopeDefault,
+    )
+    # Команды для групп — только включённые управляемые
+    group_cmds = [
         BotCommand(cmd.lstrip("/"), desc)
         for cmd, desc in MANAGEABLE_COMMANDS.items()
         if is_command_enabled(cmd)
     ]
-    try:
-        await bot.set_my_commands(enabled, scope=BotCommandScopeAllGroupChats())
-        await bot.set_my_commands(enabled, scope=BotCommandScopeDefault())
-    except Exception as e:
-        import logging
-        logging.getLogger(__name__).warning("sync_bot_commands failed: %s", e)
+    # Команды для личных чатов — help + achievements (всегда доступны)
+    private_cmds = [
+        BotCommand("help",         "Помощь по командам"),
+        BotCommand("achievements", "Достижения и ачивки"),
+    ]
+    await bot.set_my_commands(group_cmds,   scope=BotCommandScopeAllGroupChats())
+    await bot.set_my_commands(private_cmds, scope=BotCommandScopeAllPrivateChats())
+    await bot.set_my_commands(group_cmds,   scope=BotCommandScopeDefault())
+    return group_cmds
 
 
 # ── Кастомные MGE-фразы ───────────────────────────────────────────────────────

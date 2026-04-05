@@ -240,6 +240,21 @@ def grant_achievement(user_id: int, chat_id: int, achievement_id: str) -> bool:
         conn.close()
 
 
+def revoke_achievement(user_id: int, chat_id: int, achievement_id: str) -> bool:
+    """Забирает ачивку. Возвращает True если она была и удалена."""
+    conn = get_connection()
+    try:
+        conn.execute(
+            "DELETE FROM achievements WHERE user_id=? AND chat_id=? AND achievement_id=?",
+            (user_id, chat_id, achievement_id)
+        )
+        changed = conn.total_changes
+        conn.commit()
+        return changed > 0
+    finally:
+        conn.close()
+
+
 def get_user_achievements(user_id: int, chat_id: int) -> list:
     """Возвращает список ачивок пользователя [(achievement_id, earned_at), ...]."""
     conn = get_connection()

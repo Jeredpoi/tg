@@ -45,15 +45,17 @@ async def synccmds_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         pass
 
     try:
-        await sync_bot_commands(context.bot)
+        synced = await sync_bot_commands(context.bot)
+        names = " · ".join(f"/{c.command}" for c in synced) if synced else "<i>пусто</i>"
         await _autodel_reply(
             context,
             update.effective_chat.id,
-            "✅ Команды синхронизированы с Bot Father!\n\n"
-            "<i>Список команд в Telegram обновлён.</i>",
+            f"✅ Команды синхронизированы с Bot Father!\n\n"
+            f"<b>Активные команды в группах ({len(synced)}):</b>\n{names}",
+            delay=30,
         )
     except Exception as e:
-        await _autodel_reply(context, update.effective_chat.id, f"❌ Ошибка синхронизации: {e}")
+        await _autodel_reply(context, update.effective_chat.id, f"❌ Ошибка синхронизации:\n<code>{e}</code>", delay=30)
 
 
 # ── /giveach — вручную выдать ачивку пользователю ────────────────────────────
@@ -111,6 +113,64 @@ async def giveach_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         await _autodel_reply(
             context, chat_id,
             f"ℹ️ Пользователь уже имеет ачивку {ach['icon']} <b>{ach['name']}</b>.",
+        )
+
+
+# ── /revokeach — забрать ачивку у пользователя ───────────────────────────────
+
+async def revokeach_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """/revokeach <user_id> <chat_id> <ach_id> — забрать ачивку. Только владелец, только личка."""
+    if not _owner_only(update):
+        return
+
+    try:
+        await update.effective_message.delete()
+    except Exception:
+        pass
+
+    chat_id = update.effective_chat.id
+
+    args = context.args or []
+    if len(args) < 3:
+        await _autodel_reply(
+            context, chat_id,
+            "❌ Использование:\n"
+            "<code>/revokeach &lt;user_id&gt; &lt;chat_id&gt; &lt;ach_id&gt;</code>\n\n"
+            "Пример:\n"
+            "<code>/revokeach 123456789 -1001234567890 dice_user</code>",
+            delay=30,
+        )
+        return
+
+    try:
+        target_uid = int(args[0])
+        target_cid = int(args[1])
+        ach_id     = args[2]
+    except ValueError:
+        await _autodel_reply(context, chat_id, "❌ user_id и chat_id должны быть числами.")
+        return
+
+    from commands.achievements import ACHIEVEMENTS
+    from database import revoke_achievement
+
+    if ach_id not in ACHIEVEMENTS:
+        await _autodel_reply(
+            context, chat_id,
+            f"❌ Неизвестная ачивка: <code>{ach_id}</code>",
+        )
+        return
+
+    revoked = revoke_achievement(target_uid, target_cid, ach_id)
+    ach = ACHIEVEMENTS[ach_id]
+    if revoked:
+        await _autodel_reply(
+            context, chat_id,
+            f"✅ Ачивка {ach['icon']} <b>{ach['name']}</b> забрана у пользователя <code>{target_uid}</code>.",
+        )
+    else:
+        await _autodel_reply(
+            context, chat_id,
+            f"ℹ️ У пользователя <code>{target_uid}</code> нет ачивки {ach['icon']} <b>{ach['name']}</b>.",
         )
 
 
