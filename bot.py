@@ -31,7 +31,7 @@ from config import (BOT_TOKEN, PROXY_URL, WEBAPP_URL, OWNER_ID,
 
 from database import (init_db, get_daily_swear_report,
                        get_best_photo_since, get_and_delete_old_photos,
-                       get_streak, track_bot_message,
+                       get_streak, track_bot_message, track_message,
                        save_pm_chat, get_pm_chat, get_users_at_streak_risk,
                        get_top_messages_since)
 from commands.achievements import check_simple_achievements
@@ -173,10 +173,18 @@ async def _rate_limit_guard(update, context):
         remaining = math.ceil(cooldown - (now - last))
         chat = update.effective_chat
         if chat and chat.type in ("group", "supergroup"):
-            try:
-                await msg.delete()
-            except Exception:
-                pass
+            # Удаляем команду при кулдауне только если autodel для неё включён
+            _AUTODEL_KEYS = {
+                "/dice":  "autodel_dice",
+                "/mge":   "autodel_mge",
+                "/roast": "autodel_roast",
+            }
+            _autodel_key = _AUTODEL_KEYS.get(command)
+            if _autodel_key is None or get_setting(_autodel_key):
+                try:
+                    await msg.delete()
+                except Exception:
+                    pass
             try:
                 note = await context.bot.send_message(
                     chat_id=chat.id,

@@ -136,7 +136,7 @@ _DEFAULT_SETTINGS = {
     "autodel_ownerhelp": 20,       # Автоудаление ответа /ownerhelp (сек, 0 = выкл)
     "autodel_top":   300,          # /top response — 5 min
     "autodel_stats": 300,          # /stats response — 5 min
-    "autodel_dice":  30,           # /dice response — 30 sec
+    "autodel_dice":  0,            # /dice response — off by default
     "autodel_roast": 60,           # /roast response — 60 sec
     "autodel_mge":   0,            # /mge — off by default
     "streak_reminder": True,       # Напоминание о стрике в 20:00
