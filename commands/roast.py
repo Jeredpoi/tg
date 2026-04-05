@@ -117,7 +117,6 @@ async def roast_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         async def _delete(ctx):
             try:
                 await ctx.bot.delete_message(msg.chat_id, msg.message_id)
-                await update.message.delete()
             except Exception:
                 pass
         context.job_queue.run_once(_delete, 20)
@@ -140,13 +139,13 @@ async def roast_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
         context.job_queue.run_once(_check_roast_ach, 1)
 
-    try:
-        await update.message.delete()
-    except Exception:
-        pass
-
     delay = get_setting("autodel_roast")
     if delay:
+        try:
+            await update.message.delete()
+        except Exception:
+            pass
+
         _cid, _mid = update.effective_chat.id, msg.message_id
 
         async def _del_roast(ctx):

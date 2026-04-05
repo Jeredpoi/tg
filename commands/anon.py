@@ -5,7 +5,7 @@
 import html
 import time
 import logging
-from telegram import Update
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
 from telegram.error import Forbidden
 from chat_config import is_main_chat
@@ -75,20 +75,23 @@ async def anon_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
             display = f"@{user.username}" if user.username else html.escape(user.first_name or "")
             msg = await context.bot.send_message(
                 chat.id,
-                f"{display}, сначала напиши мне в личку — "
-                f"<a href=\"https://t.me/{bot_username}\">@{bot_username}</a>, "
-                f"нажми Start, потом снова используй /anon.",
-                parse_mode="HTML",
-                disable_web_page_preview=True,
+                f"{display}, нажми кнопку ниже — открой личку с ботом и нажми Start, "
+                f"потом снова используй /anon.",
+                reply_markup=InlineKeyboardMarkup([[
+                    InlineKeyboardButton(
+                        "📩 Открыть личку",
+                        url=f"https://t.me/{bot_username}?start=anon_{chat.id}",
+                    )
+                ]]),
             )
-            # Удалим подсказку через 15 секунд
+            # Удалим подсказку через 20 секунд
             async def _delete_hint(ctx):
                 try:
                     await ctx.bot.delete_message(chat.id, msg.message_id)
                 except Exception:
                     pass
 
-            context.job_queue.run_once(_delete_hint, 15)
+            context.job_queue.run_once(_delete_hint, 20)
         except Exception:
             pass
 

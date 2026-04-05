@@ -35,13 +35,13 @@ async def mge_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     msg = await update.message.reply_text(text, parse_mode="HTML")
     track_bot_message(update.effective_chat.id, msg.message_id, f"🎭 {speaker}: «{phrase[:40]}»")
 
-    try:
-        await update.message.delete()
-    except Exception:
-        pass
-
     delay = get_setting("autodel_mge")
     if delay:
+        try:
+            await update.message.delete()
+        except Exception:
+            pass
+
         _cid, _mid = update.effective_chat.id, msg.message_id
 
         async def _del_mge(ctx):

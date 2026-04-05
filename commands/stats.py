@@ -80,10 +80,16 @@ async def stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     else:
         lines.append("🏆 Ачивок пока нет")
 
-    # Кнопка «Ачивки» — открывает список ачивок для кликнувшего в этом чате
-    kb = InlineKeyboardMarkup([[
-        InlineKeyboardButton("🏆 Мои ачивки", callback_data=f"ach:{chat_id}:easy:0"),
-    ]])
+    # Кнопка «Ачивки» — в личке открывает сразу, в группе даёт deep link
+    if update.effective_chat.type == "private":
+        kb = InlineKeyboardMarkup([[
+            InlineKeyboardButton("🏆 Мои ачивки", callback_data=f"ach:{chat_id}:easy:0"),
+        ]])
+    else:
+        bot_username = context.bot.username
+        kb = InlineKeyboardMarkup([[
+            InlineKeyboardButton("🏆 Мои ачивки", url=f"https://t.me/{bot_username}?start=ach_{chat_id}"),
+        ]])
 
     msg = await update.message.reply_text("\n".join(lines), parse_mode="HTML", reply_markup=kb)
 

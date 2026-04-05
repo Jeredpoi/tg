@@ -11,7 +11,7 @@ import time
 
 from swear_detector import (
     _count_swears,
-    FORWARD_RESPONSES, NAME_RESPONSES, SWEAR_RESPONSES,
+    FORWARD_RESPONSES, NAME_RESPONSES, SWEAR_RESPONSES, FLOOD_RESPONSES,
 )
 from config import SWEAR_COOLDOWN, SWEAR_RESPONSE_DELAY
 from database import (
@@ -19,6 +19,7 @@ from database import (
     get_user_stats, update_streak,
     get_chat_total_msg_count, get_days_since_last_activity,
     track_bot_message,
+    get_user_today_msg_count, check_and_update_daily_record,
 )
 from chat_config import (
     get_setting, get_custom_swear_responses, get_custom_swear_triggers,
@@ -55,6 +56,14 @@ _MENTION_COOLDOWN = 20
 _FORWARD_CHANCE   = 0.4
 _MENTION_CHANCE   = 0.7
 
+# ── Антифлуд ─────────────────────────────────────────────────────────────────
+# chat_id → (user_id, count) — подряд идущие сообщения от одного юзера
+_flood_counter: dict[int, tuple[int, int]] = {}
+# chat_id → timestamp последней реакции на флуд
+_flood_last:    dict[int, float]           = {}
+_FLOOD_THRESHOLD = 5
+_FLOOD_COOLDOWN  = 600  # 10 минут
+
 # ── Аватары ───────────────────────────────────────────────────────────────────
 _avatar_cache_set: set[int] = set()
 _AVATARS_DIR = os.path.join(os.path.dirname(__file__), "..", "photos", "avatars")
@@ -74,8 +83,9 @@ def cleanup_state() -> None:
     """
     _user_recent_times.clear()
     _last_chat_msg.clear()
+    _flood_counter.clear()
     cutoff = time.time() - 7200
-    for d in (_forward_last, _mention_last, _swear_last_response):
+    for d in (_forward_last, _mention_last, _swear_last_response, _flood_last):
         stale = [k for k, v in d.items() if v < cutoff]
         for k in stale:
             d.pop(k, None)
@@ -333,3 +343,39 @@ async def track_message_handler(update, context) -> None:
                 },
                 name=f"swear_{chat_id}",
             )
+
+    # ── Дневной рекорд ───────────────────────────────────────────────────────
+    if is_group:
+        try:
+            _name = user.first_name or user.username or "Участник"
+            today_count = get_user_today_msg_count(user.id, chat_id)
+            if today_count >= 10:
+                is_record = check_and_update_daily_record(user.id, chat_id, today_count)
+                if is_record:
+                    await update.message.reply_text(
+                        f"🏆 {_name} побил личный рекорд — <b>{today_count}</b> сообщений за сегодня!",
+                        parse_mode="HTML",
+                    )
+        except Exception as e:
+            logger.debug("daily_record check failed: %s", e)
+
+    # ── Антифлуд-реакция ─────────────────────────────────────────────────────
+    if is_group and get_setting("flood_react"):
+        try:
+            prev = _flood_counter.get(chat_id)
+            if prev and prev[0] == user.id:
+                flood_count = prev[1] + 1
+            else:
+                flood_count = 1
+            _flood_counter[chat_id] = (user.id, flood_count)
+
+            if flood_count >= _FLOOD_THRESHOLD:
+                now = time.time()
+                if now - _flood_last.get(chat_id, 0) > _FLOOD_COOLDOWN:
+                    _name = user.first_name or user.username or "кто-то"
+                    resp = random.choice(FLOOD_RESPONSES).format(name=_name)
+                    await update.message.reply_text(resp)
+                    _flood_last[chat_id] = now
+                    _flood_counter[chat_id] = (user.id, 0)
+        except Exception as e:
+            logger.debug("flood_react failed: %s", e)

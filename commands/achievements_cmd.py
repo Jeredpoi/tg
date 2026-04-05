@@ -290,6 +290,11 @@ async def achievements_callback(update: Update, context: ContextTypes.DEFAULT_TY
         await query.answer()
         return
 
+    # В группе — ачивки только в личке
+    if query.message and query.message.chat.type in ("group", "supergroup"):
+        await query.answer("Ачивки доступны только в личке с ботом 📱", show_alert=True)
+        return
+
     await query.answer()
 
     parts = query.data.split(":")

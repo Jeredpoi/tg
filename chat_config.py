@@ -139,6 +139,9 @@ _DEFAULT_SETTINGS = {
     "autodel_dice":  30,           # /dice response — 30 sec
     "autodel_roast": 60,           # /roast response — 60 sec
     "autodel_mge":   0,            # /mge — off by default
+    "streak_reminder": True,       # Напоминание о стрике в 20:00
+    "weekly_top": True,            # Топ недели каждое воскресенье
+    "flood_react": True,           # Реакция на флуд (5+ подряд)
 }
 
 _settings_cache: dict | None = None

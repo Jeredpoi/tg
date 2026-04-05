@@ -177,6 +177,36 @@ def init_db() -> None:
             )
         """)
 
+        # ── pm_chats ─────────────────────────────────────────────────────────────
+        c.execute("""
+            CREATE TABLE IF NOT EXISTS pm_chats (
+                user_id    INTEGER PRIMARY KEY,
+                pm_chat_id INTEGER NOT NULL
+            )
+        """)
+
+        # ── daily_messages ───────────────────────────────────────────────────────
+        c.execute("""
+            CREATE TABLE IF NOT EXISTS daily_messages (
+                chat_id    INTEGER,
+                user_id    INTEGER,
+                first_name TEXT,
+                date       TEXT,
+                count      INTEGER DEFAULT 0,
+                PRIMARY KEY (chat_id, user_id, date)
+            )
+        """)
+
+        # ── user_records ─────────────────────────────────────────────────────────
+        c.execute("""
+            CREATE TABLE IF NOT EXISTS user_records (
+                user_id        INTEGER,
+                chat_id        INTEGER,
+                max_daily_msgs INTEGER DEFAULT 0,
+                PRIMARY KEY (user_id, chat_id)
+            )
+        """)
+
         c.execute("CREATE INDEX IF NOT EXISTS idx_bot_messages_chat    ON bot_messages(chat_id, sent_at DESC)")
         c.execute("CREATE INDEX IF NOT EXISTS idx_photo_ratings_key    ON photo_ratings(key)")
         c.execute("CREATE INDEX IF NOT EXISTS idx_photo_ratings_chat   ON photo_ratings(chat_id)")
@@ -186,6 +216,7 @@ def init_db() -> None:
         c.execute("CREATE INDEX IF NOT EXISTS idx_user_stats_swear     ON user_stats(chat_id, swear_count DESC)")
         c.execute("CREATE INDEX IF NOT EXISTS idx_photo_ratings_author ON photo_ratings(author_id, chat_id)")
         c.execute("CREATE INDEX IF NOT EXISTS idx_photo_comments_photo ON photo_comments(photo_id)")
+        c.execute("CREATE INDEX IF NOT EXISTS idx_daily_messages_date  ON daily_messages(chat_id, date)")
 
         conn.commit()
     finally:
@@ -316,6 +347,14 @@ def track_message(user_id: int, username: str, first_name: str,
                     msg_count   = msg_count + 1,
                     swear_count = swear_count + excluded.swear_count
             """, (user_id, chat_id, username, first_name, swear_count))
+            # Счётчик по дням (МСК = UTC+3)
+            conn.execute("""
+                INSERT INTO daily_messages (chat_id, user_id, first_name, date, count)
+                VALUES (?, ?, ?, date('now', '+3 hours'), 1)
+                ON CONFLICT(chat_id, user_id, date) DO UPDATE SET
+                    count      = count + 1,
+                    first_name = excluded.first_name
+            """, (chat_id, user_id, first_name))
             conn.commit()
         finally:
             conn.close()
@@ -995,5 +1034,101 @@ def get_achievement_rarities(chat_id: int) -> dict:
             GROUP BY achievement_id
         """, (chat_id,)).fetchall()
         return {r["achievement_id"]: round(r["cnt"] / total * 100) for r in rows}
+    finally:
+        conn.close()
+
+
+# ── pm_chats ───────────────────────────────────────────────────────────────
+
+def save_pm_chat(user_id: int, pm_chat_id: int) -> None:
+    """Сохраняет PM chat_id пользователя (для напоминаний о стрике)."""
+    conn = get_connection()
+    try:
+        conn.execute("""
+            INSERT OR REPLACE INTO pm_chats (user_id, pm_chat_id) VALUES (?, ?)
+        """, (user_id, pm_chat_id))
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def get_pm_chat(user_id: int) -> int | None:
+    """Возвращает PM chat_id пользователя или None."""
+    conn = get_connection()
+    try:
+        row = conn.execute(
+            "SELECT pm_chat_id FROM pm_chats WHERE user_id=?", (user_id,)
+        ).fetchone()
+        return row["pm_chat_id"] if row else None
+    finally:
+        conn.close()
+
+
+def get_users_at_streak_risk(chat_id: int, min_streak: int = 3) -> list:
+    """Пользователи у кого streak >= min_streak и сегодня (МСК) ещё не писали."""
+    today = datetime.datetime.now(_MSK).strftime("%Y-%m-%d")
+    conn = get_connection()
+    try:
+        return conn.execute("""
+            SELECT s.user_id, s.streak
+            FROM activity_streaks s
+            WHERE s.chat_id = ?
+              AND s.streak >= ?
+              AND s.last_date < ?
+        """, (chat_id, min_streak, today)).fetchall()
+    finally:
+        conn.close()
+
+
+# ── daily_messages / records ───────────────────────────────────────────────
+
+def get_user_today_msg_count(user_id: int, chat_id: int) -> int:
+    """Количество сообщений пользователя за сегодня (МСК)."""
+    today = datetime.datetime.now(_MSK).strftime("%Y-%m-%d")
+    conn = get_connection()
+    try:
+        row = conn.execute(
+            "SELECT count FROM daily_messages WHERE chat_id=? AND user_id=? AND date=?",
+            (chat_id, user_id, today)
+        ).fetchone()
+        return row["count"] if row else 0
+    finally:
+        conn.close()
+
+
+def check_and_update_daily_record(user_id: int, chat_id: int, today_count: int) -> bool:
+    """Возвращает True если today_count превысил прежний рекорд и обновляет его."""
+    conn = get_connection()
+    try:
+        row = conn.execute(
+            "SELECT max_daily_msgs FROM user_records WHERE user_id=? AND chat_id=?",
+            (user_id, chat_id)
+        ).fetchone()
+        prev = row["max_daily_msgs"] if row else 0
+        if today_count > prev:
+            conn.execute("""
+                INSERT INTO user_records (user_id, chat_id, max_daily_msgs) VALUES (?, ?, ?)
+                ON CONFLICT(user_id, chat_id) DO UPDATE SET max_daily_msgs = excluded.max_daily_msgs
+            """, (user_id, chat_id, today_count))
+            conn.commit()
+            return True
+        return False
+    finally:
+        conn.close()
+
+
+def get_top_messages_since(chat_id: int, days: int = 7, limit: int = 3) -> list:
+    """Топ пользователей по сообщениям за последние N дней."""
+    conn = get_connection()
+    try:
+        return conn.execute("""
+            SELECT user_id, first_name, SUM(count) AS total
+            FROM daily_messages
+            WHERE chat_id = ?
+              AND date >= date('now', ? || ' days', '+3 hours')
+            GROUP BY user_id
+            ORDER BY total DESC
+            LIMIT ?
+        """, (chat_id, f"-{days}", limit)).fetchall()
     finally:
         conn.close()

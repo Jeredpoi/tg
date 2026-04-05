@@ -29,13 +29,13 @@ async def dice_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 
         context.job_queue.run_once(_check_dice_ach, 1)
 
-    try:
-        await update.message.delete()
-    except Exception:
-        pass
-
     delay = get_setting("autodel_dice")
     if delay:
+        try:
+            await update.message.delete()
+        except Exception:
+            pass
+
         _cid, _mid = update.effective_chat.id, msg.message_id
 
         async def _del_dice(ctx):

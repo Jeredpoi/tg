@@ -31,7 +31,9 @@ from config import (BOT_TOKEN, PROXY_URL, WEBAPP_URL, OWNER_ID,
 
 from database import (init_db, get_daily_swear_report,
                        get_best_photo_since, get_and_delete_old_photos,
-                       get_streak, track_bot_message)
+                       get_streak, track_bot_message,
+                       save_pm_chat, get_pm_chat, get_users_at_streak_risk,
+                       get_top_messages_since)
 from commands.achievements import check_simple_achievements
 from commands.message_tracker import (
     track_message_handler, cleanup_state, clear_avatar_cache,
@@ -430,6 +432,14 @@ async def _midnight_swear_report(context) -> None:
 
 async def _private_start(update, context):
     """/start в личке — с поддержкой deep link для галереи (gallery_{chat_id})."""
+    # Сохраняем PM chat_id для напоминаний о стрике
+    user = update.effective_user
+    if user:
+        try:
+            save_pm_chat(user.id, update.effective_chat.id)
+        except Exception:
+            pass
+
     if context.args and context.args[0].startswith("gallery_"):
         try:
             chat_id = int(context.args[0][8:])
@@ -483,6 +493,28 @@ async def _private_start(update, context):
         except Exception:
             pass
         return
+
+    # Deep link: ?start=anon_{group_chat_id} → сразу ожидаем анонимное сообщение
+    if context.args and context.args[0].startswith("anon_"):
+        user = update.effective_user
+        try:
+            src_chat_id = int(context.args[0][5:])
+        except ValueError:
+            src_chat_id = get_main_chat_id() or 0
+        if src_chat_id:
+            from commands.anon import _pending, ANON_TIMEOUT
+            import time as _time
+            _pending[user.id] = (src_chat_id, _time.time())
+            async def _expire(ctx):
+                _pending.pop(user.id, None)
+            context.job_queue.run_once(_expire, ANON_TIMEOUT, name=f"anon_expire_{user.id}")
+            await update.message.reply_text(
+                "🎭 <b>Анонимное сообщение</b>\n\n"
+                "Напиши сообщение — я отправлю его в группу без твоего имени.\n\n"
+                "<i>У тебя есть 5 минут. /cancel для отмены.</i>",
+                parse_mode="HTML",
+            )
+            return
 
     await help_command(update, context)
 
@@ -594,7 +626,7 @@ def main():
     # В личке работают только /start, /help, /rate
     app.add_handler(CommandHandler("start",    _private_start,  filters=filters.ChatType.PRIVATE))
     app.add_handler(CommandHandler("help",     help_command))
-    app.add_handler(CommandHandler("rate",     rate_command,    filters=filters.ChatType.PRIVATE))
+    app.add_handler(CommandHandler("rate",     rate_command))
 
     # Команды только для групп
     app.add_handler(CommandHandler("debug",   debug_command))
@@ -762,6 +794,58 @@ def main():
         three_am = datetime.time(3, 0, 0, tzinfo=msk)
         app.job_queue.run_daily(_cleanup_old_photos, time=three_am, name="cleanup_old_photos")
         logger.info("Авточистка старых фото запланирована на 03:00 МСК")
+
+        # Напоминание о стрике — ежедневно в 20:00 МСК
+        eight_pm = datetime.time(20, 0, 0, tzinfo=msk)
+        async def _streak_reminder(ctx):
+            if not get_setting("streak_reminder"):
+                return
+            chat_id = get_main_chat_id()
+            if not chat_id:
+                return
+            users = get_users_at_streak_risk(chat_id, min_streak=3)
+            for u in users:
+                pm = get_pm_chat(u["user_id"])
+                if not pm:
+                    continue
+                try:
+                    await ctx.bot.send_message(
+                        pm,
+                        f"⚠️ Твой стрик <b>{u['streak']} дн.</b> под угрозой!\n"
+                        "Напиши что-нибудь в чат до полуночи, чтобы не потерять.",
+                        parse_mode="HTML",
+                    )
+                except Exception:
+                    pass
+        app.job_queue.run_daily(_streak_reminder, time=eight_pm, name="streak_reminder")
+        logger.info("Напоминание о стрике запланировано на 20:00 МСК")
+
+        # Топ недели — каждое воскресенье в 21:00 МСК
+        nine_pm = datetime.time(21, 0, 0, tzinfo=msk)
+        async def _weekly_top(ctx):
+            if not get_setting("weekly_top"):
+                return
+            chat_id = get_main_chat_id()
+            if not chat_id:
+                return
+            top = get_top_messages_since(chat_id, days=7, limit=3)
+            if not top:
+                return
+            medals = ["🥇", "🥈", "🥉"]
+            lines = ["📊 <b>Топ недели</b>\n"]
+            for i, u in enumerate(top):
+                lines.append(f"{medals[i]} {_html_mod.escape(u['first_name'] or 'Аноним')} — {u['total']} сообщ.")
+            try:
+                await ctx.bot.send_message(chat_id, "\n".join(lines), parse_mode="HTML")
+            except Exception as e:
+                logger.warning("weekly_top: %s", e)
+        app.job_queue.run_daily(
+            _weekly_top,
+            time=nine_pm,
+            days=(6,),  # 6 = воскресенье
+            name="weekly_top",
+        )
+        logger.info("Топ недели запланирован на вс 21:00 МСК")
 
         # Авточистка in-memory словарей — каждый час убираем устаревшие записи
         async def _cleanup_cmd_cooldown(ctx):
