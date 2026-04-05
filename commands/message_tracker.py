@@ -64,6 +64,10 @@ _flood_last:    dict[int, float]           = {}
 _FLOOD_THRESHOLD = 5
 _FLOOD_COOLDOWN  = 600  # 10 минут
 
+# ── Дневной рекорд — анонсируем только раз в день ────────────────────────────
+# (user_id, chat_id) → date string "YYYY-MM-DD" последнего анонса
+_record_announced: dict[tuple, str] = {}
+
 # ── Аватары ───────────────────────────────────────────────────────────────────
 _avatar_cache_set: set[int] = set()
 _AVATARS_DIR = os.path.join(os.path.dirname(__file__), "..", "photos", "avatars")
@@ -350,12 +354,17 @@ async def track_message_handler(update, context) -> None:
             _name = user.first_name or user.username or "Участник"
             today_count = get_user_today_msg_count(user.id, chat_id)
             if today_count >= 10:
-                is_record = check_and_update_daily_record(user.id, chat_id, today_count)
-                if is_record:
-                    await update.message.reply_text(
-                        f"🏆 {_name} побил личный рекорд — <b>{today_count}</b> сообщений за сегодня!",
-                        parse_mode="HTML",
-                    )
+                _rec_key  = (user.id, chat_id)
+                _today_dt = datetime.datetime.now(_MSK).strftime("%Y-%m-%d")
+                # Анонсируем рекорд только один раз в день
+                if _record_announced.get(_rec_key) != _today_dt:
+                    is_record = check_and_update_daily_record(user.id, chat_id, today_count)
+                    if is_record:
+                        _record_announced[_rec_key] = _today_dt
+                        await update.message.reply_text(
+                            f"🏆 {_name} побил личный рекорд — <b>{today_count}</b> сообщений за сегодня!",
+                            parse_mode="HTML",
+                        )
         except Exception as e:
             logger.debug("daily_record check failed: %s", e)
 
